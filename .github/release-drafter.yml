@@ -3,23 +3,30 @@ tag-template: $RESOLVED_VERSION
 
 categories:
   - title: "⚠️ Breaking changes"
-    labels:
-      - breaking
+    when:
+      labels:
+        - breaking
   - title: "🚀 New features"
-    labels:
-      - enhancement
+    when:
+      labels:
+        - enhancement
   - title: "🐞 Bug fixes"
-    labels:
-      - bug
+    when:
+      labels:
+        - bug
   - title: "📋 Other changes"
   - title: "🧩 Dependency updates"
-    labels:
-      - dependencies
+    when:
+      labels:
+        - dependencies
 
-# Labels drive both the changelog sections above and the version bump below,
-# so they are applied from the Conventional Commits prefix this repo already
-# requires rather than by hand. A PR titled `feat(sensor): ...` lands under
-# "New features" without anyone remembering to label it.
+# Labels drive the changelog sections above, and are applied from the
+# Conventional Commits prefix this repo already requires rather than by hand.
+# A PR titled `feat(sensor): ...` lands under "New features" without anyone
+# remembering to label it.
+#
+# The autolabeler only writes labels when it runs as its own job on a
+# pull_request event -- see the comment in workflows/release-drafter.yml.
 autolabeler:
   - label: breaking
     title:
@@ -34,13 +41,17 @@ autolabeler:
     title:
       - '/^(build|chore)\(deps\)/'
 
+# Every release is a patch bump, deliberately. Tags here are CalVer --
+# year.month.patch -- so the "minor" position is the *month*, and mapping
+# `enhancement` onto it the way a semver project would means a `feat:` merged
+# in August proposes 2026.9.0. That is a September release, in August.
+#
+# There is therefore no major/minor label mapping, and adding one back is not
+# the fix for anything. The first release of each month is tagged by hand
+# (AGENTS.md, "Releases"); within a month, patch is the only correct bump.
+# Breaking changes still get their own changelog section above -- CalVer
+# simply does not encode compatibility in the version.
 version-resolver:
-  major:
-    labels:
-      - breaking
-  minor:
-    labels:
-      - enhancement
   default: patch
 
 template: |

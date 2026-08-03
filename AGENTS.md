@@ -163,8 +163,22 @@ they fail in the pull request rather than after a tag exists.
 
 Release notes are drafted by release-drafter from merged pull requests, and
 labels come from the Conventional Commits prefix in the PR title -- `feat:`
-lands under new features and bumps the minor version, `fix:` under bug fixes.
-That is another reason to get the prefix right.
+lands under new features, `fix:` under bug fixes. That is another reason to
+get the prefix right.
+
+**Labels affect the changelog section only, never the version.** Every release
+is a patch bump. Mapping `enhancement` onto a minor bump the way a semver
+project would means a `feat:` merged in August proposes `2026.9.0` -- a
+September release, in August -- because in CalVer the minor position is the
+month. `.github/release-drafter.yml` therefore has no major/minor label
+mapping, and restoring one is not the fix for anything.
+
+The autolabeler runs as its **own job** on `pull_request`. The combined
+workflow silently never labelled anything: on a pull request the top-level
+action gets `refs/pull/N/merge`, an ephemeral merge commit, so it forces
+dry-run -- and dry-run suppresses label writes along with release writes. If
+merged pull requests start arriving unlabelled again, check for
+`forcing dry-run mode` in the Release Drafter log rather than the config.
 
 **Tags are bare CalVer: `2026.8.0`, no `v` prefix.** This matches ha-pitboss
 and pyschlage, and Home Assistant's own scheme.
