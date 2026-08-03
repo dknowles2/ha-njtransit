@@ -577,6 +577,20 @@ NJCL → {NJCL, NJCLL}    # Coast Line + Bay Head
 
 All other codes map to themselves; unknown codes map to themselves and log at debug.
 
+**There is a fourth line vocabulary, on the board itself.** `lineAbbreviation` reads `M&E`,
+which matches neither the alert feed's `MNE` nor `getTrainLines`. It is display text and is
+useless for correlation.
+
+The board's `line` field carries full titles, and *those* match `getTrainLines.title`
+exactly for twelve of the thirteen rail lines. The exception is the one this integration
+was built for: the board says `Morristown Line` where `getTrainLines` says
+`Morris & Essex Line`. So resolution is: exact title match against `getTrainLines`, then a
+one-entry alias table for `Morristown Line`, then give up.
+
+Giving up **fails open** — an unresolved line means no line filter, so every rail alert is
+reported. A missed delay alert is worse than a noisy one, and this vocabulary is exactly
+the sort of thing that shifts upstream without notice.
+
 ### 6.5 Crowding
 
 `#0B6623` → `LIGHT`, `#FFD300` → `MODERATE`, unrecognized → `UNKNOWN` with the raw hex

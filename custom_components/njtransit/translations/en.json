@@ -43,5 +43,33 @@
         }
       }
     }
+  },
+  "entity": {
+    "sensor": {
+      "next_departure": {
+        "name": "Next departure"
+      },
+      "departure": {
+        "name": "Departure {index}"
+      },
+      "delay": {
+        "name": "Delay"
+      },
+      "crowding": {
+        "name": "Crowding",
+        "state": {
+          "light": "Light",
+          "moderate": "Moderate",
+          "heavy": "Heavy",
+          "unknown": "Unknown"
+        }
+      },
+      "alerts": {
+        "name": "Service alerts"
+      },
+      "advisories": {
+        "name": "Planned advisories"
+      }
+    }
   }
 }

@@ -11,22 +11,6 @@ scoped to a commute you actually take.
 > official API, no documentation, and no compatibility promise. It can break
 > without notice. See [Reliability](#reliability).
 
-## Why not just a REST sensor?
-
-Because **neither NJ Transit feed tells you the whole story.** Captured during
-a real Morris & Essex disruption:
-
-- The system status feed reported live alerts for trains 6612, 6607, 6324,
-  6311 and 6610.
-- The Short Hills departure board at the same moment showed train **6320 to New
-  York as cancelled** — mentioned nowhere in the alert feed.
-
-Neither feed is a superset of the other, and the alert feed writes train
-numbers into free prose (`M and E train #6607, the 7:07 AM departure...`).
-Getting a dependable "is my commute broken?" signal means merging both and
-correlating on train number, which is unpleasant in a Jinja template and
-unremarkable in Python.
-
 ## What you get
 
 Each config entry is a **commute** — an origin and a destination — so
