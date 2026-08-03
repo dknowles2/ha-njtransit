@@ -205,15 +205,50 @@ origin/destination : "Short Hills Station", "New York Penn Station"   (see §3.5
 timeOption         : "D"
 date               : "08/03/2026"     MM/DD/YYYY  — "2026-08-03" returns HTTP 500
 time               : "9:30 AM"        H:MM AM/PM
-travelMode         : "BCTLXR"         site default; "B" restricts to bus
+travelMode         : "CT"             rail + PATH — NOT the site default (below)
 maxWalkingDistance : "1.00"
 minimizeTime       : "T"
 accessible         : the site sends the *strings* "true"/"false" despite the Boolean type
 ```
 
-`routeType` vocabulary: `C` commuter rail, `B` bus, `T` PATH/rapid transit, `W` walking
-connector. PATH legs carry blocks from a different ID space (e.g. `114992`) and must be
-excluded from train-ID correlation by `routeType`.
+`routeType` vocabulary: `C` commuter rail, `B` bus, `T` PATH, `L` light rail, `X` NYC
+subway, `W` walking connector. Non-rail legs carry blocks from unrelated ID spaces (PATH
+`114992`, bus `126GV026`) and must be excluded from train-ID correlation by `routeType`.
+
+**`travelMode` is the one parameter this integration does not copy from the site.**
+njtransit.com sends `BCTLXR` — every mode. This sends `CT`, rail and PATH.
+
+The cost is *not* mainly slot efficiency. It is that with every mode enabled, the planner
+picks a worse itinerary for a train and never offers the better one. Full-day sweep,
+Short Hills → New York Penn, same service day:
+
+| `travelMode` | calls | distinct trains | itinerary chosen for train `880` |
+|---|---|---|---|
+| `BCTLXR` (site) | 24 | 51 | 1 hr 17 min — Hoboken, `126` bus, subway |
+| `CT` (ours) | 21 | 46 | 53 min — Newark Broad St rail transfer |
+| `C` | 18 | 41 | 53 min — Newark Broad St rail transfer |
+
+Under `BCTLXR` the Newark Broad Street itinerary **never appeared on any page**, so the
+board would have reported `880` arriving at Penn Station at 7:27 PM when the real answer
+is 7:03 PM.
+
+This is a real tradeoff, not a free win: `CT` gives up six trains against the site
+default. All six are bus-dependent journeys of an hour or more, the worst being 2 hr
+13 min. Dropping `T` as well costs five further trains and buys nothing — `C` selects the
+same itineraries `CT` does, and PATH is a genuine Hoboken connection.
+
+**A Hoboken-headsigned train on a Penn Station board is usually correct**, and this is the
+most common false alarm about the destination filter. Train `880` reads `Hoboken`, but the
+planner routes it to Newark Broad Street and onto train `6258`, reaching Penn at 7:03 PM —
+eleven minutes ahead of the direct train that leaves 21 minutes later. Check the planner
+itinerary before concluding the filter is wrong.
+
+**A trip's arrival is the end of the itinerary, not the last rail leg's.** These differ
+whenever the journey continues by another mode, and the rail-leg reading is always
+flattering: train `480` reaches Hoboken at 10:12 AM and Penn Station at 10:37 AM via PATH,
+which upstream's own `duration` calls `1 hr 7 min`. Reading the rail leg reported a
+42-minute trip. This shipped, and the calendar event carried both the wrong end time and
+the correct duration text side by side.
 
 ### 2.6 Paging the planner — required for correctness, and it yields the calendar
 
@@ -240,9 +275,11 @@ while cur < 11:59 PM:
     cur = max(firsts) + 1 minute        # guard: if this does not advance, += 30 min
 ```
 
-Measured for Short Hills → New York Penn on a clean weekday: **24 calls, 51 distinct
-trains, 4:49 AM through 11:38 PM.** Once per day per commute, this is negligible next to
-the board's 1440 polls/day.
+Measured for Short Hills → New York Penn on a clean weekday: **21 calls, 46 distinct
+trains** at the `CT` travel mode this integration sends (§2.5). The original 24 calls / 51
+trains measurement was taken at the site's `BCTLXR`, whose extra trains are bus-dependent
+hour-plus journeys. Once per day per commute, either is negligible next to the board's
+1440 polls/day.
 
 The implemented loop needs **17 calls** for that same day, because it jumps to the latest
 departure in each page rather than stepping. The observed schedule is recorded in

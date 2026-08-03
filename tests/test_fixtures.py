@@ -23,6 +23,7 @@ ALL_FIXTURES = (
     ("train_lines", "getTrainLines"),
     ("trip_planner_short_hills_to_ny", "getTripPlannerSchedule"),
     ("trip_planner_short_hills_to_hoboken", "getTripPlannerSchedule"),
+    ("trip_planner_multimodal_short_hills_to_ny", "getTripPlannerSchedule"),
 )
 
 # Matches "train 6612" and "train #6607" alike. Deliberately \w rather than
@@ -121,6 +122,27 @@ def test_a_single_planner_call_returns_three_trips() -> None:
     trips = load_payload("trip_planner_short_hills_to_ny", "getTripPlannerSchedule")
     assert len(trips) == 3
     assert len(rail_blocks(trips)) == 4
+
+
+def test_the_site_default_travel_mode_spends_a_slot_on_a_bus() -> None:
+    """Why TRIP_PLANNER_DEFAULTS does not send BCTLXR.
+
+    Recorded with the site's own travelMode. The planner offered train 880 to
+    Hoboken, the 126 bus to Port Authority and the subway to Penn Station --
+    1 hr 17 min, when a direct train left 21 minutes later and arrived 13
+    minutes earlier. With only three slots per call (SPEC 2.6) that is a slot
+    a usable train could have had, and the itinerary still put 880 on the
+    board because the destination filter keys on the first rail leg.
+
+    If this fixture ever contains only rail legs, the endpoint's behaviour
+    changed and the travelMode override deserves rechecking -- not deleting.
+    """
+    trips = load_payload(
+        "trip_planner_multimodal_short_hills_to_ny", "getTripPlannerSchedule"
+    )
+    modes = {leg["routeType"] for trip in trips for leg in trip["legs"]}
+    assert "B" in modes, "no bus leg -- the recorded multimodal case is gone"
+    assert rail_blocks(trips) == {"880"}
 
 
 def test_commutes_from_one_origin_share_trains() -> None:

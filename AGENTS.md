@@ -88,6 +88,21 @@ Do not regenerate these fixtures to make a test pass.
   Anything that needs the day's trains must page (SPEC §2.6). This was a bug in
   the spec itself before it was caught — the `51 trains, not 4` assertion in
   the tests is its regression guard.
+- **A `Hoboken` train on a Penn Station board is usually correct.** This is
+  the most common false alarm about the destination filter. Train `880` reads
+  `Hoboken`; the planner routes it via a Newark Broad Street transfer onto
+  `6258`, reaching Penn at 7:03 PM — ahead of the direct train leaving 21
+  minutes later. Check the planner itinerary before "fixing" the filter.
+- **The planner will route you by bus and subway if you let it.** `travelMode`
+  is the one call parameter not copied from njtransit.com, which sends
+  `BCTLXR`. With every mode on, the planner picked bus-and-subway for `880`
+  (1 hr 17 min) and never offered the 53-minute rail transfer on any page, so
+  the board would have shown the wrong arrival. Send `CT`. It costs six
+  trains a day, all bus-dependent hour-plus journeys. SPEC §2.5.
+- **A trip's arrival is the itinerary's, not the last rail leg's.** They
+  differ whenever the journey continues by another mode, and the rail-leg
+  reading always flatters: it called a 1 hr 7 min journey 42 minutes. Reach
+  for `_terminal_time`, not `rail_legs[-1]`.
 - **Train IDs are strings, not numbers.** Trenton's board carries Amtrak `A79`
   and SEPTA services.
 - **Status casing is inconsistent** for the same semantic state — `Cancelled`

@@ -27,7 +27,7 @@
       'attributes': dict({
         <CalendarEntityStateAttribute.ALL_DAY: 'all_day'>: False,
         <CalendarEntityStateAttribute.DESCRIPTION: 'description'>: 'Scheduled journey time 1 hr 7 min.',
-        <CalendarEntityStateAttribute.END_TIME: 'end_time'>: '2026-08-03 10:12:00',
+        <CalendarEntityStateAttribute.END_TIME: 'end_time'>: '2026-08-03 10:37:00',
         <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to New York Penn Station Departures',
         <CalendarEntityStateAttribute.LOCATION: 'location'>: 'Short Hills Station',
         <CalendarEntityStateAttribute.MESSAGE: 'message'>: 'Train 480 to New York Penn Station',
@@ -459,7 +459,7 @@
       'attributes': dict({
         <CalendarEntityStateAttribute.ALL_DAY: 'all_day'>: False,
         <CalendarEntityStateAttribute.DESCRIPTION: 'description'>: 'Scheduled journey time 1 hr 7 min.',
-        <CalendarEntityStateAttribute.END_TIME: 'end_time'>: '2026-08-03 10:12:00',
+        <CalendarEntityStateAttribute.END_TIME: 'end_time'>: '2026-08-03 10:37:00',
         <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to Hoboken Terminal Departures',
         <CalendarEntityStateAttribute.LOCATION: 'location'>: 'Short Hills Station',
         <CalendarEntityStateAttribute.MESSAGE: 'message'>: 'Train 480 to Hoboken Terminal',
@@ -472,7 +472,7 @@
       'attributes': dict({
         <CalendarEntityStateAttribute.ALL_DAY: 'all_day'>: False,
         <CalendarEntityStateAttribute.DESCRIPTION: 'description'>: 'Scheduled journey time 1 hr 7 min.',
-        <CalendarEntityStateAttribute.END_TIME: 'end_time'>: '2026-08-03 10:12:00',
+        <CalendarEntityStateAttribute.END_TIME: 'end_time'>: '2026-08-03 10:37:00',
         <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to New York Penn Station Departures',
         <CalendarEntityStateAttribute.LOCATION: 'location'>: 'Short Hills Station',
         <CalendarEntityStateAttribute.MESSAGE: 'message'>: 'Train 480 to New York Penn Station',

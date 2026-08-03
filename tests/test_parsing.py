@@ -337,6 +337,29 @@ class TestParseTrips:
         )
         assert all("114992" not in trip.train_ids for trip in trips)
 
+    def test_arrival_is_the_end_of_the_itinerary_not_the_last_train(self) -> None:
+        """A mixed-mode itinerary continues after its last rail leg.
+
+        Train 880 reaches Hoboken at 6:45 PM; the journey continues by bus
+        and subway and reaches Penn Station at 7:27 PM. Reading the rail
+        leg's arrival reported a 35-minute trip to New York, which is both
+        wrong and flattering enough to look like the best option on the
+        board.
+        """
+        trips = parse_trips(
+            load_payload(
+                "trip_planner_multimodal_short_hills_to_ny", "getTripPlannerSchedule"
+            ),
+            at(17, 43),
+        )
+        assert len(trips) == 1
+        trip = trips[0]
+
+        assert trip.train_ids == ("880",)
+        assert trip.departure.strftime("%I:%M %p").lstrip("0") == "6:10 PM"
+        assert trip.arrival.strftime("%I:%M %p").lstrip("0") == "7:27 PM"
+        assert (trip.arrival - trip.departure).total_seconds() / 60 == 77
+
     def test_arrival_after_departure_across_midnight(self) -> None:
         """A journey crossing midnight must not arrive before it departs."""
         trips = parse_trips(

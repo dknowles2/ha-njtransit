@@ -1,0 +1,65 @@
+{
+    "data": {
+        "getTripPlannerSchedule": [
+            {
+                "duration": "1 hr 17 min",
+                "legs": [
+                    {
+                        "block": "880",
+                        "route": "MNE",
+                        "routeType": "C",
+                        "onStopDescription": "SHORT HILLS",
+                        "onStopTime": "6:10 PM",
+                        "offStopDescription": "HOBOKEN",
+                        "offStopTime": "6:45 PM"
+                    },
+                    {
+                        "block": null,
+                        "route": null,
+                        "routeType": "W",
+                        "onStopDescription": "HOBOKEN",
+                        "onStopTime": "6:45 PM",
+                        "offStopDescription": "HOBOKEN TERMINAL",
+                        "offStopTime": null
+                    },
+                    {
+                        "block": "126GV026",
+                        "route": "126",
+                        "routeType": "B",
+                        "onStopDescription": "HOBOKEN TERMINAL",
+                        "onStopTime": "6:55 PM",
+                        "offStopDescription": "PORT AUTHORITY BUS TERMINAL",
+                        "offStopTime": "7:17 PM"
+                    },
+                    {
+                        "block": null,
+                        "route": null,
+                        "routeType": "W",
+                        "onStopDescription": "PORT AUTHORITY BUS TERMINAL",
+                        "onStopTime": "7:17 PM",
+                        "offStopDescription": "42 ST-PORT AUTH BUS TERM",
+                        "offStopTime": null
+                    },
+                    {
+                        "block": "",
+                        "route": "NYCTA C",
+                        "routeType": "X",
+                        "onStopDescription": "42 ST-PORT AUTH BUS TERM",
+                        "onStopTime": "7:26 PM",
+                        "offStopDescription": "34 ST-PENN STATION",
+                        "offStopTime": "7:27 PM"
+                    },
+                    {
+                        "block": null,
+                        "route": "NYCTA C",
+                        "routeType": "X",
+                        "onStopDescription": "NEW YORK PENN STATION",
+                        "onStopTime": "7:27 PM",
+                        "offStopDescription": null,
+                        "offStopTime": "7:27 PM"
+                    }
+                ]
+            }
+        ]
+    }
+}
