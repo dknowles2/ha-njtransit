@@ -190,16 +190,43 @@ query TrainStopList($train: String!) {
 """,
 )
 
-# Defaults the site itself sends. `accessible` is declared Boolean in the
-# schema but njtransit.com sends the strings "true"/"false"; the Boolean form
-# is accepted, so use it.
+# Defaults the site itself sends, except `travelMode`. `accessible` is
+# declared Boolean in the schema but njtransit.com sends the strings
+# "true"/"false"; the Boolean form is accepted, so use it.
 TRIP_PLANNER_DEFAULTS = {
     "timeOption": "D",
     "accessible": False,
-    "travelMode": "BCTLXR",
+    "travelMode": "CT",
     "maxWalkingDistance": "1.00",
     "minimizeTime": "T",
 }
+
+TRAVEL_MODE_SITE_DEFAULT = "BCTLXR"
+"""What njtransit.com sends: bus, rail, PATH, light rail, subway, ferry.
+
+Not what this integration sends. ``"CT"`` -- commuter rail and PATH -- is,
+and the difference is about *which itinerary* the planner picks for a train,
+not just how many it returns. Full-day sweep, Short Hills to New York Penn:
+
+===========  =====  ======  ==========================
+travelMode   calls  trains  itinerary chosen for 880
+===========  =====  ======  ==========================
+``BCTLXR``      24      51  1 hr 17 min, bus + subway
+``CT``          21      46  53 min, rail transfer
+``C``           18      41  53 min, rail transfer
+===========  =====  ======  ==========================
+
+Under the site default the planner offered train 880 as Hoboken, then the
+126 bus to Port Authority, then the subway -- and never surfaced the
+Newark Broad Street rail transfer that reaches Penn Station 24 minutes
+earlier, on any page. The board would have shown 880 arriving at 7:27 PM
+when the real answer was 7:03 PM.
+
+The six trains ``CT`` gives up against the site default are all bus-dependent
+journeys of an hour or more (the worst is 2 hr 13 min). Dropping ``T`` as
+well costs five further trains and buys nothing -- PATH is a genuine Hoboken
+connection, and ``C`` picks the same itineraries ``CT`` does.
+"""
 
 PLANNER_DATE_FORMAT = "%m/%d/%Y"
 """Anything else is rejected -- an ISO date returns HTTP 500. See SPEC 2.6."""

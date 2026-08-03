@@ -344,12 +344,35 @@ def parse_lines(payload: list[dict[str, Any]] | None) -> tuple[RailLine, ...]:
     )
 
 
+def _terminal_time(trip: dict[str, Any]) -> str | None:
+    """Return when the itinerary actually ends.
+
+    Deliberately not the last *rail* leg's arrival. A mixed-mode itinerary
+    continues past its last train, so reading the rail leg would report
+    reaching the destination at the moment you reach a transfer point
+    instead. The observed case: train 880 Short Hills 6:10 PM to Hoboken
+    6:45 PM, then a bus and a subway, arriving Penn Station at 7:27 PM. The
+    rail-leg reading called that a 35-minute trip.
+
+    Scans from the end because walking connectors carry a null
+    ``offStopTime``, as does the sentinel leg when the planner appends one.
+    """
+    for leg in reversed(trip.get("legs") or ()):
+        if time := (leg.get("offStopTime") or "").strip():
+            return time
+    return None
+
+
 def parse_trip(trip: dict[str, Any], reference: datetime) -> ScheduledTrip | None:
     """Build a :class:`.ScheduledTrip` from one planner itinerary.
 
-    Only commuter-rail legs count: itineraries may include walking connectors
-    and PATH legs, and PATH carries block IDs from an unrelated namespace. The
-    planner also appends a sentinel leg with a null block, which is skipped.
+    Only commuter-rail legs yield train IDs: itineraries may include walking
+    connectors and PATH legs, and PATH carries block IDs from an unrelated
+    namespace. The planner also appends a sentinel leg with a null block,
+    which is skipped.
+
+    The *times*, however, come from the whole itinerary -- see
+    :func:`_terminal_time`.
 
     :return: ``None`` when the itinerary contains no rail leg, which happens
         for all-walking or PATH-only results.
@@ -363,7 +386,7 @@ def parse_trip(trip: dict[str, Any], reference: datetime) -> ScheduledTrip | Non
         return None
 
     departure = resolve_time(rail_legs[0].get("onStopTime"), reference)
-    arrival = resolve_time(rail_legs[-1].get("offStopTime"), reference)
+    arrival = resolve_time(_terminal_time(trip), reference)
     if departure is None or arrival is None:
         return None
 

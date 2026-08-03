@@ -14,6 +14,7 @@ from pytest_homeassistant_custom_component.test_util.aiohttp import (
 )
 from yarl import URL
 
+from custom_components.njtransit.api import queries
 from custom_components.njtransit.api.client import NJTransitClient
 from custom_components.njtransit.api.exceptions import (
     NJTransitAPIError,
@@ -283,6 +284,19 @@ def observed_day_fixture() -> list[dict[str, Any]]:
 
 class TestScheduledTrips:
     """The paging loop."""
+
+    def test_travel_mode_deliberately_diverges_from_the_site(self) -> None:
+        """Rail and PATH only, not the site's every-mode default.
+
+        Pinned because it looks like an oversight: every other value in
+        TRIP_PLANNER_DEFAULTS is copied verbatim from njtransit.com. With the
+        site's BCTLXR the planner picked a bus-and-subway itinerary for train
+        880 and never offered the 53-minute rail transfer on any page, so the
+        board reported an arrival 24 minutes too late. See SPEC 2.5 for the
+        full-day measurements, including what this costs.
+        """
+        assert queries.TRIP_PLANNER_DEFAULTS["travelMode"] == "CT"
+        assert queries.TRAVEL_MODE_SITE_DEFAULT == "BCTLXR"
 
     async def test_covers_the_whole_service_day(
         self,
