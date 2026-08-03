@@ -1,0 +1,491 @@
+{
+    "data": {
+        "getSystemStatus": [
+            {
+                "abbreviation": "MNBN",
+                "message": "Update 2: Update: MBPJ train #1254, the 8:33 AM arrival into Hoboken is up to 35 minutes late due to congestion from a disabled train at Glen Rock. An update to follow.",
+                "msg_richtext": "Update 2: Update: MBPJ train #1254, the 8:33 AM arrival into Hoboken is up to 35 minutes late due to congestion from a disabled train at Glen Rock. An update to follow.",
+                "msg_url": "",
+                "service": "Rail",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "HBLR",
+                "message": "HBLR: the 9:14 AM departure from Tonnelle Ave to Westside Ave, will not operate due to a downed tree near MLK Dr.",
+                "msg_richtext": "HBLR: the 9:14 AM departure from Tonnelle Ave to Westside Ave, will not operate due to a downed tree near MLK Dr.",
+                "msg_url": "",
+                "service": "Light Rail",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "NEC",
+                "message": "NEC train #3821, the 8:46 AM arrival into Trenton, is up to 15 minutes late due to congestion from a disabled train. An update will follow.   ",
+                "msg_richtext": "NEC train #3821, the 8:46 AM arrival into Trenton, is up to 15 minutes late due to congestion from a disabled train. An update will follow.   ",
+                "msg_url": "",
+                "service": "Rail",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "MNBN",
+                "message": "Update: MBPJ train #1254, the 8:33 AM arrival into Hoboken is up to 25 minutes late due to congestion from a disabled train at Glen Rock. An update to follow.",
+                "msg_richtext": "Update: MBPJ train #1254, the 8:33 AM arrival into Hoboken is up to 25 minutes late due to congestion from a disabled train at Glen Rock. An update to follow.",
+                "msg_url": "",
+                "service": "Rail",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "MNBN",
+                "message": "Update 2: MBPJ train #1154, the 8:14 AM arrival in Hoboken is up to 35 minutes late due to mechanical issues in Glen Rock. An update to follow.",
+                "msg_richtext": "Update 2: MBPJ train #1154, the 8:14 AM arrival in Hoboken is up to 35 minutes late due to mechanical issues in Glen Rock. An update to follow.",
+                "msg_url": "",
+                "service": "Rail",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "HBLR",
+                "message": "HBLR: the 8:11 AM departure from Hoboken to 8th St, is cancelled due to mechanical issues. ",
+                "msg_richtext": "HBLR: the 8:11 AM departure from Hoboken to 8th St, is cancelled due to mechanical issues. ",
+                "msg_url": "",
+                "service": "Light Rail",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "MNE",
+                "message": "M and E train #309, the 8:23 AM arrival in Summit is up to 15 minutes late due to congestion from signal issues near Newark Broad St.",
+                "msg_richtext": "M and E train #309, the 8:23 AM arrival in Summit is up to 15 minutes late due to congestion from signal issues near Newark Broad St.",
+                "msg_url": "",
+                "service": "Rail",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "HBLR",
+                "message": "HBLR: the 9:02 AM departure from Westside Ave to Tonnelle Ave, will not operate due to a downed tree near MLK Dr.",
+                "msg_richtext": "HBLR: the 9:02 AM departure from Westside Ave to Tonnelle Ave, will not operate due to a downed tree near MLK Dr.",
+                "msg_url": "",
+                "service": "Light Rail",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "RVR",
+                "message": "River Line: The 7:58 AM departure from WEC to Trenton is cancelled due to mechanical issues.  ",
+                "msg_richtext": "River Line: The 7:58 AM departure from WEC to Trenton is cancelled due to mechanical issues.  ",
+                "msg_url": "",
+                "service": "Light Rail",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "HBLR",
+                "message": "HBLR: the 8:53 AM departure from Tonnelle Ave to Westside Ave, will not operate due to a downed tree near MLK Dr.",
+                "msg_richtext": "HBLR: the 8:53 AM departure from Tonnelle Ave to Westside Ave, will not operate due to a downed tree near MLK Dr.",
+                "msg_url": "",
+                "service": "Light Rail",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "HBLR",
+                "message": "HBLR: the 8:53 AM departure from Tonnelle Ave to Westside Ave, will not operate due to a downed tree near MLK Dr.",
+                "msg_richtext": "HBLR: the 8:53 AM departure from Tonnelle Ave to Westside Ave, will not operate due to a downed tree near MLK Dr.",
+                "msg_url": "",
+                "service": "Light Rail",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "MNE",
+                "message": "Update: M and E train #6607, the 7:07 AM departure from PSNY, scheduled to arrive in Dover at 8:35 AM, is up to 25 minutes late following earlier mechanical issues. ",
+                "msg_richtext": "Update: M and E train #6607, the 7:07 AM departure from PSNY, scheduled to arrive in Dover at 8:35 AM, is up to 25 minutes late following earlier mechanical issues. ",
+                "msg_url": "",
+                "service": "Rail",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "HBLR",
+                "message": "HBLR: the 8:30 AM departure from Tonnelle Ave to Westside Ave, will not operate due to a downed tree near MLK Dr.",
+                "msg_richtext": "HBLR: the 8:30 AM departure from Tonnelle Ave to Westside Ave, will not operate due to a downed tree near MLK Dr.",
+                "msg_url": "",
+                "service": "Light Rail",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "HBLR",
+                "message": "HBLR: the 8:22 AM departure from Tonnelle Ave to Westside Ave, will not operate due to a downed tree near MLK Dr.",
+                "msg_richtext": "HBLR: the 8:22 AM departure from Tonnelle Ave to Westside Ave, will not operate due to a downed tree near MLK Dr.",
+                "msg_url": "",
+                "service": "Light Rail",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "HBLR",
+                "message": "HBLR: the 8:14 AM departure from Tonnelle Ave to Westside Ave, will not operate due to a downed tree near MLK Dr.",
+                "msg_richtext": "HBLR: the 8:14 AM departure from Tonnelle Ave to Westside Ave, will not operate due to a downed tree near MLK Dr.",
+                "msg_url": "",
+                "service": "Light Rail",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "HBLR",
+                "message": "HBLR: the 7:44 AM departure from Tonnelle Ave to Westside Ave, will not operate due to a downed tree near MLK Dr.",
+                "msg_richtext": "HBLR: the 7:44 AM departure from Tonnelle Ave to Westside Ave, will not operate due to a downed tree near MLK Dr.",
+                "msg_url": "",
+                "service": "Light Rail",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "HBLR",
+                "message": "HBLR: the 7:25 AM departure from Tonnelle Ave to Westside Ave, will not operate due to a downed tree near MLK Dr.",
+                "msg_richtext": "HBLR: the 7:25 AM departure from Tonnelle Ave to Westside Ave, will not operate due to a downed tree near MLK Dr.",
+                "msg_url": "",
+                "service": "Light Rail",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "HBLR",
+                "message": "HBLR: the 7:39 AM arrival into Westside Ave from Tonnelle Ave, did not operate due to a downed tree near MLK Dr.",
+                "msg_richtext": "HBLR: the 7:39 AM arrival into Westside Ave from Tonnelle Ave, did not operate due to a downed tree near MLK Dr.",
+                "msg_url": "",
+                "service": "Light Rail",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "HBLR",
+                "message": "HBLR: the 7:16 AM departure from Garfield to Westside Ave, did not operate due to a downed tree near MLK Dr.",
+                "msg_richtext": "HBLR: the 7:16 AM departure from Garfield to Westside Ave, did not operate due to a downed tree near MLK Dr.",
+                "msg_url": "",
+                "service": "Light Rail",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "HBLR",
+                "message": "HBLR: the 8:31 AM departure from Westside to Tonnelle Ave, is cancelled due to a downed tree near MLK Dr. ",
+                "msg_richtext": "HBLR: the 8:31 AM departure from Westside to Tonnelle Ave, is cancelled due to a downed tree near MLK Dr. ",
+                "msg_url": "",
+                "service": "Light Rail",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "HBLR",
+                "message": "HBLR: the 8:08 AM departure from Westside to Tonnelle Ave, is cancelled due to a downed tree near MLK Dr. ",
+                "msg_richtext": "HBLR: the 8:08 AM departure from Westside to Tonnelle Ave, is cancelled due to a downed tree near MLK Dr. ",
+                "msg_url": "",
+                "service": "Light Rail",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "HBLR",
+                "message": "HBLR: The 7:12 AM departure from Hoboken to Danford is cancelled due to mechanical issues. ",
+                "msg_richtext": "HBLR: The 7:12 AM departure from Hoboken to Danford is cancelled due to mechanical issues. ",
+                "msg_url": "",
+                "service": "Light Rail",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "HBLR",
+                "message": "HBLR: the 7:45 AM departure from Westside to Tonnelle Ave, is cancelled due to a downed tree near MLK Dr.  ",
+                "msg_richtext": "HBLR: the 7:45 AM departure from Westside to Tonnelle Ave, is cancelled due to a downed tree near MLK Dr.  ",
+                "msg_url": "",
+                "service": "Light Rail",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "HBLR",
+                "message": "HBLR: the 7:27 AM departure from Westside Ave to Tonnelle Ave, is cancelled due to a downed tree near MLK Dr. ",
+                "msg_richtext": "HBLR: the 7:27 AM departure from Westside Ave to Tonnelle Ave, is cancelled due to a downed tree near MLK Dr. ",
+                "msg_url": "",
+                "service": "Light Rail",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "MNE",
+                "message": "M and E train #6324, the 8:54 AM departure from Summit, arriving in PSNY at 9:42 AM, is cancelled due to  equipment availability resulting from earlier crew availability issues. Please take train #6624, the 8:48 AM departure from Summit, arriving in PSNY at 9:31 AM , departing from Summit at 8:54 AM today, 8/3, making additional stops.",
+                "msg_richtext": "M and E train #6324, the 8:54 AM departure from Summit, arriving in PSNY at 9:42 AM, is cancelled due to  equipment availability resulting from earlier crew availability issues. Please take train #6624, the 8:48 AM departure from Summit, arriving in PSNY at 9:31 AM , departing from Summit at 8:54 AM today, 8/3, making additional stops.",
+                "msg_url": "",
+                "service": "Rail",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "RVR",
+                "message": "River Line: the 8:12 AM departure from Trenton to WEC, is cancelled due to equipment availability. ",
+                "msg_richtext": "River Line: the 8:12 AM departure from Trenton to WEC, is cancelled due to equipment availability. ",
+                "msg_url": "",
+                "service": "Light Rail",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "MNE",
+                "message": "M and E train #6311, the 7:40 AM departure from PSNY, arrival into Summit at 8:33 AM, is cancelled due to crew availability at time of departure. Please take train #6613, the 8:02 AM departure from PSNY, arrival into Summit at 8:55 AM.",
+                "msg_richtext": "M and E train #6311, the 7:40 AM departure from PSNY, arrival into Summit at 8:33 AM, is cancelled due to crew availability at time of departure. Please take train #6613, the 8:02 AM departure from PSNY, arrival into Summit at 8:55 AM.",
+                "msg_url": "",
+                "service": "Rail",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "MNBN",
+                "message": "MBPJ train #1212, the 9:00 AM departure from Waldwick is cancelled due to originally scheduled engineer not available at the time of departure. Please take train #1110, the 10:12 AM departure from Waldwick, arriving in Hoboken at 11:06 AM.",
+                "msg_richtext": "MBPJ train #1212, the 9:00 AM departure from Waldwick is cancelled due to originally scheduled engineer not available at the time of departure. Please take train #1110, the 10:12 AM departure from Waldwick, arriving in Hoboken at 11:06 AM.",
+                "msg_url": "",
+                "service": "Rail",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "RARV",
+                "message": "Raritan Valley Line: Possible Delays due to Track Maintenance \u2013 Weekdays from Wednesday, August 5 to Friday, August 14, 2026",
+                "msg_richtext": "Raritan Valley Line: Possible Delays due to Track Maintenance \u2013 Weekdays from Wednesday, August 5 to Friday, August 14, 2026",
+                "msg_url": "https://www.njtransit.com/service-advisory/2144127",
+                "service": "Rail",
+                "advisoryAlert": "1"
+            },
+            {
+                "abbreviation": "HBLR",
+                "message": "Hudson-Bergen Light Rail: Tonnelle Avenue Park and Ride Closure \u2013 Saturday, August 8 through Sunday, August 9, 2026",
+                "msg_richtext": "Hudson-Bergen Light Rail: Tonnelle Avenue Park and Ride Closure \u2013 Saturday, August 8 through Sunday, August 9, 2026",
+                "msg_url": "https://www.njtransit.com/station-advisory/2143404",
+                "service": "Light Rail",
+                "advisoryAlert": "1"
+            },
+            {
+                "abbreviation": "MNE",
+                "message": "Northeast Corridor, North Jersey Coast Line, and Morris & Essex Lines: Possible Delays \u2013 Weekends Beginning Friday, July 31, 2026",
+                "msg_richtext": "Northeast Corridor, North Jersey Coast Line, and Morris & Essex Lines: Possible Delays \u2013 Weekends Beginning Friday, July 31, 2026",
+                "msg_url": "https://www.njtransit.com/service-advisory/2063193",
+                "service": "Rail",
+                "advisoryAlert": "1"
+            },
+            {
+                "abbreviation": "NJCL",
+                "message": "Northeast Corridor, North Jersey Coast Line, and Morris & Essex Lines: Possible Delays \u2013 Weekends Beginning Friday, July 31, 2026",
+                "msg_richtext": "Northeast Corridor, North Jersey Coast Line, and Morris & Essex Lines: Possible Delays \u2013 Weekends Beginning Friday, July 31, 2026",
+                "msg_url": "https://www.njtransit.com/service-advisory/2063193",
+                "service": "Rail",
+                "advisoryAlert": "1"
+            },
+            {
+                "abbreviation": "NEC",
+                "message": "Northeast Corridor, North Jersey Coast Line, and Morris & Essex Lines: Possible Delays \u2013 Weekends Beginning Friday, July 31, 2026",
+                "msg_richtext": "Northeast Corridor, North Jersey Coast Line, and Morris & Essex Lines: Possible Delays \u2013 Weekends Beginning Friday, July 31, 2026",
+                "msg_url": "https://www.njtransit.com/service-advisory/2063193",
+                "service": "Rail",
+                "advisoryAlert": "1"
+            },
+            {
+                "abbreviation": "RARV",
+                "message": "Raritan Valley Line: Possible Delays due to Track Maintenance \u2013 Monday, August 3 and Tuesday, August 4, 2026",
+                "msg_richtext": "Raritan Valley Line: Possible Delays due to Track Maintenance \u2013 Monday, August 3 and Tuesday, August 4, 2026",
+                "msg_url": "https://www.njtransit.com/service-advisory/2140746",
+                "service": "Rail",
+                "advisoryAlert": "1"
+            },
+            {
+                "abbreviation": "MNBN",
+                "message": "Main-Bergen County Line: Possible Delays Due to Track Maintenance \u2013 Saturday, August 8 and Sunday, August 9, 2026",
+                "msg_richtext": "Main-Bergen County Line: Possible Delays Due to Track Maintenance \u2013 Saturday, August 8 and Sunday, August 9, 2026",
+                "msg_url": "https://www.njtransit.com/service-advisory/2140752",
+                "service": "Rail",
+                "advisoryAlert": "1"
+            },
+            {
+                "abbreviation": "NJCL",
+                "message": "Newark Airport Station: AirTrain Service replaced by Shuttle Bus \u2013 Beginning Monday, July 27, 2026",
+                "msg_richtext": "Newark Airport Station: AirTrain Service replaced by Shuttle Bus \u2013 Beginning Monday, July 27, 2026",
+                "msg_url": "https://www.njtransit.com/station-advisory/2138622",
+                "service": "Rail",
+                "advisoryAlert": "1"
+            },
+            {
+                "abbreviation": "NEC",
+                "message": "Newark Airport Station: AirTrain Service replaced by Shuttle Bus \u2013 Beginning Monday, July 27, 2026",
+                "msg_richtext": "Newark Airport Station: AirTrain Service replaced by Shuttle Bus \u2013 Beginning Monday, July 27, 2026",
+                "msg_url": "https://www.njtransit.com/station-advisory/2138622",
+                "service": "Rail",
+                "advisoryAlert": "1"
+            },
+            {
+                "abbreviation": "836",
+                "message": "Bus route 836, the 7:46 AM departure from Freehold to Asbury Park, will not operate due to operator availability. ",
+                "msg_richtext": "Bus route 836, the 7:46 AM departure from Freehold to Asbury Park, will not operate due to operator availability. ",
+                "msg_url": "",
+                "service": "Bus",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "830",
+                "message": "Bus route 830, the 7:29 AM departure from Asbury Park to Point Pleasant, did not operate due to operator availability.   ",
+                "msg_richtext": "Bus route 830, the 7:29 AM departure from Asbury Park to Point Pleasant, did not operate due to operator availability.   ",
+                "msg_url": "",
+                "service": "Bus",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "712",
+                "message": "Bus route 712, the 7:50 AM departure from Totowa to Hackensack, will not operate due to operator availability.",
+                "msg_richtext": "Bus route 712, the 7:50 AM departure from Totowa to Hackensack, will not operate due to operator availability.",
+                "msg_url": "",
+                "service": "Bus",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "40",
+                "message": "Bus route 40, the 8:05 AM departure from North Arlington to Newark, will not operate due to operator availability.  ",
+                "msg_richtext": "Bus route 40, the 8:05 AM departure from North Arlington to Newark, will not operate due to operator availability.  ",
+                "msg_url": "",
+                "service": "Bus",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "99",
+                "message": "Bus route 99, the 7:54 AM departure from Hillside to Belleville, will not operate due to operator availability.     ",
+                "msg_richtext": "Bus route 99, the 7:54 AM departure from Hillside to Belleville, will not operate due to operator availability.     ",
+                "msg_url": "",
+                "service": "Bus",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "89",
+                "message": "Bus route 89, the 7:35 AM departure from North Bergen to Hoboken, did not operate due to operator availability.",
+                "msg_richtext": "Bus route 89, the 7:35 AM departure from North Bergen to Hoboken, did not operate due to operator availability.",
+                "msg_url": "",
+                "service": "Bus",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "59",
+                "message": "Bus route 59, the 8:00 AM departure from Newark to Roselle, will not operate due to operator availability.   ",
+                "msg_richtext": "Bus route 59, the 8:00 AM departure from Newark to Roselle, will not operate due to operator availability.   ",
+                "msg_url": "",
+                "service": "Bus",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "13",
+                "message": "Bus route 13T,the 7:29 AM departure from Belleville to Irvington, will not operate due to operator availability. ",
+                "msg_richtext": "Bus route 13T,the 7:29 AM departure from Belleville to Irvington, will not operate due to operator availability. ",
+                "msg_url": "",
+                "service": "Bus",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "40",
+                "message": "Bus route 40, the 8:05 AM departure from North Arlington to Newark, will not operate due to operator availability.",
+                "msg_richtext": "Bus route 40, the 8:05 AM departure from North Arlington to Newark, will not operate due to operator availability.",
+                "msg_url": "",
+                "service": "Bus",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "408",
+                "message": "Bus route 408, the, 8:28 AM departure from Millville to Philadelphia, will not operate due to operator availability.",
+                "msg_richtext": "Bus route 408, the, 8:28 AM departure from Millville to Philadelphia, will not operate due to operator availability.",
+                "msg_url": "",
+                "service": "Bus",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "190",
+                "message": "Bus route 190, the 7:20 AM departure from NYPABT to Paterson, will not operate due to operator availability. ",
+                "msg_richtext": "Bus route 190, the 7:20 AM departure from NYPABT to Paterson, will not operate due to operator availability. ",
+                "msg_url": "",
+                "service": "Bus",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "96",
+                "message": "Bus route 96, the 7:10 AM departure from Newark to Irvington will not operate due to operator availability.",
+                "msg_richtext": "Bus route 96, the 7:10 AM departure from Newark to Irvington will not operate due to operator availability.",
+                "msg_url": "",
+                "service": "Bus",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "48",
+                "message": "Bus route 48, the 7:50 AM departure from Elizabeth to Perth Amboy, will not operate today due to operator availability.",
+                "msg_richtext": "Bus route 48, the 7:50 AM departure from Elizabeth to Perth Amboy, will not operate today due to operator availability.",
+                "msg_url": "",
+                "service": "Bus",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "165",
+                "message": "Bus route 165 is on a detour on Soldier Hill Rd at Kinderkamack Rd in Oradell due to a downed tree. Buses will use Ackerman Ave, Forest Ave, Oradell Ave and Kinderkamack Rd. ",
+                "msg_richtext": "Bus route 165 is on a detour on Soldier Hill Rd at Kinderkamack Rd in Oradell due to a downed tree. Buses will use Ackerman Ave, Forest Ave, Oradell Ave and Kinderkamack Rd. ",
+                "msg_url": "",
+                "service": "Bus",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "116",
+                "message": "Bus route 116 will operate on detour on Solider Hill Rd at Kinderkamack Rd in Oradell due to a downed tree. Buses will use Ackerman Ave, Forest Ave, Oradell Ave, Kinderkamack Ave and Solider Rd.",
+                "msg_richtext": "Bus route 116 will operate on detour on Solider Hill Rd at Kinderkamack Rd in Oradell due to a downed tree. Buses will use Ackerman Ave, Forest Ave, Oradell Ave, Kinderkamack Ave and Solider Rd.",
+                "msg_url": "",
+                "service": "Bus",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "608",
+                "message": "Bus route 608, the 7:30 AM departure from Hamilton to Ewing, will not operate due to operator availability.",
+                "msg_richtext": "Bus route 608, the 7:30 AM departure from Hamilton to Ewing, will not operate due to operator availability.",
+                "msg_url": "",
+                "service": "Bus",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "59",
+                "message": "Bus route 59, the 6:48 AM departure from Cranford to Newark, will not operate due to operator availability.    ",
+                "msg_richtext": "Bus route 59, the 6:48 AM departure from Cranford to Newark, will not operate due to operator availability.    ",
+                "msg_url": "",
+                "service": "Bus",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "81",
+                "message": "Bus route 81, the 8:45 AM departure from Old Bergen Rd at Gates Ave to Montgomery St at Greene St, will not operate due to operator availability. ",
+                "msg_richtext": "Bus route 81, the 8:45 AM departure from Old Bergen Rd at Gates Ave to Montgomery St at Greene St, will not operate due to operator availability. ",
+                "msg_url": "",
+                "service": "Bus",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "48",
+                "message": "Bus route 48, the 6:45 AM departure from Elizabeth to Woodbridge, will not operate due to operator availability.  ",
+                "msg_richtext": "Bus route 48, the 6:45 AM departure from Elizabeth to Woodbridge, will not operate due to operator availability.  ",
+                "msg_url": "",
+                "service": "Bus",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "13",
+                "message": "Bus route 13, the 7:29 AM departure from Belleville to Irvington, will not operate due to operator availability.",
+                "msg_richtext": "Bus route 13, the 7:29 AM departure from Belleville to Irvington, will not operate due to operator availability.",
+                "msg_url": "",
+                "service": "Bus",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "116",
+                "message": "Bus route 116, the 7:23 AM departure from Perth Amboy to New York PABT, will not operate due to operator availability. ",
+                "msg_richtext": "Bus route 116, the 7:23 AM departure from Perth Amboy to New York PABT, will not operate due to operator availability. ",
+                "msg_url": "",
+                "service": "Bus",
+                "advisoryAlert": "0"
+            },
+            {
+                "abbreviation": "8",
+                "message": "Bus route 8 will operate on detour on Bergen Ave in Jersey City due to a police investigation. Buses will use Bramhall Ave, Martin Luther King Blvd, Communipaw Ave and Bergen Ave.",
+                "msg_richtext": "Bus route 8 will operate on detour on Bergen Ave in Jersey City due to a police investigation. Buses will use Bramhall Ave, Martin Luther King Blvd, Communipaw Ave and Bergen Ave.",
+                "msg_url": "",
+                "service": "Bus",
+                "advisoryAlert": "0"
+            }
+        ]
+    },
+    "extensions": {
+        "cacheControl": {
+            "version": 1,
+            "hints": [
+                {
+                    "path": [
+                        "getSystemStatus"
+                    ],
+                    "maxAge": 30
+                }
+            ]
+        }
+    }
+}

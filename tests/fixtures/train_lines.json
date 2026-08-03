@@ -1,0 +1,84 @@
+{
+    "data": {
+        "getTrainLines": [
+            {
+                "id": "6bbd4db6-b488-4f88-af49-7b5d0df7abed",
+                "title": "Montclair Line",
+                "abbreviation": "BNTNM"
+            },
+            {
+                "id": "a50fcf96-3482-4a23-bddc-bca6b8da7b1d",
+                "title": "North Jersey Coast Line (Bay Head)",
+                "abbreviation": "NJCLL"
+            },
+            {
+                "id": "8cb31a16-27ef-432d-a313-a1529c24ed23",
+                "title": "Port Jervis Line",
+                "abbreviation": "MNBNP"
+            },
+            {
+                "id": "8a82aeb2-53d8-4ea2-bc2e-1c171d8139ce",
+                "title": "Gladstone Branch",
+                "abbreviation": "MNEG"
+            },
+            {
+                "id": "836bc524-89ef-420f-99a0-6c2f85cbd13d",
+                "title": "Princeton Shuttle (Dinky)",
+                "abbreviation": "PRIN"
+            },
+            {
+                "id": "423754d2-75a6-41da-8f80-e0b1573f163b",
+                "title": "Main-Bergen County Line",
+                "abbreviation": "MNBN"
+            },
+            {
+                "id": "2db9fee2-09ff-4216-b45c-ead17af50472",
+                "title": "Pascack Valley Line",
+                "abbreviation": "PASC"
+            },
+            {
+                "id": "429edde9-87ab-4613-ab01-6bab79dce0fd",
+                "title": "Atlantic City Rail Line",
+                "abbreviation": "ATLC"
+            },
+            {
+                "id": "8b975306-8045-4622-a726-a20aed7d16ef",
+                "title": "Montclair-Boonton Line",
+                "abbreviation": "BNTN"
+            },
+            {
+                "id": "89ab5400-61f5-4cc9-b161-4617ec641aed",
+                "title": "Raritan Valley Line",
+                "abbreviation": "RARV"
+            },
+            {
+                "id": "2935a1e2-b6f8-4f61-bf54-e4f81f25ae26",
+                "title": "North Jersey Coast Line",
+                "abbreviation": "NJCL"
+            },
+            {
+                "id": "c61e4b41-1d17-44ae-b91f-00a5f900f06f",
+                "title": "Morris & Essex Line",
+                "abbreviation": "MNE"
+            },
+            {
+                "id": "b1712397-aff6-45f1-8228-16d9d2d9f012",
+                "title": "Northeast Corridor",
+                "abbreviation": "NEC"
+            }
+        ]
+    },
+    "extensions": {
+        "cacheControl": {
+            "version": 1,
+            "hints": [
+                {
+                    "path": [
+                        "getTrainLines"
+                    ],
+                    "maxAge": 30
+                }
+            ]
+        }
+    }
+}

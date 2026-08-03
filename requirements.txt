@@ -1,0 +1,5 @@
+homeassistant==2026.7.4
+mypy==2.3.0
+pip>=26.2
+pytest_homeassistant_custom_component==0.13.348
+ruff==0.16.0

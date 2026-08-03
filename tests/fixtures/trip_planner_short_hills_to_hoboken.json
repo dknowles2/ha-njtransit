@@ -1,0 +1,420 @@
+{
+    "data": {
+        "getTripPlannerSchedule": [
+            {
+                "duration": "42 min",
+                "legs": [
+                    {
+                        "block": "480",
+                        "route": "MNEG",
+                        "routeType": "C",
+                        "sign": "HOBOKEN",
+                        "onStopDescription": "SHORT HILLS",
+                        "onStopTime": "9:30 AM",
+                        "offStopDescription": "HOBOKEN",
+                        "offStopTime": "10:12 AM",
+                        "duration": "42 minutes",
+                        "realtime": null
+                    },
+                    {
+                        "block": null,
+                        "route": null,
+                        "routeType": "W",
+                        "sign": null,
+                        "onStopDescription": "HOBOKEN",
+                        "onStopTime": "10:12 AM",
+                        "offStopDescription": "Hoboken Station",
+                        "offStopTime": null,
+                        "duration": null,
+                        "realtime": null
+                    },
+                    {
+                        "block": null,
+                        "route": null,
+                        "routeType": "W",
+                        "sign": null,
+                        "onStopDescription": "HOBOKEN STATION",
+                        "onStopTime": null,
+                        "offStopDescription": null,
+                        "offStopTime": "10:12 AM",
+                        "duration": null,
+                        "realtime": null
+                    }
+                ],
+                "redNotes": null,
+                "footnotes": []
+            },
+            {
+                "duration": "1 hr 28 min",
+                "legs": [
+                    {
+                        "block": "411",
+                        "route": "MNEG",
+                        "routeType": "C",
+                        "sign": "GLADSTONE",
+                        "onStopDescription": "SHORT HILLS",
+                        "onStopTime": "9:33 AM",
+                        "offStopDescription": "SUMMIT",
+                        "offStopTime": "9:38 AM",
+                        "duration": "5 minutes",
+                        "realtime": null
+                    },
+                    {
+                        "block": "6628",
+                        "route": "MNE",
+                        "routeType": "C",
+                        "sign": "NEW YORK PENN STATION",
+                        "onStopDescription": "SUMMIT",
+                        "onStopTime": "9:46 AM",
+                        "offStopDescription": "NEW YORK PENN STATION",
+                        "offStopTime": "10:25 AM",
+                        "duration": "39 minutes",
+                        "realtime": null
+                    },
+                    {
+                        "block": "3835",
+                        "route": "NEC",
+                        "routeType": "C",
+                        "sign": "TRENTON TRANSIT CENTER",
+                        "onStopDescription": "NEW YORK PENN STATION",
+                        "onStopTime": "10:33 AM",
+                        "offStopDescription": "SECAUCUS UPPER LEVEL",
+                        "offStopTime": "10:43 AM",
+                        "duration": "10 minutes",
+                        "realtime": null
+                    },
+                    {
+                        "block": "1652",
+                        "route": "PASC",
+                        "routeType": "C",
+                        "sign": "HOBOKEN",
+                        "onStopDescription": "SECAUCUS LOWER LEVEL",
+                        "onStopTime": "10:49 AM",
+                        "offStopDescription": "HOBOKEN",
+                        "offStopTime": "11:01 AM",
+                        "duration": "12 minutes",
+                        "realtime": null
+                    },
+                    {
+                        "block": null,
+                        "route": null,
+                        "routeType": "W",
+                        "sign": null,
+                        "onStopDescription": "HOBOKEN",
+                        "onStopTime": "11:01 AM",
+                        "offStopDescription": "Hoboken Station",
+                        "offStopTime": null,
+                        "duration": null,
+                        "realtime": null
+                    },
+                    {
+                        "block": null,
+                        "route": null,
+                        "routeType": "W",
+                        "sign": null,
+                        "onStopDescription": "HOBOKEN STATION",
+                        "onStopTime": null,
+                        "offStopDescription": null,
+                        "offStopTime": "11:01 AM",
+                        "duration": null,
+                        "realtime": null
+                    }
+                ],
+                "redNotes": null,
+                "footnotes": []
+            },
+            {
+                "duration": "1 hr 34 min",
+                "legs": [
+                    {
+                        "block": "411",
+                        "route": "MNEG",
+                        "routeType": "C",
+                        "sign": "GLADSTONE",
+                        "onStopDescription": "SHORT HILLS",
+                        "onStopTime": "9:33 AM",
+                        "offStopDescription": "SUMMIT",
+                        "offStopTime": "9:38 AM",
+                        "duration": "5 minutes",
+                        "realtime": null
+                    },
+                    {
+                        "block": "6628",
+                        "route": "MNE",
+                        "routeType": "C",
+                        "sign": "NEW YORK PENN STATION",
+                        "onStopDescription": "SUMMIT",
+                        "onStopTime": "9:46 AM",
+                        "offStopDescription": "NEW YORK PENN STATION",
+                        "offStopTime": "10:25 AM",
+                        "duration": "39 minutes",
+                        "realtime": null
+                    },
+                    {
+                        "block": "",
+                        "route": "NYCT E",
+                        "routeType": "T",
+                        "sign": "NYC subway E",
+                        "onStopDescription": "34 ST-PENN STATION",
+                        "onStopTime": "10:30 AM",
+                        "offStopDescription": "42 ST-PORT AUTH BUS TERM",
+                        "offStopTime": "10:32 AM",
+                        "duration": "2 minutes",
+                        "realtime": null
+                    },
+                    {
+                        "block": "126ML004",
+                        "route": "126",
+                        "routeType": "B",
+                        "sign": "HOBOKEN-PATH-Exact Fare",
+                        "onStopDescription": "PORT AUTHORITY BUS TERMINAL",
+                        "onStopTime": "10:45 AM",
+                        "offStopDescription": "HOBOKEN TERMINAL LANE 6",
+                        "offStopTime": "11:07 AM",
+                        "duration": "22 minutes",
+                        "realtime": null
+                    },
+                    {
+                        "block": null,
+                        "route": "126",
+                        "routeType": "B",
+                        "sign": null,
+                        "onStopDescription": "HOBOKEN STATION",
+                        "onStopTime": "11:07 AM",
+                        "offStopDescription": null,
+                        "offStopTime": "11:07 AM",
+                        "duration": null,
+                        "realtime": null
+                    }
+                ],
+                "redNotes": null,
+                "footnotes": []
+            }
+        ]
+    },
+    "extensions": {
+        "cacheControl": {
+            "version": 1,
+            "hints": [
+                {
+                    "path": [
+                        "getTripPlannerSchedule"
+                    ],
+                    "maxAge": 600
+                },
+                {
+                    "path": [
+                        "getTripPlannerSchedule",
+                        0,
+                        "legs"
+                    ],
+                    "maxAge": 600
+                },
+                {
+                    "path": [
+                        "getTripPlannerSchedule",
+                        0,
+                        "legs",
+                        0,
+                        "realtime"
+                    ],
+                    "maxAge": 600
+                },
+                {
+                    "path": [
+                        "getTripPlannerSchedule",
+                        0,
+                        "legs",
+                        1,
+                        "realtime"
+                    ],
+                    "maxAge": 600
+                },
+                {
+                    "path": [
+                        "getTripPlannerSchedule",
+                        0,
+                        "legs",
+                        2,
+                        "realtime"
+                    ],
+                    "maxAge": 600
+                },
+                {
+                    "path": [
+                        "getTripPlannerSchedule",
+                        0,
+                        "redNotes"
+                    ],
+                    "maxAge": 60
+                },
+                {
+                    "path": [
+                        "getTripPlannerSchedule",
+                        0,
+                        "footnotes"
+                    ],
+                    "maxAge": 60
+                },
+                {
+                    "path": [
+                        "getTripPlannerSchedule",
+                        1,
+                        "legs"
+                    ],
+                    "maxAge": 600
+                },
+                {
+                    "path": [
+                        "getTripPlannerSchedule",
+                        1,
+                        "legs",
+                        0,
+                        "realtime"
+                    ],
+                    "maxAge": 600
+                },
+                {
+                    "path": [
+                        "getTripPlannerSchedule",
+                        1,
+                        "legs",
+                        1,
+                        "realtime"
+                    ],
+                    "maxAge": 600
+                },
+                {
+                    "path": [
+                        "getTripPlannerSchedule",
+                        1,
+                        "legs",
+                        2,
+                        "realtime"
+                    ],
+                    "maxAge": 600
+                },
+                {
+                    "path": [
+                        "getTripPlannerSchedule",
+                        1,
+                        "legs",
+                        3,
+                        "realtime"
+                    ],
+                    "maxAge": 600
+                },
+                {
+                    "path": [
+                        "getTripPlannerSchedule",
+                        1,
+                        "legs",
+                        4,
+                        "realtime"
+                    ],
+                    "maxAge": 600
+                },
+                {
+                    "path": [
+                        "getTripPlannerSchedule",
+                        1,
+                        "legs",
+                        5,
+                        "realtime"
+                    ],
+                    "maxAge": 600
+                },
+                {
+                    "path": [
+                        "getTripPlannerSchedule",
+                        1,
+                        "redNotes"
+                    ],
+                    "maxAge": 60
+                },
+                {
+                    "path": [
+                        "getTripPlannerSchedule",
+                        1,
+                        "footnotes"
+                    ],
+                    "maxAge": 60
+                },
+                {
+                    "path": [
+                        "getTripPlannerSchedule",
+                        2,
+                        "legs"
+                    ],
+                    "maxAge": 600
+                },
+                {
+                    "path": [
+                        "getTripPlannerSchedule",
+                        2,
+                        "legs",
+                        0,
+                        "realtime"
+                    ],
+                    "maxAge": 600
+                },
+                {
+                    "path": [
+                        "getTripPlannerSchedule",
+                        2,
+                        "legs",
+                        1,
+                        "realtime"
+                    ],
+                    "maxAge": 600
+                },
+                {
+                    "path": [
+                        "getTripPlannerSchedule",
+                        2,
+                        "legs",
+                        2,
+                        "realtime"
+                    ],
+                    "maxAge": 600
+                },
+                {
+                    "path": [
+                        "getTripPlannerSchedule",
+                        2,
+                        "legs",
+                        3,
+                        "realtime"
+                    ],
+                    "maxAge": 600
+                },
+                {
+                    "path": [
+                        "getTripPlannerSchedule",
+                        2,
+                        "legs",
+                        4,
+                        "realtime"
+                    ],
+                    "maxAge": 600
+                },
+                {
+                    "path": [
+                        "getTripPlannerSchedule",
+                        2,
+                        "redNotes"
+                    ],
+                    "maxAge": 60
+                },
+                {
+                    "path": [
+                        "getTripPlannerSchedule",
+                        2,
+                        "footnotes"
+                    ],
+                    "maxAge": 60
+                }
+            ]
+        }
+    }
+}

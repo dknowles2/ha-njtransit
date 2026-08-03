@@ -1,0 +1,11 @@
+{
+  "domain": "njtransit",
+  "name": "NJ Transit",
+  "codeowners": ["@dknowles2"],
+  "documentation": "https://github.com/dknowles2/ha-njtransit",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/dknowles2/ha-njtransit/issues",
+  "requirements": [],
+  "version": "0.0.0"
+}

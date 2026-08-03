@@ -1,0 +1,1050 @@
+{
+    "data": {
+        "getTrainDepartureScreens": {
+            "items": [
+                {
+                    "background": "#00953b",
+                    "color": "#ffffff",
+                    "departureDate": "8:17 AM",
+                    "destination": "Summit",
+                    "inlineMessage": "",
+                    "line": "Morristown Line",
+                    "lineAbbreviation": "M&E",
+                    "status": "All Aboard",
+                    "track": "1",
+                    "trainID": "309",
+                    "stops": null,
+                    "capacity": {
+                        "sections": [
+                            {
+                                "position": "Back",
+                                "cars": [
+                                    {
+                                        "color": "#0B6623",
+                                        "number": "1380"
+                                    }
+                                ]
+                            },
+                            {
+                                "position": "Front",
+                                "cars": [
+                                    {
+                                        "color": "#0B6623",
+                                        "number": "1472"
+                                    }
+                                ]
+                            },
+                            {
+                                "position": "Middle",
+                                "cars": [
+                                    {
+                                        "color": "#0B6623",
+                                        "number": "1473"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                },
+                {
+                    "background": "#000000 ",
+                    "color": "#ffffff",
+                    "departureDate": "8:25 AM",
+                    "destination": "New York",
+                    "inlineMessage": "",
+                    "line": "Morristown Line",
+                    "lineAbbreviation": "M&E",
+                    "status": "Cancelled",
+                    "track": "2",
+                    "trainID": "6320",
+                    "stops": null,
+                    "capacity": null
+                },
+                {
+                    "background": "#00953b",
+                    "color": "#ffffff",
+                    "departureDate": "8:28 AM",
+                    "destination": "Summit",
+                    "inlineMessage": "",
+                    "line": "Morristown Line",
+                    "lineAbbreviation": "M&E",
+                    "status": "CANCELLED",
+                    "track": "1",
+                    "trainID": "6311",
+                    "stops": null,
+                    "capacity": null
+                },
+                {
+                    "background": "#a1d5ae",
+                    "color": "#000000",
+                    "departureDate": "8:39 AM",
+                    "destination": "Gladstone",
+                    "inlineMessage": "",
+                    "line": "Gladstone Branch",
+                    "lineAbbreviation": "M&E",
+                    "status": "in 16 Min",
+                    "track": "1",
+                    "trainID": "409",
+                    "stops": null,
+                    "capacity": {
+                        "sections": [
+                            {
+                                "position": "Back",
+                                "cars": [
+                                    {
+                                        "color": "#0B6623",
+                                        "number": "1469"
+                                    }
+                                ]
+                            },
+                            {
+                                "position": "Front",
+                                "cars": [
+                                    {
+                                        "color": "#0B6623",
+                                        "number": "1468"
+                                    }
+                                ]
+                            },
+                            {
+                                "position": "Middle",
+                                "cars": [
+                                    {
+                                        "color": "#0B6623",
+                                        "number": "1325"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                },
+                {
+                    "background": "#7a6e62",
+                    "color": "#ffffff",
+                    "departureDate": "8:42 AM",
+                    "destination": "Hoboken",
+                    "inlineMessage": "",
+                    "line": "Gladstone Branch",
+                    "lineAbbreviation": "M&E",
+                    "status": "in 20 Min",
+                    "track": "2",
+                    "trainID": "416",
+                    "stops": null,
+                    "capacity": {
+                        "sections": [
+                            {
+                                "position": "Back",
+                                "cars": [
+                                    {
+                                        "color": "#0B6623",
+                                        "number": "1504"
+                                    }
+                                ]
+                            },
+                            {
+                                "position": "Front",
+                                "cars": [
+                                    {
+                                        "color": "#0B6623",
+                                        "number": "1311"
+                                    }
+                                ]
+                            },
+                            {
+                                "position": "Middle",
+                                "cars": [
+                                    {
+                                        "color": "#0B6623",
+                                        "number": "1505"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                },
+                {
+                    "background": "#00953b",
+                    "color": "#ffffff",
+                    "departureDate": "8:49 AM",
+                    "destination": "Dover",
+                    "inlineMessage": "",
+                    "line": "Morristown Line",
+                    "lineAbbreviation": "M&E",
+                    "status": "in 28 Min",
+                    "track": "1",
+                    "trainID": "6613",
+                    "stops": null,
+                    "capacity": {
+                        "sections": [
+                            {
+                                "position": "Back",
+                                "cars": [
+                                    {
+                                        "color": "#0B6623",
+                                        "number": "7261"
+                                    },
+                                    {
+                                        "color": "#0B6623",
+                                        "number": "7006"
+                                    }
+                                ]
+                            },
+                            {
+                                "position": "Front",
+                                "cars": [
+                                    {
+                                        "color": "#0B6623",
+                                        "number": "7746"
+                                    },
+                                    {
+                                        "color": "#0B6623",
+                                        "number": "7293"
+                                    }
+                                ]
+                            },
+                            {
+                                "position": "Middle",
+                                "cars": [
+                                    {
+                                        "color": "#0B6623",
+                                        "number": "7219"
+                                    },
+                                    {
+                                        "color": "#0B6623",
+                                        "number": "7655"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                },
+                {
+                    "background": "#000000 ",
+                    "color": "#ffffff",
+                    "departureDate": "8:52 AM",
+                    "destination": "New York -SEC",
+                    "inlineMessage": "",
+                    "line": "Morristown Line",
+                    "lineAbbreviation": "M&E",
+                    "status": "",
+                    "track": "2",
+                    "trainID": "6624",
+                    "stops": null,
+                    "capacity": {
+                        "sections": [
+                            {
+                                "position": "Back",
+                                "cars": [
+                                    {
+                                        "color": "#0B6623",
+                                        "number": "5349"
+                                    },
+                                    {
+                                        "color": "#0B6623",
+                                        "number": "5317"
+                                    }
+                                ]
+                            },
+                            {
+                                "position": "Front",
+                                "cars": [
+                                    {
+                                        "color": "#0B6623",
+                                        "number": "6016"
+                                    },
+                                    {
+                                        "color": "#0B6623",
+                                        "number": "5413"
+                                    }
+                                ]
+                            },
+                            {
+                                "position": "Middle",
+                                "cars": [
+                                    {
+                                        "color": "#0B6623",
+                                        "number": "5316"
+                                    },
+                                    {
+                                        "color": "#0B6623",
+                                        "number": "5385"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                },
+                {
+                    "background": "#7a6e62",
+                    "color": "#ffffff",
+                    "departureDate": "9:10 AM",
+                    "destination": "Hoboken",
+                    "inlineMessage": "",
+                    "line": "Morristown Line",
+                    "lineAbbreviation": "M&E",
+                    "status": "",
+                    "track": "2",
+                    "trainID": "626",
+                    "stops": null,
+                    "capacity": null
+                },
+                {
+                    "background": "#00953b",
+                    "color": "#ffffff",
+                    "departureDate": "9:19 AM",
+                    "destination": "Dover",
+                    "inlineMessage": "",
+                    "line": "Morristown Line",
+                    "lineAbbreviation": "M&E",
+                    "status": "",
+                    "track": "1",
+                    "trainID": "6617",
+                    "stops": null,
+                    "capacity": null
+                },
+                {
+                    "background": "#7a6e62",
+                    "color": "#ffffff",
+                    "departureDate": "9:30 AM",
+                    "destination": "Hoboken",
+                    "inlineMessage": "",
+                    "line": "Gladstone Branch",
+                    "lineAbbreviation": "M&E",
+                    "status": "",
+                    "track": "2",
+                    "trainID": "480",
+                    "stops": null,
+                    "capacity": null
+                },
+                {
+                    "background": "#a1d5ae",
+                    "color": "#000000",
+                    "departureDate": "9:33 AM",
+                    "destination": "Gladstone",
+                    "inlineMessage": "",
+                    "line": "Gladstone Branch",
+                    "lineAbbreviation": "M&E",
+                    "status": "",
+                    "track": "1",
+                    "trainID": "411",
+                    "stops": null,
+                    "capacity": null
+                },
+                {
+                    "background": "#000000 ",
+                    "color": "#ffffff",
+                    "departureDate": "9:55 AM",
+                    "destination": "New York",
+                    "inlineMessage": "",
+                    "line": "Morristown Line",
+                    "lineAbbreviation": "M&E",
+                    "status": "",
+                    "track": "2",
+                    "trainID": "6328",
+                    "stops": null,
+                    "capacity": null
+                },
+                {
+                    "background": "#00953b",
+                    "color": "#ffffff",
+                    "departureDate": "9:58 AM",
+                    "destination": "Hackettstown",
+                    "inlineMessage": "",
+                    "line": "Morristown Line",
+                    "lineAbbreviation": "M&E",
+                    "status": "",
+                    "track": "1",
+                    "trainID": "851",
+                    "stops": null,
+                    "capacity": null
+                },
+                {
+                    "background": "#00953b",
+                    "color": "#ffffff",
+                    "departureDate": "10:02 AM",
+                    "destination": "Summit",
+                    "inlineMessage": "",
+                    "line": "Morristown Line",
+                    "lineAbbreviation": "M&E",
+                    "status": "",
+                    "track": "1",
+                    "trainID": "6317",
+                    "stops": null,
+                    "capacity": null
+                },
+                {
+                    "background": "#a1d5ae",
+                    "color": "#000000",
+                    "departureDate": "10:18 AM",
+                    "destination": "Gladstone",
+                    "inlineMessage": "",
+                    "line": "Gladstone Branch",
+                    "lineAbbreviation": "M&E",
+                    "status": "",
+                    "track": "1",
+                    "trainID": "413",
+                    "stops": null,
+                    "capacity": null
+                },
+                {
+                    "background": "#000000 ",
+                    "color": "#ffffff",
+                    "departureDate": "10:32 AM",
+                    "destination": "New York -SEC",
+                    "inlineMessage": "",
+                    "line": "Morristown Line",
+                    "lineAbbreviation": "M&E",
+                    "status": "",
+                    "track": "2",
+                    "trainID": "6332",
+                    "stops": null,
+                    "capacity": null
+                },
+                {
+                    "background": "#00953b",
+                    "color": "#ffffff",
+                    "departureDate": "10:47 AM",
+                    "destination": "Dover",
+                    "inlineMessage": "",
+                    "line": "Morristown Line",
+                    "lineAbbreviation": "M&E",
+                    "status": "",
+                    "track": "1",
+                    "trainID": "6619",
+                    "stops": null,
+                    "capacity": null
+                },
+                {
+                    "background": "#7a6e62",
+                    "color": "#ffffff",
+                    "departureDate": "10:54 AM",
+                    "destination": "Hoboken",
+                    "inlineMessage": "",
+                    "line": "Gladstone Branch",
+                    "lineAbbreviation": "M&E",
+                    "status": "",
+                    "track": "2",
+                    "trainID": "418",
+                    "stops": null,
+                    "capacity": null
+                },
+                {
+                    "background": "#a1d5ae",
+                    "color": "#000000",
+                    "departureDate": "11:18 AM",
+                    "destination": "Gladstone",
+                    "inlineMessage": "",
+                    "line": "Gladstone Branch",
+                    "lineAbbreviation": "M&E",
+                    "status": "",
+                    "track": "1",
+                    "trainID": "415",
+                    "stops": null,
+                    "capacity": null
+                }
+            ],
+            "bannerMsg": "",
+            "twitterAccounts": null,
+            "fullScreenMsg": null
+        }
+    },
+    "extensions": {
+        "cacheControl": {
+            "version": 1,
+            "hints": [
+                {
+                    "path": [
+                        "getTrainDepartureScreens"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        0,
+                        "stops"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        0,
+                        "capacity"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        0,
+                        "capacity",
+                        "sections"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        0,
+                        "capacity",
+                        "sections",
+                        0,
+                        "cars"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        0,
+                        "capacity",
+                        "sections",
+                        1,
+                        "cars"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        0,
+                        "capacity",
+                        "sections",
+                        2,
+                        "cars"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        1,
+                        "stops"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        1,
+                        "capacity"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        2,
+                        "stops"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        2,
+                        "capacity"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        3,
+                        "stops"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        3,
+                        "capacity"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        3,
+                        "capacity",
+                        "sections"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        3,
+                        "capacity",
+                        "sections",
+                        0,
+                        "cars"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        3,
+                        "capacity",
+                        "sections",
+                        1,
+                        "cars"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        3,
+                        "capacity",
+                        "sections",
+                        2,
+                        "cars"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        4,
+                        "stops"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        4,
+                        "capacity"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        4,
+                        "capacity",
+                        "sections"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        4,
+                        "capacity",
+                        "sections",
+                        0,
+                        "cars"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        4,
+                        "capacity",
+                        "sections",
+                        1,
+                        "cars"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        4,
+                        "capacity",
+                        "sections",
+                        2,
+                        "cars"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        5,
+                        "stops"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        5,
+                        "capacity"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        5,
+                        "capacity",
+                        "sections"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        5,
+                        "capacity",
+                        "sections",
+                        0,
+                        "cars"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        5,
+                        "capacity",
+                        "sections",
+                        1,
+                        "cars"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        5,
+                        "capacity",
+                        "sections",
+                        2,
+                        "cars"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        6,
+                        "stops"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        6,
+                        "capacity"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        6,
+                        "capacity",
+                        "sections"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        6,
+                        "capacity",
+                        "sections",
+                        0,
+                        "cars"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        6,
+                        "capacity",
+                        "sections",
+                        1,
+                        "cars"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        6,
+                        "capacity",
+                        "sections",
+                        2,
+                        "cars"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        7,
+                        "stops"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        7,
+                        "capacity"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        8,
+                        "stops"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        8,
+                        "capacity"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        9,
+                        "stops"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        9,
+                        "capacity"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        10,
+                        "stops"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        10,
+                        "capacity"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        11,
+                        "stops"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        11,
+                        "capacity"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        12,
+                        "stops"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        12,
+                        "capacity"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        13,
+                        "stops"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        13,
+                        "capacity"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        14,
+                        "stops"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        14,
+                        "capacity"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        15,
+                        "stops"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        15,
+                        "capacity"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        16,
+                        "stops"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        16,
+                        "capacity"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        17,
+                        "stops"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        17,
+                        "capacity"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        18,
+                        "stops"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "items",
+                        18,
+                        "capacity"
+                    ],
+                    "maxAge": 30
+                },
+                {
+                    "path": [
+                        "getTrainDepartureScreens",
+                        "twitterAccounts"
+                    ],
+                    "maxAge": 3600
+                }
+            ]
+        }
+    }
+}
