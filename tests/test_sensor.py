@@ -57,11 +57,11 @@ def departure(
 class TestUsableDepartures:
     """Which board rows count as this commute's trains."""
 
-    def test_prefers_the_resolved_train_set(self) -> None:
-        """The planner's answer beats the board's label.
+    def test_includes_trains_only_the_planner_knows(self) -> None:
+        """Train 411 is a Gladstone train whose board label reads "Summit".
 
-        Train 411 is a Gladstone train whose board label reads "Summit", but
-        it connects onward to New York. A label match would throw it away.
+        It connects onward to New York, so a label match alone would throw it
+        away.
         """
         board = DepartureBoard(
             station="Short Hills Station",
@@ -75,8 +75,13 @@ class TestUsableDepartures:
         usable = usable_departures(board, route, NY_PENN)
         assert [d.train_id for d in usable] == ["411"]
 
-    def test_falls_back_to_label_matching(self) -> None:
-        """Used only when the planner could not resolve the pair."""
+    def test_includes_trains_only_the_label_knows(self) -> None:
+        """The planner set is never given a veto -- see usable_departures.
+
+        When it is stale or partial, a train the label plainly matches must
+        still count. Silently dropping a cancelled train is the failure this
+        integration exists to prevent.
+        """
         board = DepartureBoard(
             station="Short Hills Station",
             departures=(

@@ -70,6 +70,11 @@
       "advisories": {
         "name": "Planned advisories"
       }
+    },
+    "binary_sensor": {
+      "disrupted": {
+        "name": "Commute disrupted"
+      }
     }
   }
 }

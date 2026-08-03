@@ -41,37 +41,43 @@ def usable_departures(
 ) -> list[Departure]:
     """Return the departures that actually serve this commute.
 
-    Preference order matters:
+    Two signals, and a departure qualifies on **either**:
 
-    1. The train IDs resolved from the trip planner. This is the good filter:
-       it includes journeys requiring a transfer -- a Gladstone train to
-       Summit, connecting onward -- whose board label reads ``Summit`` and
-       which a label match would discard.
-    2. A shared-word match against the board's destination label, used only
-       when resolution failed. Board labels are short forms
-       (``New York -SEC`` for ``New York Penn Station``), so neither equality
-       nor a substring test works.
-    3. Everything, when no destination is configured.
+    1. Its train is in the set resolved from the trip planner. This catches
+       journeys requiring a transfer -- a Gladstone train to Summit,
+       connecting onward -- whose board label reads ``Summit`` and which a
+       label match alone would discard.
+    2. Its destination label shares a significant word with the configured
+       destination. Board labels are short forms (``New York -SEC`` for
+       ``New York Penn Station``), so neither equality nor a substring test
+       works.
+
+    **The union matters, and it is not merely defensive.** Treating the
+    planner set as authoritative and skipping the label check silently drops
+    real trains whenever that set is stale, partial, or built before a
+    timetable change -- and "silently drops a cancelled train" is precisely
+    the failure this integration exists to prevent. The recorded disruption
+    demonstrates it: train 6320 is labelled ``New York`` and cancelled, but a
+    single planner page resolves only four trains and 6320 is not among them.
+
+    Neither signal is complete, so neither gets a veto. With no destination
+    configured, every departure qualifies.
     """
     if board is None:
         return []
 
-    if route is not None and route.train_ids:
-        return [
-            departure
-            for departure in board.departures
-            if departure.train_id in route.train_ids
-        ]
+    train_ids = route.train_ids if route is not None else frozenset()
+    wanted = _significant_words(destination) if destination else frozenset()
 
-    if destination:
-        wanted = _significant_words(destination)
-        return [
-            departure
-            for departure in board.departures
-            if wanted & _significant_words(departure.destination)
-        ]
+    if not train_ids and not wanted:
+        return list(board.departures)
 
-    return list(board.departures)
+    return [
+        departure
+        for departure in board.departures
+        if departure.train_id in train_ids
+        or (wanted & _significant_words(departure.destination))
+    ]
 
 
 class NJTransitEntity(CoordinatorEntity[DepartureCoordinator]):

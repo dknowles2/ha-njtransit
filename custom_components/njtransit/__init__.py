@@ -29,7 +29,7 @@ from .coordinator import (
     store_for,
 )
 
-PLATFORMS: list[Platform] = [Platform.SENSOR]
+PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR, Platform.SENSOR]
 
 
 def _interval(entry: NJTransitConfigEntry, key: str, default: int) -> timedelta:
