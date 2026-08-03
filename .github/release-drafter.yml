@@ -1,0 +1,54 @@
+name-template: $RESOLVED_VERSION
+tag-template: $RESOLVED_VERSION
+
+categories:
+  - title: "⚠️ Breaking changes"
+    labels:
+      - breaking
+  - title: "🚀 New features"
+    labels:
+      - enhancement
+  - title: "🐞 Bug fixes"
+    labels:
+      - bug
+  - title: "📋 Other changes"
+  - title: "🧩 Dependency updates"
+    labels:
+      - dependencies
+
+# Labels drive both the changelog sections above and the version bump below,
+# so they are applied from the Conventional Commits prefix this repo already
+# requires rather than by hand. A PR titled `feat(sensor): ...` lands under
+# "New features" without anyone remembering to label it.
+autolabeler:
+  - label: breaking
+    title:
+      - '/^[a-z]+(\(.+\))?!:/'
+  - label: enhancement
+    title:
+      - '/^feat(\(.+\))?!?:/'
+  - label: bug
+    title:
+      - '/^fix(\(.+\))?!?:/'
+  - label: dependencies
+    title:
+      - '/^(build|chore)\(deps\)/'
+
+version-resolver:
+  major:
+    labels:
+      - breaking
+  minor:
+    labels:
+      - enhancement
+  default: patch
+
+template: |
+  ## What's Changed
+
+  $CHANGES
+
+  ## Installation
+
+  Install through HACS, or download `njtransit.zip` below and extract it into
+  `config/custom_components/njtransit/`.

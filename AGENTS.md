@@ -115,6 +115,24 @@ wordmark lives, and Home Assistant falls back to the icon without one.
 `tests/test_brand.py` fails if a logo appears, which is the prompt to check
 the artwork's provenance rather than a rule against ever having one.
 
+## Releases
+
+Publishing a GitHub release is the whole process. `release.yml` stamps the tag
+into `manifest.json`, zips `custom_components/njtransit/` into
+`njtransit.zip`, and attaches it -- that asset is what HACS downloads, named
+by `hacs.json`.
+
+**Do not put a real version in `manifest.json`.** It carries the
+`0000.0.0` placeholder deliberately, and the release workflow refuses to run
+if that is missing, so a stale hand-edited version can never ship.
+`tests/test_packaging.py` guards this and the other packaging invariants, so
+they fail in the pull request rather than after a tag exists.
+
+Release notes are drafted by release-drafter from merged pull requests, and
+labels come from the Conventional Commits prefix in the PR title -- `feat:`
+lands under new features and bumps the minor version, `fix:` under bug fixes.
+That is another reason to get the prefix right.
+
 ## Layering
 
 `custom_components/njtransit/api/` must not import `homeassistant`. It takes an
