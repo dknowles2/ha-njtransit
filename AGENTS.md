@@ -131,13 +131,30 @@ if it fails, do not add an exemption.
 Run the same checks CI runs, and make sure all three pass:
 
 ```sh
-uv run pytest
+uv run coverage run -m pytest
+uv run coverage report      # enforces fail_under = 97
 uv run ruff check .
 uv run mypy .
 ```
 
+`uv run pytest` alone is fine for quick iteration, but run the coverage
+variant before finishing — CI enforces the gate, and new code without tests
+fails there rather than here.
+
 Run `mypy .`, not `mypy custom_components/njtransit` — CI checks the whole
 tree, and errors in `tests/` are easy to miss otherwise.
+
+`tests/test_snapshots.py` freezes every entity's state and attributes against
+the recorded capture, which is what catches an entity quietly disappearing or
+an attribute being renamed. Update it deliberately, never to make a build go
+green:
+
+```sh
+uv run pytest tests/test_snapshots.py --snapshot-update
+```
+
+A snapshot diff is a behaviour change. Read it before accepting it — if you
+cannot explain a line of the diff, that line is the bug.
 
 ## Commit / PR conventions
 

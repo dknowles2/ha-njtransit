@@ -1,0 +1,819 @@
+# serializer version: 1
+# name: test_all_entities
+  dict({
+    'binary_sensor.short_hills_station_to_new_york_penn_station_commute_disrupted': dict({
+      'attributes': dict({
+        'affected_trains': list([
+          '6320',
+        ]),
+        'delay_threshold': 10,
+        <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'problem',
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to New York Penn Station Commute disrupted',
+        'lookahead_minutes': 90,
+        'reasons': list([
+          'Train 6320 (8:25 AM) is cancelled',
+        ]),
+        'upcoming_trains': list([
+          '6320',
+          '6624',
+          '480',
+          '411',
+        ]),
+      }),
+      'state': 'on',
+      'unique_id': 'RT-NY-disrupted',
+    }),
+    'calendar.short_hills_station_to_new_york_penn_station_departures': dict({
+      'attributes': dict({
+        <CalendarEntityStateAttribute.ALL_DAY: 'all_day'>: False,
+        <CalendarEntityStateAttribute.DESCRIPTION: 'description'>: 'Scheduled journey time 1 hr 7 min.',
+        <CalendarEntityStateAttribute.END_TIME: 'end_time'>: '2026-08-03 10:12:00',
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to New York Penn Station Departures',
+        <CalendarEntityStateAttribute.LOCATION: 'location'>: 'Short Hills Station',
+        <CalendarEntityStateAttribute.MESSAGE: 'message'>: 'Train 480 to New York Penn Station',
+        <CalendarEntityStateAttribute.START_TIME: 'start_time'>: '2026-08-03 09:30:00',
+      }),
+      'state': 'off',
+      'unique_id': 'RT-NY-calendar',
+    }),
+    'sensor.short_hills_station_to_new_york_penn_station_crowding': dict({
+      'attributes': dict({
+        <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'enum',
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to New York Penn Station Crowding',
+        <SensorEntityCapabilityAttribute.OPTIONS: 'options'>: list([
+          'light',
+          'moderate',
+          'heavy',
+          'unknown',
+        ]),
+      }),
+      'state': 'unknown',
+      'unique_id': 'RT-NY-crowding',
+    }),
+    'sensor.short_hills_station_to_new_york_penn_station_delay': dict({
+      'attributes': dict({
+        <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'duration',
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to New York Penn Station Delay',
+        <SensorEntityCapabilityAttribute.STATE_CLASS: 'state_class'>: <SensorStateClass.MEASUREMENT: 'measurement'>,
+        <EntityStateAttribute.UNIT_OF_MEASUREMENT: 'unit_of_measurement'>: <UnitOfTime.MINUTES: 'min'>,
+      }),
+      'state': 'unknown',
+      'unique_id': 'RT-NY-delay',
+    }),
+    'sensor.short_hills_station_to_new_york_penn_station_departure_2': dict({
+      'attributes': dict({
+        'alerts': list([
+        ]),
+        'cars': list([
+          dict({
+            'crowding': 'light',
+            'number': '5349',
+            'position': 'Back',
+          }),
+          dict({
+            'crowding': 'light',
+            'number': '5317',
+            'position': 'Back',
+          }),
+          dict({
+            'crowding': 'light',
+            'number': '6016',
+            'position': 'Front',
+          }),
+          dict({
+            'crowding': 'light',
+            'number': '5413',
+            'position': 'Front',
+          }),
+          dict({
+            'crowding': 'light',
+            'number': '5316',
+            'position': 'Middle',
+          }),
+          dict({
+            'crowding': 'light',
+            'number': '5385',
+            'position': 'Middle',
+          }),
+        ]),
+        'crowding': 'light',
+        'delay_minutes': None,
+        'destination': 'New York -SEC',
+        <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'timestamp',
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to New York Penn Station Departure 2',
+        'inline_message': None,
+        'line': 'Morristown Line',
+        'status': 'unknown',
+        'status_raw': '',
+        'track': '2',
+        'train_id': '6624',
+      }),
+      'state': '2026-08-03T12:52:00+00:00',
+      'unique_id': 'RT-NY-departure-1',
+    }),
+    'sensor.short_hills_station_to_new_york_penn_station_departure_3': dict({
+      'attributes': dict({
+        'alerts': list([
+        ]),
+        'cars': list([
+        ]),
+        'crowding': 'unknown',
+        'delay_minutes': None,
+        'destination': 'Hoboken',
+        <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'timestamp',
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to New York Penn Station Departure 3',
+        'inline_message': None,
+        'line': 'Gladstone Branch',
+        'status': 'unknown',
+        'status_raw': '',
+        'track': '2',
+        'train_id': '480',
+      }),
+      'state': '2026-08-03T13:30:00+00:00',
+      'unique_id': 'RT-NY-departure-2',
+    }),
+    'sensor.short_hills_station_to_new_york_penn_station_next_departure': dict({
+      'attributes': dict({
+        'alerts': list([
+        ]),
+        'cars': list([
+        ]),
+        'crowding': 'unknown',
+        'delay_minutes': None,
+        'destination': 'New York',
+        <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'timestamp',
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to New York Penn Station Next departure',
+        'inline_message': None,
+        'line': 'Morristown Line',
+        'status': 'cancelled',
+        'status_raw': 'Cancelled',
+        'track': '2',
+        'train_id': '6320',
+      }),
+      'state': '2026-08-03T12:25:00+00:00',
+      'unique_id': 'RT-NY-departure-0',
+    }),
+    'sensor.short_hills_station_to_new_york_penn_station_planned_advisories': dict({
+      'attributes': dict({
+        'affects_my_trains': list([
+        ]),
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to New York Penn Station Planned advisories',
+        'lines': list([
+          'MNE',
+        ]),
+        'messages': list([
+          'Northeast Corridor, North Jersey Coast Line, and Morris & Essex Lines: Possible Delays – Weekends Beginning Friday, July 31, 2026',
+        ]),
+        <SensorEntityCapabilityAttribute.STATE_CLASS: 'state_class'>: <SensorStateClass.MEASUREMENT: 'measurement'>,
+        'train_ids': list([
+        ]),
+        <EntityStateAttribute.UNIT_OF_MEASUREMENT: 'unit_of_measurement'>: 'alerts',
+        'urls': list([
+          'https://www.njtransit.com/service-advisory/2063193',
+        ]),
+      }),
+      'state': '1',
+      'unique_id': 'RT-NY-advisories',
+    }),
+    'sensor.short_hills_station_to_new_york_penn_station_service_alerts': dict({
+      'attributes': dict({
+        'affects_my_trains': list([
+          '309',
+          '6311',
+        ]),
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to New York Penn Station Service alerts',
+        'lines': list([
+          'MNE',
+        ]),
+        'messages': list([
+          'M and E train #309, the 8:23 AM arrival in Summit is up to 15 minutes late due to congestion from signal issues near Newark Broad St.',
+          'Update: M and E train #6607, the 7:07 AM departure from PSNY, scheduled to arrive in Dover at 8:35 AM, is up to 25 minutes late following earlier mechanical issues. ',
+          'M and E train #6324, the 8:54 AM departure from Summit, arriving in PSNY at 9:42 AM, is cancelled due to  equipment availability resulting from earlier crew availability issues. Please take train #6624, the 8:48 AM departure from Summit, arriving in PSNY at 9:31 AM , departing from Summit at 8:54 AM today, 8/3, making additional stops.',
+          'M and E train #6311, the 7:40 AM departure from PSNY, arrival into Summit at 8:33 AM, is cancelled due to crew availability at time of departure. Please take train #6613, the 8:02 AM departure from PSNY, arrival into Summit at 8:55 AM.',
+        ]),
+        <SensorEntityCapabilityAttribute.STATE_CLASS: 'state_class'>: <SensorStateClass.MEASUREMENT: 'measurement'>,
+        'train_ids': list([
+          '309',
+          '6311',
+          '6324',
+          '6607',
+        ]),
+        <EntityStateAttribute.UNIT_OF_MEASUREMENT: 'unit_of_measurement'>: 'alerts',
+        'urls': list([
+        ]),
+      }),
+      'state': '4',
+      'unique_id': 'RT-NY-alerts',
+    }),
+  })
+# ---
+# name: test_entities_without_a_destination
+  dict({
+    'binary_sensor.short_hills_station_commute_disrupted': dict({
+      'attributes': dict({
+        'affected_trains': list([
+          '309',
+          '6320',
+          '6311',
+        ]),
+        'delay_threshold': 10,
+        <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'problem',
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station Commute disrupted',
+        'lookahead_minutes': 90,
+        'reasons': list([
+          'Train 309 (8:17 AM): M and E train #309, the 8:23 AM arrival in Summit is up to 15 minutes late due to congestion from signal issues near Newark Broad St.',
+          'Train 6320 (8:25 AM) is cancelled',
+          'Train 6311 (8:28 AM) is cancelled',
+        ]),
+        'upcoming_trains': list([
+          '309',
+          '6320',
+          '6311',
+          '409',
+          '416',
+          '6613',
+          '6624',
+          '626',
+          '6617',
+          '480',
+          '411',
+        ]),
+      }),
+      'state': 'on',
+      'unique_id': 'RT-disrupted',
+    }),
+    'sensor.short_hills_station_crowding': dict({
+      'attributes': dict({
+        <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'enum',
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station Crowding',
+        <SensorEntityCapabilityAttribute.OPTIONS: 'options'>: list([
+          'light',
+          'moderate',
+          'heavy',
+          'unknown',
+        ]),
+        'positions': dict({
+          'back': list([
+            'light',
+          ]),
+          'front': list([
+            'light',
+          ]),
+          'middle': list([
+            'light',
+          ]),
+        }),
+      }),
+      'state': 'light',
+      'unique_id': 'RT-crowding',
+    }),
+    'sensor.short_hills_station_delay': dict({
+      'attributes': dict({
+        <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'duration',
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station Delay',
+        <SensorEntityCapabilityAttribute.STATE_CLASS: 'state_class'>: <SensorStateClass.MEASUREMENT: 'measurement'>,
+        <EntityStateAttribute.UNIT_OF_MEASUREMENT: 'unit_of_measurement'>: <UnitOfTime.MINUTES: 'min'>,
+      }),
+      'state': 'unknown',
+      'unique_id': 'RT-delay',
+    }),
+    'sensor.short_hills_station_departure_2': dict({
+      'attributes': dict({
+        'alerts': list([
+        ]),
+        'cars': list([
+        ]),
+        'crowding': 'unknown',
+        'delay_minutes': None,
+        'destination': 'New York',
+        <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'timestamp',
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station Departure 2',
+        'inline_message': None,
+        'line': 'Morristown Line',
+        'status': 'cancelled',
+        'status_raw': 'Cancelled',
+        'track': '2',
+        'train_id': '6320',
+      }),
+      'state': '2026-08-03T12:25:00+00:00',
+      'unique_id': 'RT-departure-1',
+    }),
+    'sensor.short_hills_station_departure_3': dict({
+      'attributes': dict({
+        'alerts': list([
+          'M and E train #6311, the 7:40 AM departure from PSNY, arrival into Summit at 8:33 AM, is cancelled due to crew availability at time of departure. Please take train #6613, the 8:02 AM departure from PSNY, arrival into Summit at 8:55 AM.',
+        ]),
+        'cars': list([
+        ]),
+        'crowding': 'unknown',
+        'delay_minutes': None,
+        'destination': 'Summit',
+        <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'timestamp',
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station Departure 3',
+        'inline_message': None,
+        'line': 'Morristown Line',
+        'status': 'cancelled',
+        'status_raw': 'CANCELLED',
+        'track': '1',
+        'train_id': '6311',
+      }),
+      'state': '2026-08-03T12:28:00+00:00',
+      'unique_id': 'RT-departure-2',
+    }),
+    'sensor.short_hills_station_next_departure': dict({
+      'attributes': dict({
+        'alerts': list([
+          'M and E train #309, the 8:23 AM arrival in Summit is up to 15 minutes late due to congestion from signal issues near Newark Broad St.',
+        ]),
+        'cars': list([
+          dict({
+            'crowding': 'light',
+            'number': '1380',
+            'position': 'Back',
+          }),
+          dict({
+            'crowding': 'light',
+            'number': '1472',
+            'position': 'Front',
+          }),
+          dict({
+            'crowding': 'light',
+            'number': '1473',
+            'position': 'Middle',
+          }),
+        ]),
+        'crowding': 'light',
+        'delay_minutes': None,
+        'destination': 'Summit',
+        <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'timestamp',
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station Next departure',
+        'inline_message': None,
+        'line': 'Morristown Line',
+        'status': 'all_aboard',
+        'status_raw': 'All Aboard',
+        'track': '1',
+        'train_id': '309',
+      }),
+      'state': '2026-08-03T12:17:00+00:00',
+      'unique_id': 'RT-departure-0',
+    }),
+    'sensor.short_hills_station_planned_advisories': dict({
+      'attributes': dict({
+        'affects_my_trains': list([
+        ]),
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station Planned advisories',
+        'lines': list([
+          'MNE',
+        ]),
+        'messages': list([
+          'Northeast Corridor, North Jersey Coast Line, and Morris & Essex Lines: Possible Delays – Weekends Beginning Friday, July 31, 2026',
+        ]),
+        <SensorEntityCapabilityAttribute.STATE_CLASS: 'state_class'>: <SensorStateClass.MEASUREMENT: 'measurement'>,
+        'train_ids': list([
+        ]),
+        <EntityStateAttribute.UNIT_OF_MEASUREMENT: 'unit_of_measurement'>: 'alerts',
+        'urls': list([
+          'https://www.njtransit.com/service-advisory/2063193',
+        ]),
+      }),
+      'state': '1',
+      'unique_id': 'RT-advisories',
+    }),
+    'sensor.short_hills_station_service_alerts': dict({
+      'attributes': dict({
+        'affects_my_trains': list([
+          '309',
+          '6311',
+        ]),
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station Service alerts',
+        'lines': list([
+          'MNE',
+        ]),
+        'messages': list([
+          'M and E train #309, the 8:23 AM arrival in Summit is up to 15 minutes late due to congestion from signal issues near Newark Broad St.',
+          'Update: M and E train #6607, the 7:07 AM departure from PSNY, scheduled to arrive in Dover at 8:35 AM, is up to 25 minutes late following earlier mechanical issues. ',
+          'M and E train #6324, the 8:54 AM departure from Summit, arriving in PSNY at 9:42 AM, is cancelled due to  equipment availability resulting from earlier crew availability issues. Please take train #6624, the 8:48 AM departure from Summit, arriving in PSNY at 9:31 AM , departing from Summit at 8:54 AM today, 8/3, making additional stops.',
+          'M and E train #6311, the 7:40 AM departure from PSNY, arrival into Summit at 8:33 AM, is cancelled due to crew availability at time of departure. Please take train #6613, the 8:02 AM departure from PSNY, arrival into Summit at 8:55 AM.',
+        ]),
+        <SensorEntityCapabilityAttribute.STATE_CLASS: 'state_class'>: <SensorStateClass.MEASUREMENT: 'measurement'>,
+        'train_ids': list([
+          '309',
+          '6311',
+          '6324',
+          '6607',
+        ]),
+        <EntityStateAttribute.UNIT_OF_MEASUREMENT: 'unit_of_measurement'>: 'alerts',
+        'urls': list([
+        ]),
+      }),
+      'state': '4',
+      'unique_id': 'RT-alerts',
+    }),
+  })
+# ---
+# name: test_two_commutes_from_one_origin
+  dict({
+    'binary_sensor.short_hills_station_to_hoboken_terminal_commute_disrupted': dict({
+      'attributes': dict({
+        'affected_trains': list([
+        ]),
+        'delay_threshold': 10,
+        <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'problem',
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to Hoboken Terminal Commute disrupted',
+        'lookahead_minutes': 90,
+        'reasons': list([
+        ]),
+        'upcoming_trains': list([
+          '416',
+          '626',
+          '480',
+          '411',
+        ]),
+      }),
+      'state': 'off',
+      'unique_id': 'RT-HB-disrupted',
+    }),
+    'binary_sensor.short_hills_station_to_new_york_penn_station_commute_disrupted': dict({
+      'attributes': dict({
+        'affected_trains': list([
+          '6320',
+        ]),
+        'delay_threshold': 10,
+        <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'problem',
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to New York Penn Station Commute disrupted',
+        'lookahead_minutes': 90,
+        'reasons': list([
+          'Train 6320 (8:25 AM) is cancelled',
+        ]),
+        'upcoming_trains': list([
+          '6320',
+          '6624',
+          '480',
+          '411',
+        ]),
+      }),
+      'state': 'on',
+      'unique_id': 'RT-NY-disrupted',
+    }),
+    'calendar.short_hills_station_to_hoboken_terminal_departures': dict({
+      'attributes': dict({
+        <CalendarEntityStateAttribute.ALL_DAY: 'all_day'>: False,
+        <CalendarEntityStateAttribute.DESCRIPTION: 'description'>: 'Scheduled journey time 1 hr 7 min.',
+        <CalendarEntityStateAttribute.END_TIME: 'end_time'>: '2026-08-03 10:12:00',
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to Hoboken Terminal Departures',
+        <CalendarEntityStateAttribute.LOCATION: 'location'>: 'Short Hills Station',
+        <CalendarEntityStateAttribute.MESSAGE: 'message'>: 'Train 480 to Hoboken Terminal',
+        <CalendarEntityStateAttribute.START_TIME: 'start_time'>: '2026-08-03 09:30:00',
+      }),
+      'state': 'off',
+      'unique_id': 'RT-HB-calendar',
+    }),
+    'calendar.short_hills_station_to_new_york_penn_station_departures': dict({
+      'attributes': dict({
+        <CalendarEntityStateAttribute.ALL_DAY: 'all_day'>: False,
+        <CalendarEntityStateAttribute.DESCRIPTION: 'description'>: 'Scheduled journey time 1 hr 7 min.',
+        <CalendarEntityStateAttribute.END_TIME: 'end_time'>: '2026-08-03 10:12:00',
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to New York Penn Station Departures',
+        <CalendarEntityStateAttribute.LOCATION: 'location'>: 'Short Hills Station',
+        <CalendarEntityStateAttribute.MESSAGE: 'message'>: 'Train 480 to New York Penn Station',
+        <CalendarEntityStateAttribute.START_TIME: 'start_time'>: '2026-08-03 09:30:00',
+      }),
+      'state': 'off',
+      'unique_id': 'RT-NY-calendar',
+    }),
+    'sensor.short_hills_station_to_hoboken_terminal_crowding': dict({
+      'attributes': dict({
+        <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'enum',
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to Hoboken Terminal Crowding',
+        <SensorEntityCapabilityAttribute.OPTIONS: 'options'>: list([
+          'light',
+          'moderate',
+          'heavy',
+          'unknown',
+        ]),
+        'positions': dict({
+          'back': list([
+            'light',
+          ]),
+          'front': list([
+            'light',
+          ]),
+          'middle': list([
+            'light',
+          ]),
+        }),
+      }),
+      'state': 'light',
+      'unique_id': 'RT-HB-crowding',
+    }),
+    'sensor.short_hills_station_to_hoboken_terminal_delay': dict({
+      'attributes': dict({
+        <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'duration',
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to Hoboken Terminal Delay',
+        <SensorEntityCapabilityAttribute.STATE_CLASS: 'state_class'>: <SensorStateClass.MEASUREMENT: 'measurement'>,
+        <EntityStateAttribute.UNIT_OF_MEASUREMENT: 'unit_of_measurement'>: <UnitOfTime.MINUTES: 'min'>,
+      }),
+      'state': '0',
+      'unique_id': 'RT-HB-delay',
+    }),
+    'sensor.short_hills_station_to_hoboken_terminal_departure_2': dict({
+      'attributes': dict({
+        'alerts': list([
+        ]),
+        'cars': list([
+        ]),
+        'crowding': 'unknown',
+        'delay_minutes': None,
+        'destination': 'Hoboken',
+        <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'timestamp',
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to Hoboken Terminal Departure 2',
+        'inline_message': None,
+        'line': 'Morristown Line',
+        'status': 'unknown',
+        'status_raw': '',
+        'track': '2',
+        'train_id': '626',
+      }),
+      'state': '2026-08-03T13:10:00+00:00',
+      'unique_id': 'RT-HB-departure-1',
+    }),
+    'sensor.short_hills_station_to_hoboken_terminal_departure_3': dict({
+      'attributes': dict({
+        'alerts': list([
+        ]),
+        'cars': list([
+        ]),
+        'crowding': 'unknown',
+        'delay_minutes': None,
+        'destination': 'Hoboken',
+        <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'timestamp',
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to Hoboken Terminal Departure 3',
+        'inline_message': None,
+        'line': 'Gladstone Branch',
+        'status': 'unknown',
+        'status_raw': '',
+        'track': '2',
+        'train_id': '480',
+      }),
+      'state': '2026-08-03T13:30:00+00:00',
+      'unique_id': 'RT-HB-departure-2',
+    }),
+    'sensor.short_hills_station_to_hoboken_terminal_next_departure': dict({
+      'attributes': dict({
+        'alerts': list([
+        ]),
+        'cars': list([
+          dict({
+            'crowding': 'light',
+            'number': '1504',
+            'position': 'Back',
+          }),
+          dict({
+            'crowding': 'light',
+            'number': '1311',
+            'position': 'Front',
+          }),
+          dict({
+            'crowding': 'light',
+            'number': '1505',
+            'position': 'Middle',
+          }),
+        ]),
+        'crowding': 'light',
+        'delay_minutes': 0,
+        'destination': 'Hoboken',
+        <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'timestamp',
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to Hoboken Terminal Next departure',
+        'inline_message': None,
+        'line': 'Gladstone Branch',
+        'status': 'on_time',
+        'status_raw': 'in 20 Min',
+        'track': '2',
+        'train_id': '416',
+      }),
+      'state': '2026-08-03T12:42:00+00:00',
+      'unique_id': 'RT-HB-departure-0',
+    }),
+    'sensor.short_hills_station_to_hoboken_terminal_planned_advisories': dict({
+      'attributes': dict({
+        'affects_my_trains': list([
+        ]),
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to Hoboken Terminal Planned advisories',
+        'lines': list([
+          'MNE',
+        ]),
+        'messages': list([
+          'Northeast Corridor, North Jersey Coast Line, and Morris & Essex Lines: Possible Delays – Weekends Beginning Friday, July 31, 2026',
+        ]),
+        <SensorEntityCapabilityAttribute.STATE_CLASS: 'state_class'>: <SensorStateClass.MEASUREMENT: 'measurement'>,
+        'train_ids': list([
+        ]),
+        <EntityStateAttribute.UNIT_OF_MEASUREMENT: 'unit_of_measurement'>: 'alerts',
+        'urls': list([
+          'https://www.njtransit.com/service-advisory/2063193',
+        ]),
+      }),
+      'state': '1',
+      'unique_id': 'RT-HB-advisories',
+    }),
+    'sensor.short_hills_station_to_hoboken_terminal_service_alerts': dict({
+      'attributes': dict({
+        'affects_my_trains': list([
+          '309',
+          '6311',
+        ]),
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to Hoboken Terminal Service alerts',
+        'lines': list([
+          'MNE',
+        ]),
+        'messages': list([
+          'M and E train #309, the 8:23 AM arrival in Summit is up to 15 minutes late due to congestion from signal issues near Newark Broad St.',
+          'Update: M and E train #6607, the 7:07 AM departure from PSNY, scheduled to arrive in Dover at 8:35 AM, is up to 25 minutes late following earlier mechanical issues. ',
+          'M and E train #6324, the 8:54 AM departure from Summit, arriving in PSNY at 9:42 AM, is cancelled due to  equipment availability resulting from earlier crew availability issues. Please take train #6624, the 8:48 AM departure from Summit, arriving in PSNY at 9:31 AM , departing from Summit at 8:54 AM today, 8/3, making additional stops.',
+          'M and E train #6311, the 7:40 AM departure from PSNY, arrival into Summit at 8:33 AM, is cancelled due to crew availability at time of departure. Please take train #6613, the 8:02 AM departure from PSNY, arrival into Summit at 8:55 AM.',
+        ]),
+        <SensorEntityCapabilityAttribute.STATE_CLASS: 'state_class'>: <SensorStateClass.MEASUREMENT: 'measurement'>,
+        'train_ids': list([
+          '309',
+          '6311',
+          '6324',
+          '6607',
+        ]),
+        <EntityStateAttribute.UNIT_OF_MEASUREMENT: 'unit_of_measurement'>: 'alerts',
+        'urls': list([
+        ]),
+      }),
+      'state': '4',
+      'unique_id': 'RT-HB-alerts',
+    }),
+    'sensor.short_hills_station_to_new_york_penn_station_crowding': dict({
+      'attributes': dict({
+        <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'enum',
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to New York Penn Station Crowding',
+        <SensorEntityCapabilityAttribute.OPTIONS: 'options'>: list([
+          'light',
+          'moderate',
+          'heavy',
+          'unknown',
+        ]),
+      }),
+      'state': 'unknown',
+      'unique_id': 'RT-NY-crowding',
+    }),
+    'sensor.short_hills_station_to_new_york_penn_station_delay': dict({
+      'attributes': dict({
+        <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'duration',
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to New York Penn Station Delay',
+        <SensorEntityCapabilityAttribute.STATE_CLASS: 'state_class'>: <SensorStateClass.MEASUREMENT: 'measurement'>,
+        <EntityStateAttribute.UNIT_OF_MEASUREMENT: 'unit_of_measurement'>: <UnitOfTime.MINUTES: 'min'>,
+      }),
+      'state': 'unknown',
+      'unique_id': 'RT-NY-delay',
+    }),
+    'sensor.short_hills_station_to_new_york_penn_station_departure_2': dict({
+      'attributes': dict({
+        'alerts': list([
+        ]),
+        'cars': list([
+          dict({
+            'crowding': 'light',
+            'number': '5349',
+            'position': 'Back',
+          }),
+          dict({
+            'crowding': 'light',
+            'number': '5317',
+            'position': 'Back',
+          }),
+          dict({
+            'crowding': 'light',
+            'number': '6016',
+            'position': 'Front',
+          }),
+          dict({
+            'crowding': 'light',
+            'number': '5413',
+            'position': 'Front',
+          }),
+          dict({
+            'crowding': 'light',
+            'number': '5316',
+            'position': 'Middle',
+          }),
+          dict({
+            'crowding': 'light',
+            'number': '5385',
+            'position': 'Middle',
+          }),
+        ]),
+        'crowding': 'light',
+        'delay_minutes': None,
+        'destination': 'New York -SEC',
+        <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'timestamp',
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to New York Penn Station Departure 2',
+        'inline_message': None,
+        'line': 'Morristown Line',
+        'status': 'unknown',
+        'status_raw': '',
+        'track': '2',
+        'train_id': '6624',
+      }),
+      'state': '2026-08-03T12:52:00+00:00',
+      'unique_id': 'RT-NY-departure-1',
+    }),
+    'sensor.short_hills_station_to_new_york_penn_station_departure_3': dict({
+      'attributes': dict({
+        'alerts': list([
+        ]),
+        'cars': list([
+        ]),
+        'crowding': 'unknown',
+        'delay_minutes': None,
+        'destination': 'Hoboken',
+        <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'timestamp',
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to New York Penn Station Departure 3',
+        'inline_message': None,
+        'line': 'Gladstone Branch',
+        'status': 'unknown',
+        'status_raw': '',
+        'track': '2',
+        'train_id': '480',
+      }),
+      'state': '2026-08-03T13:30:00+00:00',
+      'unique_id': 'RT-NY-departure-2',
+    }),
+    'sensor.short_hills_station_to_new_york_penn_station_next_departure': dict({
+      'attributes': dict({
+        'alerts': list([
+        ]),
+        'cars': list([
+        ]),
+        'crowding': 'unknown',
+        'delay_minutes': None,
+        'destination': 'New York',
+        <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'timestamp',
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to New York Penn Station Next departure',
+        'inline_message': None,
+        'line': 'Morristown Line',
+        'status': 'cancelled',
+        'status_raw': 'Cancelled',
+        'track': '2',
+        'train_id': '6320',
+      }),
+      'state': '2026-08-03T12:25:00+00:00',
+      'unique_id': 'RT-NY-departure-0',
+    }),
+    'sensor.short_hills_station_to_new_york_penn_station_planned_advisories': dict({
+      'attributes': dict({
+        'affects_my_trains': list([
+        ]),
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to New York Penn Station Planned advisories',
+        'lines': list([
+          'MNE',
+        ]),
+        'messages': list([
+          'Northeast Corridor, North Jersey Coast Line, and Morris & Essex Lines: Possible Delays – Weekends Beginning Friday, July 31, 2026',
+        ]),
+        <SensorEntityCapabilityAttribute.STATE_CLASS: 'state_class'>: <SensorStateClass.MEASUREMENT: 'measurement'>,
+        'train_ids': list([
+        ]),
+        <EntityStateAttribute.UNIT_OF_MEASUREMENT: 'unit_of_measurement'>: 'alerts',
+        'urls': list([
+          'https://www.njtransit.com/service-advisory/2063193',
+        ]),
+      }),
+      'state': '1',
+      'unique_id': 'RT-NY-advisories',
+    }),
+    'sensor.short_hills_station_to_new_york_penn_station_service_alerts': dict({
+      'attributes': dict({
+        'affects_my_trains': list([
+          '309',
+          '6311',
+        ]),
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to New York Penn Station Service alerts',
+        'lines': list([
+          'MNE',
+        ]),
+        'messages': list([
+          'M and E train #309, the 8:23 AM arrival in Summit is up to 15 minutes late due to congestion from signal issues near Newark Broad St.',
+          'Update: M and E train #6607, the 7:07 AM departure from PSNY, scheduled to arrive in Dover at 8:35 AM, is up to 25 minutes late following earlier mechanical issues. ',
+          'M and E train #6324, the 8:54 AM departure from Summit, arriving in PSNY at 9:42 AM, is cancelled due to  equipment availability resulting from earlier crew availability issues. Please take train #6624, the 8:48 AM departure from Summit, arriving in PSNY at 9:31 AM , departing from Summit at 8:54 AM today, 8/3, making additional stops.',
+          'M and E train #6311, the 7:40 AM departure from PSNY, arrival into Summit at 8:33 AM, is cancelled due to crew availability at time of departure. Please take train #6613, the 8:02 AM departure from PSNY, arrival into Summit at 8:55 AM.',
+        ]),
+        <SensorEntityCapabilityAttribute.STATE_CLASS: 'state_class'>: <SensorStateClass.MEASUREMENT: 'measurement'>,
+        'train_ids': list([
+          '309',
+          '6311',
+          '6324',
+          '6607',
+        ]),
+        <EntityStateAttribute.UNIT_OF_MEASUREMENT: 'unit_of_measurement'>: 'alerts',
+        'urls': list([
+        ]),
+      }),
+      'state': '4',
+      'unique_id': 'RT-NY-alerts',
+    }),
+  })
+# ---

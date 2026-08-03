@@ -397,3 +397,90 @@ class TestScheduledTrips:
         sent = mocker.mock_calls[0][2]["variables"]
         assert sent["date"] == "08/04/2026"
         assert sent["time"].endswith(("AM", "PM"))
+
+
+class TestPagingLimits:
+    """The two ways a service day comes back incomplete.
+
+    Both keep whatever was collected rather than discarding it. The train set
+    is a filter, and `usable_departures` unions it with label matching, so a
+    partial filter degrades gracefully while an empty one does not.
+    """
+
+    async def test_stops_at_the_iteration_cap(
+        self,
+        client_for: Callable[[AiohttpClientMocker], NJTransitClient],
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A dense enough timetable would page all day without the cap."""
+        # One departure a minute: each page advances the cursor by ~3 minutes,
+        # so the day would take hundreds of requests.
+        dense = [
+            {
+                "train_id": f"D{n}",
+                "departure": (
+                    datetime(2026, 8, 4, 4, 30, tzinfo=TZ) + timedelta(minutes=n)
+                ).isoformat(),
+                "duration": "39 min",
+            }
+            for n in range(400)
+        ]
+        mocker = AiohttpClientMocker()
+        planner = FakePlanner(dense)
+        planner.install(mocker)
+
+        trips = await client_for(mocker).scheduled_trips(
+            "Short Hills Station", "New York Penn Station", on=SERVICE_DATE
+        )
+
+        assert len(planner.requests) == 40, "the cap did not stop the loop"
+        assert trips, "the partial day was discarded"
+        assert len(trips) < len(dense)
+        assert "may be incomplete" in caplog.text
+
+    async def test_a_mid_page_failure_keeps_the_partial_day(
+        self,
+        client_for: Callable[[AiohttpClientMocker], NJTransitClient],
+        observed_day: list[dict[str, Any]],
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Losing the network partway through must not lose the morning."""
+        planner = FakePlanner(observed_day)
+        fail_after = 3
+
+        async def respond(
+            method: str, url: URL, data: dict[str, Any]
+        ) -> AiohttpClientMockResponse:
+            if len(planner.requests) >= fail_after:
+                raise TimeoutError
+            variables = data["variables"]
+            requested = datetime.strptime(
+                f"{variables['date']} {variables['time']}",
+                f"{PLANNER_DATE_FORMAT} {PLANNER_TIME_FORMAT}",
+            ).replace(tzinfo=TZ)
+            return AiohttpClientMockResponse(
+                method="POST", url=URL(ENDPOINT), json=planner.page_for(requested)
+            )
+
+        mocker = AiohttpClientMocker()
+        mocker.post(ENDPOINT, side_effect=respond)
+
+        trips = await client_for(mocker).scheduled_trips(
+            "Short Hills Station", "New York Penn Station", on=SERVICE_DATE
+        )
+
+        assert trips, "a partial day was thrown away"
+        assert len(trips) < 51
+        assert "incomplete" in caplog.text
+
+    async def test_an_immediate_failure_still_raises(
+        self, client_for: Callable[[AiohttpClientMocker], NJTransitClient]
+    ) -> None:
+        """With nothing collected there is no partial day worth keeping."""
+        mocker = AiohttpClientMocker()
+        mocker.post(ENDPOINT, exc=TimeoutError())
+
+        with pytest.raises(NJTransitConnectionError):
+            await client_for(mocker).scheduled_trips(
+                "Short Hills Station", "New York Penn Station", on=SERVICE_DATE
+            )
