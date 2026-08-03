@@ -63,15 +63,26 @@ Do not regenerate these fixtures to make a test pass.
 
 ## Traps this API sets
 
-- **Station names are not one vocabulary, they are three.** The board wants
-  `Short Hills`, the trip planner wants `Short Hills Station`, and planner leg
-  descriptions emit `SHORT HILLS`. Worse, the planner's tolerance varies per
-  station: `Hoboken`, `Hoboken Station`, and `Hoboken Terminal` all work, while
-  bare `Short Hills` fails. Never infer a rule from a station that happens to
-  work. SPEC §3.5.
+- **Take station names from `getTrainScheduleStationsRailForDV` and use them
+  verbatim.** Its titles are the one vocabulary both the board and the trip
+  planner accept. Never synthesize a name: most titles end in `Station` or
+  `Terminal`, but `MetLife Stadium` and `Penn Station New York` do not.
+- **That list has alias rows, so `title` is not a key.** 177 rows describe 167
+  stations — New York Penn appears three times. Dedupe by `pentaStationID`,
+  which is also the stable identity for unique IDs. SPEC §3.5.
+- **Outside that list, tolerance varies per station and per consumer.** The
+  board fuzzy-matches; the planner does not, and inconsistently — `Hoboken`,
+  `Hoboken Station` and `Hoboken Terminal` all work while bare `Short Hills`
+  fails. Never infer a rule from a station that happens to work.
 - **A wrong station name is indistinguishable from no service.** Both surface
   as a generic "unable to find trips". This is the nastiest failure mode in the
-  API.
+  API, and code that swallows it will be silent in exactly the case users
+  report.
+- **Line names are a fourth vocabulary, and the board's is useless.**
+  `lineAbbreviation` is `M&E`, matching neither the alert feed's `MNE` nor
+  `getTrainLines`. Correlate on the board's `line` *titles*, which match
+  `getTrainLines` exactly for twelve of thirteen lines — the exception being
+  `Morristown Line`. Unresolvable lines fail open. SPEC §6.4.
 - **The trip planner returns exactly 3 trips per call, always.** A single query
   for Short Hills → NY Penn yields 4 trains; the real service day has 51.
   Anything that needs the day's trains must page (SPEC §2.6). This was a bug in
