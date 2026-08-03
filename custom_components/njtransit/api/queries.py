@@ -170,6 +170,10 @@ query TripPlannerSchedule(
 """,
 )
 
+# Unused by v1. Kept because it is verified against the live endpoint, so
+# per-train stop tracking starts from a known-good query rather than a
+# guess -- and because a wrong field selection here nulls the whole
+# response (SPEC 3.1), which is exactly the mistake this avoids.
 STOP_LIST = Operation(
     name="TrainStopList",
     root_field="getTrainStopList",
