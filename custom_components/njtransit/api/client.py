@@ -11,6 +11,7 @@ import aiohttp
 from .exceptions import (
     NJTransitAPIError,
     NJTransitConnectionError,
+    NJTransitError,
     NJTransitNotFoundError,
     NJTransitRequestError,
 )
@@ -234,6 +235,22 @@ class NJTransitClient:
                 if found:
                     break
                 raise
+            except NJTransitError:
+                # A failure partway through leaves a partial day. Keep it, for
+                # the same reason the page cap does: the train set is a filter,
+                # and a partial filter beats none. Raise only when there is
+                # nothing to keep.
+                if not found:
+                    raise
+                _LOGGER.warning(
+                    "Paging %s -> %s failed after %d requests; "
+                    "schedule for %s is incomplete",
+                    origin,
+                    destination,
+                    pages,
+                    service_date,
+                )
+                break
             pages += 1
 
             if not trips:

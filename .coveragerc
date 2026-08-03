@@ -1,0 +1,22 @@
+# Coverage configuration.
+#
+# Per-tool config lives in its own file here -- see .ruff.toml, mypy.ini and
+# pytest.ini -- and there is no pyproject.toml.
+
+[run]
+source = custom_components/njtransit
+branch = True
+
+[report]
+show_missing = True
+skip_covered = True
+exclude_also =
+    if TYPE_CHECKING:
+    raise NotImplementedError
+
+# Deliberately below the 100% gate pyschlage uses. That works for a pure
+# library; a Home Assistant integration carries lifecycle branches -- unload
+# ordering, defensive `is None` guards on framework state -- that cost more to
+# exercise than they are worth. 97 sits just under the current 98% so real
+# rot fails the build while a single defensive line does not.
+fail_under = 97
