@@ -25,8 +25,7 @@ CAPTURED_AT = datetime(2026, 8, 3, 8, 20, tzinfo=TZ)
 def _transfers_only() -> dict[str, object]:
     """The recorded day with every one-seat ride removed.
 
-    Stands in for a pair like Gladstone to New York Penn, where no direct
-    train exists at any hour.
+    Stands in for a station pair with no direct service at any hour.
     """
     payload = load_fixture("trip_planner_short_hills_to_ny")
     trips = payload["data"]["getTripPlannerSchedule"]
@@ -102,7 +101,7 @@ class TestEvents:
     async def test_arrival_is_the_event_end(
         self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
     ) -> None:
-        """End comes from the last rail leg, not a parsed duration string."""
+        """End comes from the itinerary's end, not a parsed duration string."""
         install_api_mock(aioclient_mock)
         await setup_entry(hass, make_entry())
 
@@ -138,13 +137,15 @@ class TestEvents:
     async def test_transfers_return_when_nothing_runs_direct(
         self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
     ) -> None:
-        """Gladstone to Penn has no one-seat ride at all.
+        """A pair with no one-seat ride still gets a board.
 
         An empty calendar would read as "no trains" rather than "no direct
         trains", so the filter fails open. This is also what keeps the
         transfer-describing branch reachable.
         """
-        install_api_mock(aioclient_mock, overrides={"TripPlannerSchedule": TRANSFERS_ONLY})
+        install_api_mock(
+            aioclient_mock, overrides={"TripPlannerSchedule": TRANSFERS_ONLY}
+        )
         await setup_entry(hass, make_entry())
 
         events = await calendar_entity(hass).async_get_events(

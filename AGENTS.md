@@ -199,8 +199,13 @@ Run the same checks CI runs, and make sure all three pass:
 uv run coverage run -m pytest
 uv run coverage report      # enforces fail_under = 97
 uv run ruff check .
+uv run ruff format --check .
 uv run mypy .
 ```
+
+`ruff format --check` is easy to skip because `ruff check` passes without it —
+CI runs both in the same step, so skipping it fails the pull request on a
+line-length reflow with everything else green.
 
 `uv run pytest` alone is fine for quick iteration, but run the coverage
 variant before finishing — CI enforces the gate, and new code without tests
