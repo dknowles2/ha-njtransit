@@ -216,32 +216,52 @@ subway, `W` walking connector. Non-rail legs carry blocks from unrelated ID spac
 `114992`, bus `126GV026`) and must be excluded from train-ID correlation by `routeType`.
 
 **`travelMode` is the one parameter this integration does not copy from the site.**
-njtransit.com sends `BCTLXR` — every mode. This sends `CT`, rail and PATH.
+njtransit.com sends `BCTLXR` — every mode. This sends `C`, commuter rail only, because
+§2.7 keeps only one-seat rides and every itinerary the other modes buy is discarded on
+arrival. Full-day sweep, Short Hills → New York Penn, same service day:
 
-The cost is *not* mainly slot efficiency. It is that with every mode enabled, the planner
-picks a worse itinerary for a train and never offers the better one. Full-day sweep,
-Short Hills → New York Penn, same service day:
+| `travelMode` | calls | what the extra modes add |
+|---|---|---|
+| `BCTLXR` (site) | 24 | bus and subway itineraries, all discarded |
+| `CT` | 21 | PATH itineraries, all discarded |
+| `C` (ours) | 18 | nothing to discard |
 
-| `travelMode` | calls | distinct trains | itinerary chosen for train `880` |
-|---|---|---|---|
-| `BCTLXR` (site) | 24 | 51 | 1 hr 17 min — Hoboken, `126` bus, subway |
-| `CT` (ours) | 21 | 46 | 53 min — Newark Broad St rail transfer |
-| `C` | 18 | 41 | 53 min — Newark Broad St rail transfer |
+The planner returns exactly three itineraries per call (§2.6), so an itinerary that will be
+discarded costs a slot a direct train could have had. Restricting the query is therefore
+both cheaper and better covered — worth stating because that combination is unusual.
 
-Under `BCTLXR` the Newark Broad Street itinerary **never appeared on any page**, so the
-board would have reported `880` arriving at Penn Station at 7:27 PM when the real answer
-is 7:03 PM.
+The other modes also degrade what they do return. Under `BCTLXR` the planner offered train
+`880` as Hoboken + the `126` bus + the subway (1 hr 17 min) and **never surfaced, on any
+page,** the Newark Broad Street rail transfer reaching Penn 24 minutes earlier.
 
-This is a real tradeoff, not a free win: `CT` gives up six trains against the site
-default. All six are bus-dependent journeys of an hour or more, the worst being 2 hr
-13 min. Dropping `T` as well costs five further trains and buys nothing — `C` selects the
-same itineraries `CT` does, and PATH is a genuine Hoboken connection.
+### 2.7 Direct trains only
 
-**A Hoboken-headsigned train on a Penn Station board is usually correct**, and this is the
-most common false alarm about the destination filter. Train `880` reads `Hoboken`, but the
-planner routes it to Newark Broad Street and onto train `6258`, reaching Penn at 7:03 PM —
-eleven minutes ahead of the direct train that leaves 21 minutes later. Check the planner
-itinerary before concluding the filter is wrong.
+The destination filter keeps only **one-seat rides**. A transfer itinerary is a genuine way
+to make the journey — train `880` reads `Hoboken` on the board yet reaches Penn Station at
+7:03 PM via Newark Broad Street, ahead of the direct train leaving 21 minutes later — but
+the board has no way to say where you change, or that you must. A row headsigned for
+somewhere you are not going is worse than a row that is missing.
+
+For Short Hills → New York Penn: **23 direct trains a day, and 18 more reachable only by
+changing** (the 400-series Gladstone Branch services, plus Hoboken-bound `480`, `481`,
+`626`, `682`, `880`, `882`).
+
+**"Direct" cannot be `len(train_ids) == 1`.** `train_ids` counts rail legs only, so a train
+to Hoboken continuing by PATH has one train ID and is not remotely a one-seat ride.
+`ScheduledTrip.transport_legs` counts every leg you ride, of any mode; `has_transfer` is
+`transport_legs > 1`. Walking connectors are excluded, as is the planner's sentinel leg —
+identified by a null `offStopDescription` rather than a null block, because an observed
+subway leg carried a block of `""` while being a real leg.
+
+**The filter fails open when nothing runs direct.** For a pair with no one-seat ride at any
+hour, an empty board would read as "no trains" rather than "no direct trains", so the
+transfer itineraries come back and the fallback is logged. Branch-to-branch pairs are the
+candidates — Gladstone → New York Penn resolved just one direct trip in a spot check, so
+the margin is thin enough for this path to matter even where it does not trigger.
+
+The union with the destination-label match (§9) is unaffected: label matching admits rows
+whose headsign names the destination, and those are direct by construction. Train `6320`
+— cancelled, labelled `New York`, absent from the planner — still reaches the board.
 
 **A trip's arrival is the end of the itinerary, not the last rail leg's.** These differ
 whenever the journey continues by another mode, and the rail-leg reading is always
@@ -275,10 +295,10 @@ while cur < 11:59 PM:
     cur = max(firsts) + 1 minute        # guard: if this does not advance, += 30 min
 ```
 
-Measured for Short Hills → New York Penn on a clean weekday: **21 calls, 46 distinct
-trains** at the `CT` travel mode this integration sends (§2.5). The original 24 calls / 51
-trains measurement was taken at the site's `BCTLXR`, whose extra trains are bus-dependent
-hour-plus journeys. Once per day per commute, either is negligible next to the board's
+Measured for Short Hills → New York Penn on a clean weekday: **18 calls, 41 distinct
+trains** at the `C` travel mode this integration sends (§2.5), of which 23 are direct and
+survive the §2.7 filter. The original 24 calls / 51 trains measurement was taken at the
+site's `BCTLXR`. Once per day per commute, either is negligible next to the board's
 1440 polls/day.
 
 The implemented loop needs **17 calls** for that same day, because it jumps to the latest

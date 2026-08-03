@@ -196,7 +196,7 @@ query TrainStopList($train: String!) {
 TRIP_PLANNER_DEFAULTS = {
     "timeOption": "D",
     "accessible": False,
-    "travelMode": "CT",
+    "travelMode": "C",
     "maxWalkingDistance": "1.00",
     "minimizeTime": "T",
 }
@@ -204,28 +204,29 @@ TRIP_PLANNER_DEFAULTS = {
 TRAVEL_MODE_SITE_DEFAULT = "BCTLXR"
 """What njtransit.com sends: bus, rail, PATH, light rail, subway, ferry.
 
-Not what this integration sends. ``"CT"`` -- commuter rail and PATH -- is,
-and the difference is about *which itinerary* the planner picks for a train,
-not just how many it returns. Full-day sweep, Short Hills to New York Penn:
+Not what this integration sends. ``"C"`` -- commuter rail only -- is, because
+:class:`~..coordinator.RouteCoordinator` keeps only one-seat rides, so every
+itinerary the other modes buy is discarded on arrival. Full-day sweep, Short
+Hills to New York Penn:
 
-===========  =====  ======  ==========================
-travelMode   calls  trains  itinerary chosen for 880
-===========  =====  ======  ==========================
-``BCTLXR``      24      51  1 hr 17 min, bus + subway
-``CT``          21      46  53 min, rail transfer
-``C``           18      41  53 min, rail transfer
-===========  =====  ======  ==========================
+===========  =====  =======================================
+travelMode   calls  what the extra modes add
+===========  =====  =======================================
+``BCTLXR``      24  bus and subway itineraries, all dropped
+``CT``          21  PATH itineraries, all dropped
+``C``           18  nothing to drop
+===========  =====  =======================================
 
-Under the site default the planner offered train 880 as Hoboken, then the
-126 bus to Port Authority, then the subway -- and never surfaced the
-Newark Broad Street rail transfer that reaches Penn Station 24 minutes
-earlier, on any page. The board would have shown 880 arriving at 7:27 PM
-when the real answer was 7:03 PM.
+The planner returns exactly three itineraries per call (SPEC 2.6), so an
+itinerary that will be discarded is a slot a direct train could have had.
+Restricting the query is therefore cheaper *and* better covered, which is
+unusual enough to be worth stating: 18 calls rather than 24, for strictly
+more of what is actually wanted.
 
-The six trains ``CT`` gives up against the site default are all bus-dependent
-journeys of an hour or more (the worst is 2 hr 13 min). Dropping ``T`` as
-well costs five further trains and buys nothing -- PATH is a genuine Hoboken
-connection, and ``C`` picks the same itineraries ``CT`` does.
+The other modes also degrade the data they do return. Under the site default
+the planner offered train 880 as Hoboken, then the 126 bus to Port Authority,
+then the subway -- and never surfaced the Newark Broad Street rail transfer
+reaching Penn Station 24 minutes earlier, on any page.
 """
 
 PLANNER_DATE_FORMAT = "%m/%d/%Y"
@@ -236,4 +237,11 @@ PLANNER_TIME_FORMAT = "%I:%M %p"
 avoided because it is not portable."""
 
 RAIL_ROUTE_TYPE = "C"
-"""``routeType`` for commuter rail. Bus is ``B``, PATH ``T``, walking ``W``."""
+"""``routeType`` for commuter rail. Bus is ``B``, PATH ``T``, light rail
+``L``, NYC subway ``X``, walking ``W``."""
+
+WALK_ROUTE_TYPE = "W"
+"""``routeType`` for a walking connector between two stops.
+
+These carry no block and no ``offStopTime``, and they are not a leg you ride,
+so they do not make a journey a transfer."""

@@ -211,7 +211,20 @@ class ScheduledTrip:
     """Every rail train in the itinerary, in order. Longer than one element
     when the journey requires a transfer."""
 
+    transport_legs: int = 1
+    """Legs that carry you, of any mode. Walking connectors and the planner's
+    sentinel leg do not count.
+
+    Distinct from ``len(train_ids)``, which counts only rail. A journey by
+    train to Hoboken and PATH onward has one train and two transport legs,
+    and is emphatically not a one-seat ride."""
+
     @property
     def has_transfer(self) -> bool:
-        """Whether this journey requires changing trains."""
-        return len(self.train_ids) > 1
+        """Whether this journey requires changing vehicles.
+
+        Deliberately not ``len(train_ids) > 1``: that reads a train-to-PATH
+        or train-to-bus change as no change at all, because neither adds a
+        rail leg.
+        """
+        return self.transport_legs > 1

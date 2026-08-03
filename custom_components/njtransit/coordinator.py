@@ -195,11 +195,31 @@ class RouteCoordinator(NJTransitCoordinator[RouteData]):
                 )
             return RouteData(complete=False)
 
+        # One-seat rides only. A transfer itinerary is a real way to make the
+        # journey, but surfacing it means a board row headsigned somewhere
+        # else entirely -- train 880 reads "Hoboken" on a Penn Station board
+        # -- with nothing to say where you change or that you must. Anyone
+        # who wants the connection can find it; nobody wants to discover it
+        # by being on the wrong train. Roughly 23 direct trains a day for
+        # Short Hills to New York Penn, against 18 more reachable only by
+        # changing.
+        usable = [trip for trip in trips if not trip.has_transfer]
+
+        # Except where nothing runs direct -- Gladstone to New York Penn has
+        # no one-seat ride at all. An empty board there would read as "no
+        # trains" rather than "no direct trains", which is worse than showing
+        # the connections.
+        if not usable:
+            _LOGGER.info(
+                "No direct service %s -> %s; falling back to transfer itineraries",
+                self.origin,
+                self.destination,
+            )
+            usable = trips
+
         return RouteData(
-            train_ids=frozenset(
-                train_id for trip in trips for train_id in trip.train_ids
-            ),
-            trips=tuple(sorted(trips, key=lambda trip: trip.departure)),
+            train_ids=frozenset(trip.train_id for trip in usable),
+            trips=tuple(sorted(usable, key=lambda trip: trip.departure)),
             complete=complete,
         )
 

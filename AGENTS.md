@@ -88,17 +88,23 @@ Do not regenerate these fixtures to make a test pass.
   Anything that needs the day's trains must page (SPEC §2.6). This was a bug in
   the spec itself before it was caught — the `51 trains, not 4` assertion in
   the tests is its regression guard.
-- **A `Hoboken` train on a Penn Station board is usually correct.** This is
-  the most common false alarm about the destination filter. Train `880` reads
-  `Hoboken`; the planner routes it via a Newark Broad Street transfer onto
-  `6258`, reaching Penn at 7:03 PM — ahead of the direct train leaving 21
-  minutes later. Check the planner itinerary before "fixing" the filter.
+- **Only one-seat rides reach the board.** Transfer itineraries are real —
+  train `880` reads `Hoboken` yet reaches Penn ahead of the direct train
+  leaving 21 minutes later — but the board cannot say where you change or
+  that you must, so a row headsigned for somewhere you are not going is
+  worse than a missing row. 23 direct trains a day for Short Hills to Penn,
+  against 18 more reachable only by changing. Fails open where nothing runs
+  direct, so a branch-to-branch pair shows connections rather than an empty
+  board. SPEC §2.7.
+- **"Direct" is not `len(train_ids) == 1`.** That counts rail legs only, so a
+  train to Hoboken continuing by PATH looks like a one-seat ride. Use
+  `has_transfer`, which is built on `transport_legs` and counts every leg you
+  ride.
 - **The planner will route you by bus and subway if you let it.** `travelMode`
   is the one call parameter not copied from njtransit.com, which sends
-  `BCTLXR`. With every mode on, the planner picked bus-and-subway for `880`
-  (1 hr 17 min) and never offered the 53-minute rail transfer on any page, so
-  the board would have shown the wrong arrival. Send `CT`. It costs six
-  trains a day, all bus-dependent hour-plus journeys. SPEC §2.5.
+  `BCTLXR`. Send `C`: the other modes only buy itineraries §2.7 discards, and
+  with three itineraries per call each one costs a slot a direct train could
+  have had. 18 calls instead of 24, for more of what is wanted. SPEC §2.5.
 - **A trip's arrival is the itinerary's, not the last rail leg's.** They
   differ whenever the journey continues by another mode, and the rail-leg
   reading always flatters: it called a 1 hr 7 min journey 42 minutes. Reach
@@ -193,8 +199,13 @@ Run the same checks CI runs, and make sure all three pass:
 uv run coverage run -m pytest
 uv run coverage report      # enforces fail_under = 97
 uv run ruff check .
+uv run ruff format --check .
 uv run mypy .
 ```
+
+`ruff format --check` is easy to skip because `ruff check` passes without it —
+CI runs both in the same step, so skipping it fails the pull request on a
+line-length reflow with everything else green.
 
 `uv run pytest` alone is fine for quick iteration, but run the coverage
 variant before finishing — CI enforces the gate, and new code without tests
