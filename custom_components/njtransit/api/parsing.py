@@ -15,6 +15,7 @@ explicit midnight-rollover handling.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -391,3 +392,59 @@ def parse_trips(
         for item in payload or ()
         if (trip := parse_trip(item, reference)) is not None
     )
+
+
+# The board names lines by title ("Morristown Line"), the alert feed by code
+# ("MNE"), and getTrainLines by a third pairing of the two. Titles match
+# getTrainLines exactly for 12 of the 13 rail lines; the M&E main line is the
+# exception, where the board says "Morristown Line" and getTrainLines says
+# "Morris & Essex Line".
+_LINE_TITLE_ALIASES = {
+    "morristown line": "MNE",
+}
+
+
+def line_code_for_title(
+    title: str,
+    lines: Iterable[RailLine],
+) -> str | None:
+    """Map a board line title onto a timetable line code.
+
+    :return: The line code, or ``None`` when the title is unrecognized.
+        Callers should fail open on ``None`` -- a missed delay alert is worse
+        than a noisy one.
+    """
+    if not title:
+        return None
+
+    folded = title.strip().casefold()
+    for line in lines:
+        if line.title.casefold() == folded:
+            return line.abbreviation
+    return _LINE_TITLE_ALIASES.get(folded)
+
+
+def alert_line_codes(
+    titles: Iterable[str],
+    lines: Iterable[RailLine],
+) -> frozenset[str]:
+    """Return the alert-feed codes covering a set of board line titles.
+
+    The alert feed uses umbrella codes, so a Gladstone Branch train
+    (``MNEG``) is covered by ``MNE`` alerts.
+
+    :return: Codes to match alerts against. **Empty means "do not filter"**,
+        which happens when no title could be resolved.
+    """
+    resolved = set()
+    line_list = list(lines)
+    for title in titles:
+        code = line_code_for_title(title, line_list)
+        if code is None:
+            continue
+        resolved.add(code)
+        # Walk up to the umbrella the alert feed actually uses.
+        resolved.update(
+            umbrella for umbrella, covered in _LINE_UMBRELLAS.items() if code in covered
+        )
+    return frozenset(resolved)
