@@ -33,8 +33,3 @@ jobs:
         uses: "hacs/action@main"
         with:
           category: "integration"
-          # The brands check requires this domain to be listed in
-          # home-assistant/brands, which is a pull request against a different
-          # repository and cannot be satisfied from here. Everything else HACS
-          # checks is enforced. Drop this ignore once the brands PR lands.
-          ignore: "brands"
