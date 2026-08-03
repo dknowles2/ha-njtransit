@@ -286,16 +286,16 @@ class TestScheduledTrips:
     """The paging loop."""
 
     def test_travel_mode_deliberately_diverges_from_the_site(self) -> None:
-        """Rail and PATH only, not the site's every-mode default.
+        """Commuter rail only, not the site's every-mode default.
 
         Pinned because it looks like an oversight: every other value in
-        TRIP_PLANNER_DEFAULTS is copied verbatim from njtransit.com. With the
-        site's BCTLXR the planner picked a bus-and-subway itinerary for train
-        880 and never offered the 53-minute rail transfer on any page, so the
-        board reported an arrival 24 minutes too late. See SPEC 2.5 for the
-        full-day measurements, including what this costs.
+        TRIP_PLANNER_DEFAULTS is copied verbatim from njtransit.com. Since
+        RouteCoordinator keeps only one-seat rides, every itinerary the other
+        modes buy is discarded on arrival -- and with three itineraries per
+        call, each one costs a slot a direct train could have had. See
+        SPEC 2.5.
         """
-        assert queries.TRIP_PLANNER_DEFAULTS["travelMode"] == "CT"
+        assert queries.TRIP_PLANNER_DEFAULTS["travelMode"] == "C"
         assert queries.TRAVEL_MODE_SITE_DEFAULT == "BCTLXR"
 
     async def test_covers_the_whole_service_day(

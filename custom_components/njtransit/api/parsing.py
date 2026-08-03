@@ -31,7 +31,7 @@ from .models import (
     SystemAlert,
     TrainStatus,
 )
-from .queries import RAIL_ROUTE_TYPE
+from .queries import RAIL_ROUTE_TYPE, WALK_ROUTE_TYPE
 
 TZ = ZoneInfo("America/New_York")
 
@@ -363,6 +363,25 @@ def _terminal_time(trip: dict[str, Any]) -> str | None:
     return None
 
 
+def _transport_legs(trip: dict[str, Any]) -> int:
+    """Count the legs of an itinerary you actually ride.
+
+    Not ``len(rail_legs)``: the point is to recognize a train-to-PATH or
+    train-to-bus change as a transfer, and neither adds a rail leg.
+
+    Two kinds of leg are skipped. Walking connectors are not ridden. And the
+    planner appends a sentinel with no ``offStopDescription`` -- identified
+    that way rather than by a null block, because an observed subway leg
+    carried a block of ``""`` while being a real leg.
+    """
+    return sum(
+        1
+        for leg in trip.get("legs") or ()
+        if leg.get("routeType") != WALK_ROUTE_TYPE
+        and leg.get("offStopDescription") is not None
+    )
+
+
 def parse_trip(trip: dict[str, Any], reference: datetime) -> ScheduledTrip | None:
     """Build a :class:`.ScheduledTrip` from one planner itinerary.
 
@@ -397,6 +416,7 @@ def parse_trip(trip: dict[str, Any], reference: datetime) -> ScheduledTrip | Non
 
     train_ids = tuple(leg["block"].strip() for leg in rail_legs)
     return ScheduledTrip(
+        transport_legs=_transport_legs(trip),
         train_id=train_ids[0],
         departure=departure,
         arrival=arrival,

@@ -14,12 +14,32 @@ from pytest_homeassistant_custom_component.test_util.aiohttp import (
 from custom_components.njtransit.api.parsing import TZ
 from custom_components.njtransit.calendar import CANCELLED_PREFIX, DepartureCalendar
 
-from .conftest import install_api_mock
+from .conftest import install_api_mock, load_fixture
 from .test_init import make_entry, setup_entry
 
 ENTITY = "calendar.short_hills_station_to_new_york_penn_station_departures"
 
 CAPTURED_AT = datetime(2026, 8, 3, 8, 20, tzinfo=TZ)
+
+
+def _transfers_only() -> dict[str, object]:
+    """The recorded day with every one-seat ride removed.
+
+    Stands in for a pair like Gladstone to New York Penn, where no direct
+    train exists at any hour.
+    """
+    payload = load_fixture("trip_planner_short_hills_to_ny")
+    trips = payload["data"]["getTripPlannerSchedule"]
+    kept = [
+        trip
+        for trip in trips
+        if len([leg for leg in trip["legs"] if leg["offStopDescription"]]) > 1
+    ]
+    assert kept, "fixture no longer contains a transfer itinerary"
+    return {"data": {"getTripPlannerSchedule": kept}}
+
+
+TRANSFERS_ONLY = _transfers_only()
 
 
 @pytest.fixture(name="at_capture_time", autouse=True)
@@ -92,22 +112,50 @@ class TestEvents:
         assert events
         assert all(event.end > event.start for event in events)
 
-    async def test_transfers_are_described(
+    async def test_transfer_itineraries_are_excluded(
         self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
     ) -> None:
-        """The Gladstone itinerary changes at Summit."""
+        """One-seat rides only.
+
+        The recorded day offers train 411 changing at Summit and train 480
+        changing to PATH at Hoboken. Neither belongs on a board that cannot
+        say where you change or that you must.
+        """
         install_api_mock(aioclient_mock)
         await setup_entry(hass, make_entry())
 
         events = await calendar_entity(hass).async_get_events(
             hass, CAPTURED_AT - timedelta(days=1), CAPTURED_AT + timedelta(days=2)
         )
-        described = [
+        assert events
+        assert not [
             event
             for event in events
             if event.description and "Change trains" in event.description
         ]
-        assert described, "no transfer itinerary was described"
+        assert not [event for event in events if "480" in event.summary]
+
+    async def test_transfers_return_when_nothing_runs_direct(
+        self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+    ) -> None:
+        """Gladstone to Penn has no one-seat ride at all.
+
+        An empty calendar would read as "no trains" rather than "no direct
+        trains", so the filter fails open. This is also what keeps the
+        transfer-describing branch reachable.
+        """
+        install_api_mock(aioclient_mock, overrides={"TripPlannerSchedule": TRANSFERS_ONLY})
+        await setup_entry(hass, make_entry())
+
+        events = await calendar_entity(hass).async_get_events(
+            hass, CAPTURED_AT - timedelta(days=1), CAPTURED_AT + timedelta(days=2)
+        )
+        assert events
+        assert [
+            event
+            for event in events
+            if event.description and "Change trains" in event.description
+        ]
 
     async def test_location_is_the_origin(
         self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
