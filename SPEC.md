@@ -1,7 +1,13 @@
 # NJ Transit Home Assistant Integration — Design Spec
 
-Status: draft
+Status: v1 implemented
 Scope of this document: v1 (departures + alerts)
+
+Everything in the v1 scope below is built and tested. Where the implementation
+taught us something this document got wrong, the section says so rather than being
+quietly rewritten -- see §2.6 (the planner's page size), §3.5 (station aliases) and
+§6.4 (the board's line vocabulary), each of which corrected a mistaken assumption
+here.
 
 ## 1. Goals
 
