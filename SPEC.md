@@ -420,13 +420,24 @@ class NJTransitClient:
     def __init__(
         self, session: aiohttp.ClientSession, *, timeout: float = 30.0
     ) -> None: ...
-    async def system_status(self) -> list[SystemAlert]: ...
+    async def system_status(self) -> tuple[SystemAlert, ...]: ...
     async def departures(self, station: str) -> DepartureBoard: ...
-    async def stations(self) -> list[Station]: ...
-    async def train_lines(self) -> list[RailLine]: ...
-    async def stop_list(self, train_id: str) -> list[Stop]: ...  # deferred tier
-    async def nearest_stations(self, lat: float, lon: float) -> list[NearbyStation]: ...
+    async def stations(self) -> tuple[Station, ...]: ...
+    async def train_lines(self) -> tuple[RailLine, ...]: ...
+    async def scheduled_trips(
+        self, origin: str, destination: str, on: date | None = None
+    ) -> tuple[ScheduledTrip, ...]: ...
 ```
+
+Collections are returned as tuples: everything downstream treats them as immutable
+snapshots of one poll, and a coordinator handing out a mutable list invites an entity to
+edit shared state.
+
+An earlier draft of this sketch also listed `stop_list` and `nearest_stations`. Neither
+exists, correctly — both belong to deferred features (§1), and adding client methods for
+work that is not being done just creates untested surface. The `STOP_LIST` operation does
+exist in `queries.py`, verified against the live endpoint but unused, so per-train tracking
+starts from a known-good query rather than a guess.
 
 A shared `_execute(operation, query, variables)` handles:
 
@@ -714,14 +725,30 @@ One device per config entry, named for the origin station.
 
 ### Sensors
 
+Entities are named for the **commute**, not the origin or the line, because the device is
+the commute. For Short Hills to New York Penn that is
+`sensor.short_hills_station_to_new_york_penn_station_next_departure`.
+
 | Entity | State | Key attributes |
 |---|---|---|
-| `sensor.<origin>_next_departure` | next matching departure (`device_class: timestamp`) | `train_id`, `track`, `destination`, `line`, `status`, `status_raw`, `delay_minutes`, `inline_message`, `alerts`, `cars` |
-| `sensor.<origin>_departure_2` … `_N` | 2nd..Nth matching departure | same |
-| `sensor.<origin>_delay` | `delay_minutes` of next departure (`measurement`, `min`) | — |
-| `sensor.<origin>_crowding` | `CrowdLevel` of the next departure (`device_class: enum`) | `cars`, `front`, `middle`, `back` |
-| `sensor.<line>_alerts` | count of live alerts | `messages`, `urls`, `train_ids`, `affects_my_trains` |
-| `sensor.<line>_advisories` | count of planned advisories | `messages`, `urls` |
+| `<commute>_next_departure` | next matching departure (`device_class: timestamp`) | `train_id`, `track`, `destination`, `line`, `status`, `status_raw`, `delay_minutes`, `inline_message`, `crowding`, `cars`, `alerts` |
+| `<commute>_departure_2` … `_N` | 2nd..Nth matching departure | same |
+| `<commute>_delay` | `delay_minutes` of next departure (`duration`, `min`) | — |
+| `<commute>_crowding` | `CrowdLevel` of the next departure (`device_class: enum`) | `positions` |
+| `<commute>_service_alerts` | count of live alerts on this commute's lines | `messages`, `urls`, `lines`, `train_ids`, `affects_my_trains` |
+| `<commute>_planned_advisories` | count of planned advisories | same |
+
+**Alert sensors are per commute, not per line.** An earlier draft of this table had
+`sensor.<line>_alerts`, which was open question §13.3. Per commute won on two grounds:
+`affects_my_trains` is only computable against a specific board, and a user with two
+commutes on the same line wants each device to be self-contained rather than pointing at a
+shared entity elsewhere. The cost is that a two-commute setup on one line carries two alert
+sensors with near-identical contents, which is cheap — they read from one shared
+coordinator.
+
+Line scoping still happens, inside the sensor: alerts are narrowed to the codes resolved
+from the board's line titles (§6.4), and an unresolvable line reports every rail alert
+rather than none.
 
 "Nth matching departure" indexes the filtered list, so `departure_2` always means "the
 second train I could actually take" rather than whatever is second on the raw board.
@@ -808,6 +835,7 @@ likely sources of user-reported bugs.
   | `trip_planner_short_hills_to_hoboken.json` | second commute from the same origin — exercises the §8.0 overlap |
   | `stations_rail_dv.json` | 177 stations with `pentaStationID` |
   | `train_lines.json` | 13 rail lines |
+  | `planner_day_short_hills_to_ny.json` | **derived, not a capture** — the observed 51-train service day, driving the fake pager |
 
   The pair exhibits the §1 divergence exactly: alerts name trains `309, 6311, 6324, 6607`;
   the board shows `6320` and `6311` cancelled. **`6320` is cancelled on the board and
@@ -833,7 +861,14 @@ likely sources of user-reported bugs.
   WAF response.
 - **Config flow tests**: full coverage including `invalid_station` and duplicate abort.
 - **Layering test**: no `homeassistant` import under `api/` (§4.1).
-- **Snapshot tests**: `syrupy` for entity state, per current core convention.
+- **Snapshot tests**: `syrupy` for entity state, per current core convention. Request
+  `HomeAssistantSnapshotExtension` explicitly rather than inheriting whichever `snapshot`
+  fixture wins — syrupy and pytest-homeassistant-custom-component both register one, and
+  plugin load order is not stable across environments. Getting this wrong passes locally
+  and fails in CI reporting every snapshot as missing.
+- **Coverage**: gated at 97%, currently 98%. Deliberately below the 100% `pyschlage` uses;
+  a Home Assistant integration carries lifecycle branches that cost more to exercise than
+  they are worth. Reasoning lives in `.coveragerc`.
 
 ## 11. Scaffolding
 
@@ -841,7 +876,11 @@ likely sources of user-reported bugs.
   `integration_type: service`, no `requirements` (bundled client),
   `codeowners: ["@dknowles2"]`
 - `hacs.json`: `{"name": "NJ Transit", "render_readme": true}`
-- CI: ruff, mypy strict, pytest + coverage, hassfest, HACS validation
+- CI: ruff, mypy, pytest + coverage gate, hassfest, HACS validation
+- `custom_components/njtransit/brand/`: icons served directly by Home Assistant, so no
+  pull request against `home-assistant/brands` is needed. Generated by
+  `scripts/generate_brand.py`; the artwork is original, and deliberately not NJ Transit's
+  trademarked mark.
 
 ## 12. Risks
 
@@ -862,12 +901,14 @@ features.
    for rail and bus alike; not usable. Heuristics stay.
 2. Should the destination be multi-valued (e.g. New York *or* Hoboken both acceptable)?
    §2.5 makes this cheap — union the train-ID sets from two planner queries.
-3. Per-line alert entities on the hub device, or one entity with a line attribute?
-   Per-line is better for automations; single is better for one-line users.
+3. ~~Per-line alert entities, or one entity with a line attribute?~~ — **resolved by the
+   implementation, see §9.** Neither: alert sensors are per *commute*, scoped internally
+   to that commute's lines. `affects_my_trains` is only computable against a specific
+   board, which decided it.
 4. Is the 19-row board cap universal? It held for Short Hills, Summit, and Trenton, which
    suggests a fixed limit and bounds any lookahead beyond roughly two hours.
 5. Does `dropOff` on stop-list entries mark drop-off-only stops? Empty on all sampled rows.
-6. Does the resolved train-ID set need a weekend/holiday variant? The planner is
-   date-parameterized, so a Saturday set will differ from a Tuesday set. Simplest fix is
-   to refresh `RouteCoordinator` daily using the current date, which handles this
-   implicitly — confirm that is sufficient before adding schedule-type detection.
+6. Does the resolved train-ID set need a weekend/holiday variant? `RouteCoordinator`
+   queries per date for today and tomorrow, which should handle this implicitly — but
+   that has only been reasoned about, not watched across an actual weekend or holiday.
+   Still open until someone confirms it from a running instance.
