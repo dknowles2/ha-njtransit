@@ -717,10 +717,26 @@ One device per config entry, named for the origin station.
 | `sensor.<line>_alerts` | count of live alerts | `messages`, `urls`, `train_ids`, `affects_my_trains` |
 | `sensor.<line>_advisories` | count of planned advisories | `messages`, `urls` |
 
-"Nth matching departure" indexes the list filtered to the resolved train-ID set (§2.5), so
-`departure_2` always means "the second train I could actually take" — including trains
-that require a transfer at Summit, and excluding board rows whose label merely mentions
-New York. The current YAML setup's `(2)` means whatever is second on the raw board.
+"Nth matching departure" indexes the filtered list, so `departure_2` always means "the
+second train I could actually take" rather than whatever is second on the raw board.
+
+**The filter is a union, not a preference order.** A departure qualifies if its train is in
+the resolved train-ID set (§2.5) *or* its board label shares a significant word with the
+destination. Both signals are incomplete, so neither gets a veto:
+
+- The planner set catches transfer itineraries a label match would discard — the Gladstone
+  train to Summit that connects onward.
+- The label catches trains the planner set is missing, which happens whenever that set is
+  stale, partially resolved, or predates a timetable change.
+
+Treating the planner set as authoritative looks tidier and is wrong. It silently drops
+real trains, and "silently drops a cancelled train" is the exact failure this integration
+exists to prevent. The recorded disruption demonstrates it: train 6320 is labelled
+`New York` and cancelled, and a single planner page resolves only four trains, none of
+them 6320.
+
+Word matching treats `penn`, `station` and `terminal` as noise. Without dropping `penn`,
+Newark Penn and New York Penn match each other.
 
 `next_departure` is `unknown` when no matching departures remain (e.g. overnight), not
 `unavailable` — the integration is working, there is simply no train.
