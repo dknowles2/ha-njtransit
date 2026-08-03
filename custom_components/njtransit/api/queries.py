@@ -200,8 +200,9 @@ TRIP_PLANNER_DEFAULTS = {
 PLANNER_DATE_FORMAT = "%m/%d/%Y"
 """Anything else is rejected -- an ISO date returns HTTP 500. See SPEC 2.6."""
 
-PLANNER_TIME_FORMAT = "%-I:%M %p"
-"""Twelve-hour, no leading zero, e.g. ``9:30 AM``."""
+PLANNER_TIME_FORMAT = "%I:%M %p"
+"""Twelve-hour, e.g. ``09:30 AM``. A leading zero is accepted; ``%-I`` is
+avoided because it is not portable."""
 
 RAIL_ROUTE_TYPE = "C"
 """``routeType`` for commuter rail. Bus is ``B``, PATH ``T``, walking ``W``."""

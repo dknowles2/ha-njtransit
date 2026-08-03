@@ -238,6 +238,11 @@ Measured for Short Hills → New York Penn on a clean weekday: **24 calls, 51 di
 trains, 4:49 AM through 11:38 PM.** Once per day per commute, this is negligible next to
 the board's 1440 polls/day.
 
+The implemented loop needs **17 calls** for that same day, because it jumps to the latest
+departure in each page rather than stepping. The observed schedule is recorded in
+`tests/fixtures/planner_day_short_hills_to_ny.json` and drives a fake pager that reproduces
+the three-per-call constraint, so the count is a test assertion rather than a note.
+
 The guard matters: without it, a window where all three trips share a departure time loops
 forever. Cap iterations regardless.
 
