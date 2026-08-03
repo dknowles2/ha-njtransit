@@ -1,0 +1,75 @@
+name: Release
+
+"on":
+  release:
+    types:
+      - published
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Publish the HACS package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+
+      # manifest.json ships a placeholder rather than a real version, so
+      # nothing has to be bumped by hand before tagging. The placeholder is
+      # deliberately not a plausible version -- substituting "0.0.0" would
+      # silently no-op if someone ever set a real one.
+      - name: Stamp the release version into the manifest
+        run: |
+          version="${{ github.event.release.tag_name }}"
+          version="${version,,}"
+          version="${version#v}"
+          manifest="custom_components/njtransit/manifest.json"
+
+          grep -q '"version": "0000.0.0"' "$manifest" || {
+            echo "::error::$manifest no longer carries the 0000.0.0 placeholder"
+            exit 1
+          }
+          sed -i "s/0000\.0\.0/${version}/" "$manifest"
+          python3 -c "
+          import json, sys
+          v = json.load(open('$manifest'))['version']
+          print(f'manifest version is now {v}')
+          sys.exit(0 if v == '${version}' else 1)
+          "
+
+      - name: Build the release zip
+        run: |
+          cd custom_components/njtransit
+          # HACS extracts the archive straight into the integration directory,
+          # so manifest.json has to sit at the zip root -- not under a
+          # custom_components/njtransit/ prefix.
+          zip -r njtransit.zip . -x '*__pycache__*' '*.pyc'
+
+      - name: Verify the archive HACS will download
+        run: |
+          cd custom_components/njtransit
+          # hacs.json promises this exact filename; a mismatch is a silent
+          # install failure for every user rather than a build failure here.
+          test "$(python3 -c "import json;print(json.load(open('../../hacs.json'))['filename'])")" = njtransit.zip
+
+          unzip -l njtransit.zip
+          for required in manifest.json __init__.py brand/icon.png translations/en.json; do
+            unzip -l njtransit.zip | grep -q " $required\$" || {
+              echo "::error::njtransit.zip is missing $required"
+              exit 1
+            }
+          done
+          if unzip -l njtransit.zip | grep -q __pycache__; then
+            echo "::error::njtransit.zip contains bytecode"
+            exit 1
+          fi
+          echo "archive looks right"
+
+      - name: Attach the zip to the release
+        uses: softprops/action-gh-release@v2.2.0
+        with:
+          files: custom_components/njtransit/njtransit.zip
