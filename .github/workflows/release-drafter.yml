@@ -11,11 +11,32 @@ permissions:
   contents: read
 
 jobs:
+  # Two jobs rather than one action on both events. The top-level action
+  # refuses to write anything on a pull_request: the commitish it gets is
+  # refs/pull/N/merge, an ephemeral merge commit, so it forces dry-run and
+  # logs "forcing dry-run mode and disabling publish". Dry-run suppresses
+  # label writes as well as release writes, so with the combined workflow
+  # every pull request merged unlabelled and every changelog entry landed
+  # under "Other changes". The autolabeler sub-action has no such problem.
+  autolabel:
+    name: Label the pull request
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: release-drafter/release-drafter/autolabeler@v7.7.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   update_release_draft:
+    name: Update the release draft
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      pull-requests: write
+      pull-requests: read
     steps:
       - uses: release-drafter/release-drafter@v7.7.0
         env:
