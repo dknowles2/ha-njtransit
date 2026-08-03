@@ -122,6 +122,18 @@ into `manifest.json`, zips `custom_components/njtransit/` into
 `njtransit.zip`, and attaches it -- that asset is what HACS downloads, named
 by `hacs.json`.
 
+If an upload ever fails, the release is left published with no asset -- a
+broken install for everyone, and invisible until someone tries. Re-run the
+workflow manually against the existing tag rather than deleting and re-cutting
+the release:
+
+```sh
+gh workflow run release.yml -f tag=2026.8.0
+```
+
+The upload is idempotent, and the final step fails loudly if the asset is not
+attached afterwards.
+
 **Do not put a real version in `manifest.json`.** It carries the
 `0000.0.0` placeholder deliberately, and the release workflow refuses to run
 if that is missing, so a stale hand-edited version can never ship.
