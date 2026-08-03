@@ -22,6 +22,9 @@ import pytest
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
+from pytest_homeassistant_custom_component.syrupy import (
+    HomeAssistantSnapshotExtension,
+)
 from pytest_homeassistant_custom_component.test_util.aiohttp import (
     AiohttpClientMocker,
 )
@@ -34,6 +37,24 @@ from .conftest import install_api_mock
 from .test_init import HOBOKEN, make_entry, setup_entry
 
 CAPTURED_AT = datetime(2026, 8, 3, 8, 20, tzinfo=TZ)
+
+
+@pytest.fixture(name="snapshot")
+def snapshot_fixture(snapshot: SnapshotAssertion) -> SnapshotAssertion:
+    """Pin the snapshot extension rather than inheriting one.
+
+    Both syrupy and pytest-homeassistant-custom-component register a
+    `snapshot` fixture, and which one wins depends on plugin load order --
+    which is not stable across environments. Locally syrupy loads first, so
+    Home Assistant's fixture won and wrote to `tests/snapshots/`; in CI syrupy
+    loaded last, so its own fixture won and looked in `tests/__snapshots__/`,
+    reporting every snapshot as missing.
+
+    Requesting the extension explicitly makes the directory and the serializer
+    deterministic. Without this the suite passes on a laptop and fails in CI
+    for reasons that look nothing like the actual cause.
+    """
+    return snapshot.use_extension(HomeAssistantSnapshotExtension)
 
 
 @pytest.fixture(name="at_capture_time", autouse=True)
