@@ -133,6 +133,20 @@ labels come from the Conventional Commits prefix in the PR title -- `feat:`
 lands under new features and bumps the minor version, `fix:` under bug fixes.
 That is another reason to get the prefix right.
 
+**Tags are bare CalVer: `2026.8.0`, no `v` prefix.** This matches ha-pitboss
+and pyschlage, and Home Assistant's own scheme.
+
+CalVer is not automatic. release-drafter increments the *previous* tag, so the
+first release of each month has to be tagged by hand -- `2026.9.0` when
+September comes -- after which patch releases resolve on their own
+(`2026.9.1`, `2026.9.2`). If a draft ever proposes something that is not
+year.month.patch, that is release-drafter counting from the wrong baseline,
+not a version to accept.
+
+The release workflow strips a leading `v` before stamping the manifest, so a
+`v`-prefixed tag would still produce a clean version. That is insurance
+against a slip, not an invitation to change the convention.
+
 ## Layering
 
 `custom_components/njtransit/api/` must not import `homeassistant`. It takes an
