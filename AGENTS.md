@@ -87,6 +87,23 @@ Do not regenerate these fixtures to make a test pass.
 - **Times are bare wall-clock strings** with no date and no zone. Everything is
   `America/New_York` with explicit midnight-rollover handling.
 
+## Brand images
+
+`custom_components/njtransit/brand/` holds the icons Home Assistant serves for
+this integration. They are generated, not hand-drawn:
+
+```sh
+uv run python scripts/generate_brand.py
+```
+
+The artwork is **original and must stay that way**. NJ Transit's logo and
+wordmark are their trademarks and this integration is unaffiliated, so
+shipping their mark would contradict the README's own disclaimer. There is
+deliberately no `logo.png` -- that is where the temptation to reproduce their
+wordmark lives, and Home Assistant falls back to the icon without one.
+`tests/test_brand.py` fails if a logo appears, which is the prompt to check
+the artwork's provenance rather than a rule against ever having one.
+
 ## Layering
 
 `custom_components/njtransit/api/` must not import `homeassistant`. It takes an
