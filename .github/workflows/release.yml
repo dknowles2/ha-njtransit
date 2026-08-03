@@ -4,6 +4,15 @@ name: Release
   release:
     types:
       - published
+  # A failed upload leaves a published release with no asset, which is a
+  # broken install for everyone. This makes that recoverable without deleting
+  # and re-cutting the release.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to build and attach the zip to"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -17,6 +26,8 @@ jobs:
     steps:
       - name: Check out the repository
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
 
       # manifest.json ships a placeholder rather than a real version, so
       # nothing has to be bumped by hand before tagging. The placeholder is
@@ -24,7 +35,7 @@ jobs:
       # silently no-op if someone ever set a real one.
       - name: Stamp the release version into the manifest
         run: |
-          version="${{ github.event.release.tag_name }}"
+          version="${{ github.event.release.tag_name || inputs.tag }}"
           version="${version,,}"
           version="${version#v}"
           manifest="custom_components/njtransit/manifest.json"
@@ -69,7 +80,33 @@ jobs:
           fi
           echo "archive looks right"
 
+      # Uploaded with the gh CLI rather than a third-party action. The
+      # previous action targets Node 20, gets force-run on Node 24, and failed
+      # with "Request body length does not match content-length header" --
+      # leaving 2026.8.0 published with no asset at all. gh ships on the
+      # runner and has no such runtime mismatch.
+      #
+      # --clobber makes a retry idempotent, which matters because the only way
+      # to recover a failed upload is to run this again against a release that
+      # already exists.
       - name: Attach the zip to the release
-        uses: softprops/action-gh-release@v2.2.0
-        with:
-          files: custom_components/njtransit/njtransit.zip
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          gh release upload "$TAG" \
+            custom_components/njtransit/njtransit.zip --clobber
+
+      # The asset is the entire point of this workflow, and its absence is
+      # invisible until a user tries to install. Confirm it landed.
+      - name: Confirm the asset is attached
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          names=$(gh release view "$TAG" --json assets --jq '.assets[].name')
+          echo "assets on $TAG: ${names:-<none>}"
+          echo "$names" | grep -qx njtransit.zip || {
+            echo "::error::njtransit.zip is not attached to $TAG"
+            exit 1
+          }
