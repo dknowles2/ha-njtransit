@@ -1,0 +1,47 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Add a commute",
+        "description": "Each commute is a separate entry. Add the integration again for a different destination, or for the trip home.",
+        "data": {
+          "origin": "Origin station",
+          "destination": "Destination station"
+        },
+        "data_description": {
+          "destination": "Optional. Narrows departures to trains that actually reach this station, including ones requiring a transfer."
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not reach NJ Transit.",
+      "invalid_station": "NJ Transit does not recognize that station.",
+      "same_station": "Origin and destination must differ.",
+      "unknown": "Unexpected error."
+    },
+    "abort": {
+      "already_configured": "This commute is already set up.",
+      "cannot_connect": "Could not reach NJ Transit.",
+      "unknown": "Unexpected error."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Commute options",
+        "description": "The destination is part of this entry's identity and cannot be changed here. Add another commute instead.",
+        "data": {
+          "departure_interval": "Departure board poll interval",
+          "status_interval": "Service alert poll interval",
+          "departure_count": "Upcoming departures to show",
+          "delay_threshold": "Delay before the commute counts as disrupted",
+          "lookahead": "How far ahead to watch for disruption"
+        },
+        "data_description": {
+          "departure_interval": "NJ Transit caches responses for 30 seconds, so polling faster gains nothing.",
+          "lookahead": "Departures beyond this window are ignored by the disruption sensor."
+        }
+      }
+    }
+  }
+}
