@@ -98,6 +98,34 @@ class Departure:
     only carries it for imminent departures."""
 
     @property
+    def status_text(self) -> str:
+        """Return one human-readable phrase for how this train is running.
+
+        ``status`` and ``delay_minutes`` are separate fields, and neither is
+        sufficient alone: the enum cannot say *how* late, and the delay is
+        ``None`` for a cancelled train. Anything rendering a status has to
+        combine them, so combine them once here rather than in every consumer.
+
+        Empty when the board has no realtime data yet, which is normal for
+        departures more than about an hour out. That is deliberately not
+        ``"On time"`` -- nothing is known, which is not the same as knowing
+        the train is punctual.
+        """
+        if self.status is TrainStatus.CANCELLED:
+            return "Cancelled"
+        if self.delay_minutes:
+            return f"{self.delay_minutes} min late"
+        if self.status is TrainStatus.BOARDING:
+            return "Boarding"
+        if self.status is TrainStatus.ALL_ABOARD:
+            return "All aboard"
+        if self.status is TrainStatus.DEPARTED:
+            return "Departed"
+        if self.delay_minutes == 0:
+            return "On time"
+        return ""
+
+    @property
     def crowding(self) -> CrowdLevel:
         """Return the worst crowding level across the consist."""
         if not self.cars:
