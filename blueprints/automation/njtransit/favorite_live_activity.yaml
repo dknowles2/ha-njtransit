@@ -40,6 +40,12 @@ blueprint:
         `notify.mobile_app_my_iphone`.
       selector:
         text: {}
+    icon:
+      name: Icon
+      description: Material Design Icon slug shown on the activity.
+      default: mdi:train
+      selector:
+        icon: {}
     lead_time:
       name: Start this many minutes before departure
       default: 30
@@ -81,8 +87,15 @@ variables:
   train: "{{ state_attr(sensor, 'train_id') or '' }}"
   track: "{{ state_attr(sensor, 'track') }}"
   status: "{{ state_attr(sensor, 'status_text') or 'Scheduled' }}"
+  destination: "{{ state_attr(sensor, 'destination') or '' }}"
+  # The status has to live in the title. `chronometer` replaces the message
+  # line with the countdown, and replaces critical_text too, so the title is
+  # the only text field that survives alongside a timer. An Apple Watch
+  # renders the push as an ordinary notification and shows title + message,
+  # which is why the status appeared there while the phone dropped it.
   headline: >-
     Train {{ train }}{% if track %} · Track {{ track }}{% endif %}
+    {{- ' · ' ~ status if status else '' }}
 
 actions:
   - choose:
@@ -94,13 +107,18 @@ actions:
           - action: !input notify_target
             data:
               title: "{{ headline }}"
-              message: "{{ status }}"
+              message: "{{ ('to ' ~ destination) if destination else status }}"
               data:
                 tag: njtransit_favorite
                 live_update: true
                 chronometer: true
+                # An absolute Unix timestamp. `when_relative: true` would mean
+                # "seconds from now" -- passing an epoch with it set makes the
+                # phone count down from about 1.75 billion. Absolute is also
+                # steadier: it cannot drift between this firing and the push
+                # landing.
                 when: "{{ as_timestamp(scheduled) | int }}"
-                when_relative: true
+                notification_icon: !input icon
                 group: njtransit
     # Clearing a tag that is not showing is a no-op, so this needs no memory
     # of whether an activity is currently live.
