@@ -1,0 +1,102 @@
+blueprint:
+  name: NJ Transit commute disruption alert
+  description: >
+    Run actions when a **new** problem appears on an NJ Transit commute.
+
+
+    Triggers on the disruption sensor's `reasons` attribute rather than the
+    sensor turning on. That distinction matters: if a second train fails while
+    the commute is already disrupted, the sensor is already `on` and a state
+    trigger stays silent. Diffing the attribute also means a problem clearing
+    does not fire anything, because the list only shrinks.
+
+
+    Two variables are available to your actions:
+
+
+    - `fresh_reasons` — a list of the newly appeared problems, e.g.
+      `["Train 6320 (8:12 AM) is cancelled"]`
+
+    - `commute_name` — the friendly name of the commute
+
+
+    A typical notification body is
+    `{{ fresh_reasons | join('\n') }}`.
+
+
+    How late a train must be before it counts is the **delay threshold**
+    option on the integration entry, not a setting here — the sensor's
+    `reasons` are generated from it.
+  domain: automation
+  source_url: https://github.com/dknowles2/ha-njtransit/blob/main/blueprints/automation/njtransit/commute_disruption.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+  input:
+    disruption_sensor:
+      name: Commute
+      description: >
+        The `Commute disrupted` sensor for the commute to watch. One
+        blueprint automation per direction.
+      selector:
+        entity:
+          filter:
+            - integration: njtransit
+              domain: binary_sensor
+    commute_window:
+      name: Only during this window
+      description: >
+        Optional. A schedule that is `on` while you are actually commuting,
+        so a 3 a.m. cancellation does not wake you. Leave empty to alert at
+        any hour.
+      default: []
+      selector:
+        entity:
+          multiple: true
+          filter:
+            - domain: schedule
+    notification_action:
+      name: Actions
+      description: >
+        What to do about it. Reference `fresh_reasons` and `commute_name`.
+      selector:
+        action: {}
+
+mode: queued
+max: 5
+max_exceeded: silent
+
+triggers:
+  - trigger: state
+    entity_id: !input disruption_sensor
+    attribute: reasons
+
+variables:
+  windows: !input commute_window
+  commute_name: >-
+    {{ state_attr(trigger.entity_id, 'friendly_name')
+       | default(trigger.entity_id, true)
+       | replace(' Commute disrupted', '') }}
+  previous: >-
+    {{ (trigger.from_state.attributes.reasons
+        if trigger.from_state is not none else []) or [] }}
+  current: >-
+    {{ (trigger.to_state.attributes.reasons
+        if trigger.to_state is not none else []) or [] }}
+  fresh_reasons: "{{ current | reject('in', previous) | list }}"
+
+conditions:
+  # from_state is None on a restart and on a manual run, where "new" has no
+  # meaning. Without this, restarting mid-disruption re-alerts everything
+  # that was already known.
+  - condition: template
+    value_template: >-
+      {{ trigger is defined and trigger.from_state is not none
+         and fresh_reasons | count > 0 }}
+  # An empty window list means "no restriction", so an unset input must not
+  # silently block every alert.
+  - condition: template
+    value_template: >-
+      {{ windows | count == 0
+         or windows | select('is_state', 'on') | list | count > 0 }}
+
+actions: !input notification_action

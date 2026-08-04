@@ -245,7 +245,38 @@ Not created for entries without a destination.
 
 ## Automation examples
 
-### Notify on a new problem, during commute hours only
+### Blueprint: commute disruption alert
+
+[![Import blueprint][import-shield]][import]
+
+The alert automation is packaged as a blueprint. Import it with the badge
+above, or Settings → Automations & Scenes → Blueprints → **Import Blueprint**
+and paste:
+
+```
+https://github.com/dknowles2/ha-njtransit/blob/main/blueprints/automation/njtransit/commute_disruption.yaml
+```
+
+> [!NOTE]
+> HACS won't install this — a HACS repository has one category, and this one
+> is `integration`. Import by URL instead; it works from any repository.
+
+Three inputs: the **commute** to watch, an optional **schedule** limiting it to
+hours you actually travel, and the **actions** to run. Your actions get two
+variables:
+
+| Variable | Contents |
+|---|---|
+| `fresh_reasons` | List of newly appeared problems |
+| `commute_name` | e.g. `Short Hills Station to New York Penn Station` |
+
+A typical notification body is `{{ fresh_reasons | join('\n') }}`.
+
+One automation per direction. How late a train must be before it counts is the
+**delay before disrupted** option on the integration entry, not a blueprint
+input — `reasons` is generated from it.
+
+### Or write it yourself
 
 Trigger on the `reasons` **attribute**, not on the sensor turning on. If a
 second train fails during an ongoing disruption the sensor is already `on`, and
@@ -377,3 +408,5 @@ is original and is not their logo or wordmark.
 [build]: https://github.com/dknowles2/ha-njtransit/actions/workflows/build-and-test.yml
 [build-shield]: https://github.com/dknowles2/ha-njtransit/actions/workflows/build-and-test.yml/badge.svg
 [releases]: https://github.com/dknowles2/ha-njtransit/releases/latest
+[import]: https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fdknowles2%2Fha-njtransit%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fnjtransit%2Fcommute_disruption.yaml
+[import-shield]: https://my.home-assistant.io/badges/blueprint_import.svg
