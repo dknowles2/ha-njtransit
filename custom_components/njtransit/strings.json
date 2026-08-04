@@ -85,6 +85,21 @@
       "departures": {
         "name": "Departures"
       }
+    },
+    "event": {
+      "train": {
+        "name": "Train event",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "cancelled": "Cancelled",
+              "delayed": "Delayed",
+              "track_changed": "Track changed",
+              "alerted": "Named in an alert"
+            }
+          }
+        }
+      }
     }
   }
 }

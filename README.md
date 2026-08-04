@@ -194,6 +194,32 @@ for departures more than about an hour out. **Nothing being known is not the
 same as knowing the train is punctual** — the same reason `delay_minutes` is
 nullable.
 
+### `event.<commute>_train_event`
+
+Discrete things that happen to a train, as opposed to the binary sensor's
+"is it broken right now". Event types:
+
+| Type | Fires when |
+|---|---|
+| `cancelled` | A train becomes cancelled |
+| `delayed` | A train crosses the delay threshold |
+| `track_changed` | A train is moved **after** a track was published |
+| `alerted` | A train is newly named in a live alert |
+
+Only transitions fire. An ongoing problem does not re-fire every poll, and
+nothing fires for the state that existed at startup — otherwise every restart
+would replay the morning's problems.
+
+A first track assignment is deliberately not a `track_changed`; the board
+simply had no track yet. Being *moved* is the actionable case, and the event
+carries `previous_track` alongside the new one.
+
+Each event carries `train_id`, `scheduled`, `destination`, `track`,
+`status_text` and `delay_minutes`, so an automation can act without a second
+lookup.
+
+This is the entity to build on rather than diffing `reasons` by hand.
+
 ### `sensor.<commute>_next_favorite`
 
 `device_class: timestamp`. When the next train **you actually catch** leaves,
