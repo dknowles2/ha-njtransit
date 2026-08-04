@@ -789,6 +789,13 @@ the commute. For Short Hills to New York Penn that is
 
 | Entity | State | Key attributes |
 |---|---|---|
+The favourite picker is built from `RouteData.trips`, so it offers the day's direct
+services labelled by departure time rather than a free-text box. It keeps
+`custom_value`, and re-adds any already-saved favourite missing from today's trips --
+otherwise editing options on a weekend would silently drop a weekday train. With no
+resolved schedule it degrades to free text; an unconfigurable option is worse than an
+unvalidated one.
+
 | `<commute>_next_favorite` | next departure whose train is in `favorite_trains` (`device_class: timestamp`) | same as the departure sensors, plus `favorites` |
 | `<commute>_next_departure` | next matching departure (`device_class: timestamp`) | `train_id`, `track`, `destination`, `line`, `status`, `status_raw`, `status_text`, `favorite`, `delay_minutes`, `inline_message`, `crowding`, `cars`, `alerts` |
 | `<commute>_departure_2` … `_N` | 2nd..Nth matching departure | same |

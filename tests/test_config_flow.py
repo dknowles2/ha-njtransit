@@ -19,6 +19,7 @@ from custom_components.njtransit.const import (
     CONF_DEPARTURE_INTERVAL,
     CONF_DESTINATION,
     CONF_DESTINATION_ID,
+    CONF_FAVORITE_TRAINS,
     CONF_ORIGIN,
     CONF_ORIGIN_ID,
     DOMAIN,
@@ -257,3 +258,71 @@ class TestOptionsFlow:
         interval = entry.runtime_data.board.update_interval
         assert interval is not None
         assert interval.total_seconds() == 300
+
+
+class TestFavoritesSelector:
+    """The favourite-train picker in the options form."""
+
+    @staticmethod
+    def _field(result: Any) -> Any:
+        """Return the favourite_trains schema field from a form result."""
+        for key, value in result["data_schema"].schema.items():
+            if key == CONF_FAVORITE_TRAINS:
+                return value
+        raise AssertionError("favorite_trains not in the options schema")
+
+    async def test_offers_the_trains_that_serve_this_commute(
+        self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+    ) -> None:
+        """Labelled by time -- nobody memorises which number is the 7:33."""
+        install_api_mock(aioclient_mock)
+        entry = make_entry()
+        await setup_entry(hass, entry)
+
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        selector = self._field(result)
+
+        options = selector.config["options"]
+        assert options, "no trains offered"
+        assert selector.config["multiple"] is True
+        # Free text stays available: the timetable is not the only truth.
+        assert selector.config["custom_value"] is True
+
+        labels = {option["value"]: option["label"] for option in options}
+        assert any(
+            value in label and ("AM" in label or "PM" in label)
+            for value, label in labels.items()
+        ), labels
+
+    async def test_keeps_a_saved_favorite_that_is_not_running_today(
+        self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+    ) -> None:
+        """A weekday favourite edited on a weekend must not vanish.
+
+        Without this, opening the form on a day the train does not run would
+        silently drop it from the selection on save.
+        """
+        install_api_mock(aioclient_mock)
+        entry = make_entry(options={CONF_FAVORITE_TRAINS: ["Z999"]})
+        await setup_entry(hass, entry)
+
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        values = {option["value"] for option in self._field(result).config["options"]}
+        assert "Z999" in values
+
+    async def test_falls_back_to_text_without_a_schedule(
+        self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+    ) -> None:
+        """An unconfigurable option is worse than an unvalidated one."""
+        install_api_mock(
+            aioclient_mock,
+            {"TripPlannerSchedule": {"data": {"getTripPlannerSchedule": []}}},
+        )
+        entry = make_entry()
+        await setup_entry(hass, entry)
+
+        selector = self._field(
+            await hass.config_entries.options.async_init(entry.entry_id)
+        )
+        assert selector.config["multiple"] is True
+        assert "options" not in selector.config
