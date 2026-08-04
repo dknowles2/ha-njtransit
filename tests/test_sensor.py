@@ -24,7 +24,10 @@ from custom_components.njtransit.api.parsing import (
     alert_line_codes,
     line_code_for_title,
 )
-from custom_components.njtransit.const import CONF_DEPARTURE_COUNT
+from custom_components.njtransit.const import (
+    CONF_DEPARTURE_COUNT,
+    CONF_FAVORITE_TRAINS,
+)
 from custom_components.njtransit.coordinator import RouteData
 from custom_components.njtransit.entity import usable_departures
 
@@ -352,3 +355,77 @@ def test_departure_helper_is_used_consistently() -> None:
     """Guard the test helper itself against drift."""
     sample: dict[str, Any] = {"train_id": "1"}
     assert departure(**sample).train_id == "1"
+
+
+class TestFavorites:
+    """The favourite-train sensor."""
+
+    async def test_absent_favorites_report_unknown(
+        self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+    ) -> None:
+        """No favourites configured is not "every train qualifies"."""
+        install_api_mock(aioclient_mock)
+        await setup_entry(hass, make_entry())
+
+        state = hass.states.get(f"{PREFIX}_next_favorite")
+        assert state is not None
+        assert state.state == "unknown"
+        assert state.attributes["favorites"] == []
+
+    async def test_picks_the_soonest_favorite_not_the_soonest_train(
+        self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+    ) -> None:
+        """The whole point: a later train you actually catch wins."""
+        install_api_mock(aioclient_mock)
+        await setup_entry(hass, make_entry(options={CONF_FAVORITE_TRAINS: ["6624"]}))
+
+        favorite = hass.states.get(f"{PREFIX}_next_favorite")
+        soonest = hass.states.get(f"{PREFIX}_next_departure")
+        assert favorite is not None and soonest is not None
+
+        assert favorite.attributes["train_id"] == "6624"
+        assert favorite.state != soonest.state
+        assert favorite.state > soonest.state
+
+    async def test_case_and_whitespace_are_forgiven(
+        self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+    ) -> None:
+        """Typed into a text box by hand, so tolerate how it arrives."""
+        install_api_mock(aioclient_mock)
+        await setup_entry(
+            hass, make_entry(options={CONF_FAVORITE_TRAINS: [" 6624 ", ""]})
+        )
+
+        state = hass.states.get(f"{PREFIX}_next_favorite")
+        assert state is not None
+        assert state.attributes["train_id"] == "6624"
+        # The blank entry is dropped rather than matching everything.
+        assert state.attributes["favorites"] == ["6624"]
+
+    async def test_unmatched_favorite_reports_unknown(
+        self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+    ) -> None:
+        """A weekday train favourited on a weekend must not fall back."""
+        install_api_mock(aioclient_mock)
+        await setup_entry(hass, make_entry(options={CONF_FAVORITE_TRAINS: ["9999"]}))
+
+        state = hass.states.get(f"{PREFIX}_next_favorite")
+        assert state is not None
+        assert state.state == "unknown"
+        assert state.attributes["favorites"] == ["9999"]
+
+    async def test_departure_sensors_flag_favorites(
+        self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+    ) -> None:
+        """The flag rides along on every departure, not just the favourite."""
+        install_api_mock(aioclient_mock)
+        await setup_entry(hass, make_entry(options={CONF_FAVORITE_TRAINS: ["6624"]}))
+
+        flags = {}
+        for suffix in ("next_departure", "departure_2", "departure_3"):
+            state = hass.states.get(f"{PREFIX}_{suffix}")
+            assert state is not None
+            flags[state.attributes["train_id"]] = state.attributes["favorite"]
+
+        assert flags["6624"] is True
+        assert any(value is False for value in flags.values())

@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .api.models import Departure, DepartureBoard
-from .const import DOMAIN
+from .const import CONF_FAVORITE_TRAINS, DOMAIN
 from .coordinator import (
     DepartureCoordinator,
     EntryRuntime,
@@ -80,6 +81,20 @@ def usable_departures(
     ]
 
 
+def normalize_train_ids(values: Iterable[str] | None) -> frozenset[str]:
+    """Return train IDs as the board reports them.
+
+    Train IDs are strings, not numbers -- Trenton's board carries Amtrak
+    services like ``A79`` -- so this upper-cases and strips rather than
+    coercing to int. Blank entries are dropped, since an empty row in the
+    options form is a user pressing "add" and changing their mind, not a
+    request to match every train.
+    """
+    return frozenset(
+        cleaned for value in values or () if (cleaned := str(value).strip().upper())
+    )
+
+
 class NJTransitEntity(CoordinatorEntity[DepartureCoordinator]):
     """Base for entities belonging to one commute."""
 
@@ -89,6 +104,7 @@ class NJTransitEntity(CoordinatorEntity[DepartureCoordinator]):
         """Initialize the entity."""
         super().__init__(entry.runtime_data.board)
         self.runtime: EntryRuntime = entry.runtime_data
+        self.favorites = normalize_train_ids(entry.options.get(CONF_FAVORITE_TRAINS))
         self._attr_unique_id = f"{entry.unique_id}-{key}"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},

@@ -112,6 +112,7 @@ commute, so directions can differ.
 | Upcoming departures to show | 3 | 1–10 | Number of `departure_*` sensors created |
 | Delay before disrupted | 10 min | 1–60 | How late counts as disrupted |
 | Lookahead | 90 min | 15–240 | Departures beyond this are ignored by the disruption sensor |
+| Favorite trains | none | — | Train numbers you usually catch, e.g. `6662` |
 
 Changing options reloads the entry, so entities go `unavailable` for a few
 seconds.
@@ -192,6 +193,28 @@ Empty rather than `On time` when there is no realtime data yet, which is normal
 for departures more than about an hour out. **Nothing being known is not the
 same as knowing the train is punctual** — the same reason `delay_minutes` is
 nullable.
+
+### `sensor.<commute>_next_favorite`
+
+`device_class: timestamp`. When the next train **you actually catch** leaves,
+as opposed to whichever usable train is soonest.
+
+Set the **Favorite trains** option to a list of train numbers. NJ Transit
+numbers are stable across weekdays — the 7:48 from Short Hills is 6662 every
+weekday — and they are what alerts name, so they correlate cleanly.
+
+`unknown` when no favourite runs again today, and when no favourites are
+configured. An empty list means "not using this", not "every train qualifies".
+
+Carries the same attributes as the numbered departure sensors, so an
+automation need not care which entity it read a train from, plus:
+
+| Attribute | Description |
+|---|---|
+| `favorites` | The configured train numbers, normalized |
+
+Every departure sensor also gains a `favorite` boolean, so a dashboard can
+highlight your train in a list without a second lookup.
 
 ### `sensor.<commute>_delay`
 
@@ -275,6 +298,26 @@ A typical notification body is `{{ fresh_reasons | join('\n') }}`.
 One automation per direction. How late a train must be before it counts is the
 **delay before disrupted** option on the integration entry, not a blueprint
 input — `reasons` is generated from it.
+
+### Blueprint: favorite train Live Activity
+
+[![Import blueprint][import-live-shield]][import-live]
+
+Puts your next favourite train on the iPhone Lock Screen and Dynamic Island as
+departure approaches, using [Live Activities][live-activities]. Requires
+iOS 17.2+ and Home Assistant 2026.7 or later.
+
+Set the commute's **Favorite trains** option first — this blueprint reads
+`sensor.<commute>_next_favorite`, which is `unknown` until there is a favourite
+to report.
+
+The activity appears once the train is inside the lead time, refreshes when its
+status or track changes, and clears after departure. Updates reuse the same
+`tag`, so they are silent.
+
+The countdown is a `chronometer`, which ticks on the phone. That is why the
+automation does not push once a minute — only a real change needs sending, and
+iOS rate-limits Live Activity updates.
 
 ### Or write it yourself
 
@@ -410,3 +453,6 @@ is original and is not their logo or wordmark.
 [releases]: https://github.com/dknowles2/ha-njtransit/releases/latest
 [import]: https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fdknowles2%2Fha-njtransit%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fnjtransit%2Fcommute_disruption.yaml
 [import-shield]: https://my.home-assistant.io/badges/blueprint_import.svg
+[import-live]: https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fdknowles2%2Fha-njtransit%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fnjtransit%2Ffavorite_live_activity.yaml
+[import-live-shield]: https://my.home-assistant.io/badges/blueprint_import.svg
+[live-activities]: https://companion.home-assistant.io/docs/notifications/live-activities/

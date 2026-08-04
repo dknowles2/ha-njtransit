@@ -17,6 +17,7 @@ CONF_STATUS_INTERVAL: Final = "status_interval"
 CONF_DEPARTURE_COUNT: Final = "departure_count"
 CONF_DELAY_THRESHOLD: Final = "delay_threshold"
 CONF_LOOKAHEAD: Final = "lookahead"
+CONF_FAVORITE_TRAINS: Final = "favorite_trains"
 
 DEFAULT_DEPARTURE_INTERVAL: Final = 60
 DEFAULT_STATUS_INTERVAL: Final = 120

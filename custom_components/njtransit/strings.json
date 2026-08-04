@@ -35,11 +35,13 @@
           "status_interval": "Service alert poll interval",
           "departure_count": "Upcoming departures to show",
           "delay_threshold": "Delay before the commute counts as disrupted",
-          "lookahead": "How far ahead to watch for disruption"
+          "lookahead": "How far ahead to watch for disruption",
+          "favorite_trains": "Favorite trains"
         },
         "data_description": {
           "departure_interval": "NJ Transit caches responses for 30 seconds, so polling faster gains nothing.",
-          "lookahead": "Departures beyond this window are ignored by the disruption sensor."
+          "lookahead": "Departures beyond this window are ignored by the disruption sensor.",
+          "favorite_trains": "Train numbers you usually catch, e.g. 6662. Leave empty to skip the favorite sensor entirely."
         }
       }
     }
@@ -69,6 +71,9 @@
       },
       "advisories": {
         "name": "Planned advisories"
+      },
+      "next_favorite": {
+        "name": "Next favorite"
       }
     },
     "binary_sensor": {

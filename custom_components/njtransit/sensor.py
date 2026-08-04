@@ -14,7 +14,7 @@ from homeassistant.const import UnitOfTime
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .api.models import CrowdLevel, SystemAlert
+from .api.models import CrowdLevel, Departure, SystemAlert
 from .api.parsing import alert_line_codes
 from .const import (
     CONF_DEPARTURE_COUNT,
@@ -41,6 +41,7 @@ async def async_setup_entry(
     async_add_entities(
         [
             *(DepartureSensor(entry, index) for index in range(count)),
+            FavoriteDepartureSensor(entry),
             DelaySensor(entry),
             CrowdingSensor(entry),
             AlertSensor(entry, advisories=False),
@@ -89,31 +90,95 @@ class DepartureSensor(NJTransitEntity, SensorEntity):
         if self._index >= len(departures):
             return None
 
-        departure = departures[self._index]
+        return _details(
+            departures[self._index], self.favorites, self.runtime.status.data
+        )
+
+
+def _details(
+    departure: Departure,
+    favorites: frozenset[str],
+    alerts: tuple[SystemAlert, ...] | None,
+) -> dict[str, Any]:
+    """Return the attribute payload for one departure.
+
+    Shared so the favourite sensor reports exactly what the numbered
+    departure sensors do -- an automation should not have to care which
+    entity it read a train from.
+    """
+    return {
+        "train_id": departure.train_id,
+        "favorite": departure.train_id.upper() in favorites,
+        "destination": departure.destination,
+        "line": departure.line,
+        "track": departure.track,
+        "status": departure.status.value,
+        "status_raw": departure.status_raw,
+        "status_text": departure.status_text,
+        "delay_minutes": departure.delay_minutes,
+        "inline_message": departure.inline_message,
+        "crowding": departure.crowding.value,
+        "cars": [
+            {
+                "number": car.number,
+                "position": car.position,
+                "crowding": car.level.value,
+            }
+            for car in departure.cars
+        ],
+        "alerts": [
+            alert.message
+            for alert in alerts or ()
+            if departure.train_id in alert.train_ids
+        ],
+    }
+
+
+class FavoriteDepartureSensor(NJTransitEntity, SensorEntity):
+    """When the next train you actually catch leaves.
+
+    Distinct from ``next_departure``, which is whichever usable train is
+    soonest. Someone with a fixed routine cares about *their* train, and a
+    lock-screen countdown for a service they were never going to board is
+    noise.
+
+    ``None`` when no favourite runs again today, and when no favourites are
+    configured at all -- an empty list means "not using this", not "every
+    train qualifies".
+    """
+
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_translation_key = "next_favorite"
+
+    def __init__(self, entry: NJTransitConfigEntry) -> None:
+        """Initialize the sensor."""
+        super().__init__(entry, "next-favorite")
+
+    @property
+    def _next(self) -> Departure | None:
+        """Return the soonest upcoming favourite, if any."""
+        if not self.favorites:
+            return None
+        return next(
+            (d for d in self.departures if d.train_id.upper() in self.favorites),
+            None,
+        )
+
+    @property
+    def native_value(self) -> datetime | None:
+        """Return the scheduled departure of the next favourite."""
+        departure = self._next
+        return departure.scheduled if departure else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Return the same details the numbered departure sensors report."""
+        departure = self._next
+        if departure is None:
+            return {"favorites": sorted(self.favorites)}
         return {
-            "train_id": departure.train_id,
-            "destination": departure.destination,
-            "line": departure.line,
-            "track": departure.track,
-            "status": departure.status.value,
-            "status_raw": departure.status_raw,
-            "status_text": departure.status_text,
-            "delay_minutes": departure.delay_minutes,
-            "inline_message": departure.inline_message,
-            "crowding": departure.crowding.value,
-            "cars": [
-                {
-                    "number": car.number,
-                    "position": car.position,
-                    "crowding": car.level.value,
-                }
-                for car in departure.cars
-            ],
-            "alerts": [
-                alert.message
-                for alert in self.runtime.status.data or ()
-                if departure.train_id in alert.train_ids
-            ],
+            **_details(departure, self.favorites, self.runtime.status.data),
+            "favorites": sorted(self.favorites),
         }
 
 
