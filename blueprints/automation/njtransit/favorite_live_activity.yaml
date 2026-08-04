@@ -2,7 +2,8 @@ blueprint:
   name: NJ Transit favorite train Live Activity
   description: >
     Put your next favourite train on the iPhone Lock Screen and Dynamic Island
-    as its departure approaches, and keep it updated until it leaves.
+    as its departure approaches, keep it updated until it leaves, and stop
+    once you say you are on board.
 
 
     Requires the **Favorite trains** option set on the commute, iOS 17.2+, and
@@ -17,6 +18,15 @@ blueprint:
     The countdown is a `chronometer`, which ticks on the phone. That is why
     this does not push once a minute: only a real change to the train needs to
     be sent, and iOS rate-limits Live Activity updates.
+
+
+    **Boarding.** Live Activities cannot carry buttons, and iOS does not report
+    when you swipe one away, so a plain notification with an **On board**
+    button is sent alongside the first one. Tapping it ends the activity and
+    stays quiet for the rest of the window — otherwise a second favourite
+    leaving soon after the one you actually caught would start nagging you on
+    the train. It resets when the commute window ends, or at 3am if you are not
+    using a schedule.
   domain: automation
   source_url: https://github.com/dknowles2/ha-njtransit/blob/main/blueprints/automation/njtransit/favorite_live_activity.yaml
   homeassistant:
@@ -40,6 +50,30 @@ blueprint:
         `notify.mobile_app_my_iphone`.
       selector:
         text: {}
+    boarded_helper:
+      name: "\"On board\" flag"
+      description: >
+        A toggle helper this automation owns. Turned on when you tap **On
+        board**, turned off when the window resets. Create one under Settings →
+        Devices & Services → Helpers. Leave empty to skip the button
+        entirely -- the activity still appears and still clears after
+        departure, it just cannot be dismissed early.
+      default: ""
+      selector:
+        entity:
+          filter:
+            - domain: input_boolean
+    commute_window:
+      name: Commute window
+      description: >
+        Optional. A schedule covering the hours you travel. Its end is what
+        resets the "on board" flag; without one the flag resets at 3am.
+      default: []
+      selector:
+        entity:
+          multiple: true
+          filter:
+            - domain: schedule
     icon:
       name: Icon
       description: Material Design Icon slug shown on the activity.
@@ -57,23 +91,42 @@ blueprint:
           unit_of_measurement: min
           mode: slider
 
-mode: single
+mode: queued
+max: 5
 max_exceeded: silent
 
 triggers:
   # A bare state trigger also fires on attribute changes, which is what
   # carries a new track or a slip to "12 min late".
   - trigger: state
+    id: refresh
     entity_id: !input favorite_sensor
   # Crossing into or out of the lead window is the passage of time, which no
   # state change announces. Five minutes is enough because the chronometer
   # counts down on the phone between updates.
   - trigger: time_pattern
+    id: refresh
     minutes: "/5"
+  - trigger: event
+    id: boarded
+    event_type: mobile_app_notification_action
+  - trigger: state
+    id: reset
+    entity_id: !input commute_window
+    to: "off"
+  # Without a schedule there is nothing to end the window, and a flag left on
+  # would silence tomorrow as well.
+  - trigger: time
+    id: reset
+    at: "03:00:00"
 
 variables:
   sensor: !input favorite_sensor
+  boarded: !input boarded_helper
   lead: !input lead_time
+  # Namespaced per commute, so two directions do not dismiss each other.
+  action_id: >-
+    {{ 'NJT_ONBOARD_' ~ (sensor | replace('sensor.', '') | upper) }}
   scheduled: "{{ states(sensor) }}"
   known: >-
     {{ scheduled not in ['unknown', 'unavailable', 'none', ''] }}
@@ -81,9 +134,12 @@ variables:
     {{ ((as_timestamp(scheduled) - as_timestamp(now())) / 60) | round(0) | int
        if known else 9999 }}
   # Kept briefly past departure so the activity does not vanish the instant a
-  # train you are running for slips off the board.
+  # train you are running for slips off the board. An unset helper is "", and
+  # is_state on "" is simply false, so leaving it empty behaves exactly as this
+  # blueprint did before the input existed.
   showing: >-
-    {{ known and minutes_out <= (lead | int) and minutes_out > -2 }}
+    {{ known and minutes_out <= (lead | int) and minutes_out > -2
+       and not is_state(boarded, 'on') }}
   train: "{{ state_attr(sensor, 'train_id') or '' }}"
   track: "{{ state_attr(sensor, 'track') }}"
   status: "{{ state_attr(sensor, 'status_text') or 'Scheduled' }}"
@@ -99,8 +155,38 @@ variables:
 
 actions:
   - choose:
+      - alias: You tapped "On board"
+        conditions:
+          - condition: trigger
+            id: boarded
+          - condition: template
+            value_template: >-
+              {{ boarded and trigger.event.data.action == action_id }}
+        sequence:
+          - action: input_boolean.turn_on
+            target:
+              entity_id: !input boarded_helper
+          - action: !input notify_target
+            data:
+              message: clear_notification
+              data:
+                tag: njtransit_favorite
+
+      - alias: The window ended, so arm for next time
+        conditions:
+          - condition: trigger
+            id: reset
+          - condition: template
+            value_template: "{{ boarded | length > 0 }}"
+        sequence:
+          - action: input_boolean.turn_off
+            target:
+              entity_id: !input boarded_helper
+
       - alias: Show or refresh the activity
         conditions:
+          - condition: trigger
+            id: refresh
           - condition: template
             value_template: "{{ showing }}"
         sequence:
@@ -120,11 +206,41 @@ actions:
                 when: "{{ as_timestamp(scheduled) | int }}"
                 notification_icon: !input icon
                 group: njtransit
-    # Clearing a tag that is not showing is a no-op, so this needs no memory
-    # of whether an activity is currently live.
-    default:
-      - action: !input notify_target
-        data:
-          message: clear_notification
-          data:
-            tag: njtransit_favorite
+          # The button has to ride on a separate, ordinary notification:
+          # Live Activities cannot carry actions. Sent once, when the activity
+          # first appears, rather than on every silent refresh.
+          - if:
+              - condition: template
+                value_template: >-
+                  {{ boarded and minutes_out >= (lead | int) - 5 }}
+            then:
+              - action: !input notify_target
+                data:
+                  title: "{{ headline }}"
+                  message: "{{ ('to ' ~ destination) if destination else status }}"
+                  data:
+                    tag: njtransit_favorite_board
+                    group: njtransit
+                    notification_icon: !input icon
+                    actions:
+                      - action: "{{ action_id }}"
+                        title: On board
+
+      # A refresh outside the window, or after boarding, ends the activity.
+      # Clearing a tag that is not showing is a no-op, so this needs no memory
+      # of whether one is currently live.
+      #
+      # Deliberately a branch rather than `default`. mobile_app_notification_action
+      # fires for every notification action in the system, so with a default
+      # branch someone else's button would fall through here and clear this
+      # activity.
+      - alias: Nothing to show, so end the activity
+        conditions:
+          - condition: trigger
+            id: refresh
+        sequence:
+          - action: !input notify_target
+            data:
+              message: clear_notification
+              data:
+                tag: njtransit_favorite
