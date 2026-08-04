@@ -459,9 +459,15 @@ hacs.json
 
 ### 4.1 On the bundled client
 
-The client is bundled rather than published separately, per decision. Worth stating once:
-**HA core requires third-party API clients to live in a separate published package**, so
-core submission will require extracting `api/` later.
+The client is bundled rather than published separately, per decision. **This integration
+does not target Home Assistant Core**, so the core rule requiring third-party API clients
+to live in a separate published package does not apply, and `api/` stays in-tree.
+
+The layering below is kept regardless, on its own merits: it keeps a reverse-engineered
+API surface testable without a Home Assistant fixture, and lets the traps in this document
+be checked against the live endpoint by a standalone script. Skipping core is a judgement
+about a private, undocumented endpoint -- not a licence to hold the code to a lower
+standard than core would.
 
 To keep that a mechanical move rather than a rewrite: `api/` must not import
 `homeassistant`, must accept an injected `aiohttp.ClientSession` rather than reaching for

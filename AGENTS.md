@@ -199,11 +199,21 @@ against a slip, not an invitation to change the convention.
 `custom_components/njtransit/api/` must not import `homeassistant`. It takes an
 injected `aiohttp.ClientSession` and raises its own exceptions.
 
-The client is bundled rather than published to PyPI, which is a deliberate
-tradeoff: Home Assistant Core requires third-party API clients to be a separate
-package, so core submission will mean extracting `api/` later. Keeping it
-HA-free makes that a move rather than a rewrite. A test enforces the boundary —
-if it fails, do not add an exemption.
+The client is bundled rather than published to PyPI. **This integration is not
+targeting Home Assistant Core**, so the packaging rule that would force `api/`
+into a separate PyPI package does not apply.
+
+The boundary stays anyway, and the test enforcing it stays. It is worth having
+on its own merits — it keeps the reverse-engineered API surface testable
+without a Home Assistant fixture, and it is the reason the traps in this file
+can be verified against the live endpoint by a standalone script. If it fails,
+do not add an exemption.
+
+**Not submitting to core is not a lower quality bar.** Hold to what core would
+ask for: full type coverage, a config flow with no YAML path, unique IDs on
+every entity, no I/O in properties, translated strings, diagnostics, and tests
+that would survive a core review. The reason to skip core is that the endpoint
+is private and undocumented, not that the code should be looser.
 
 ## Before committing
 
