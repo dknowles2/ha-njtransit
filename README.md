@@ -112,7 +112,7 @@ commute, so directions can differ.
 | Upcoming departures to show | 3 | 1–10 | Number of `departure_*` sensors created |
 | Delay before disrupted | 10 min | 1–60 | How late counts as disrupted |
 | Lookahead | 90 min | 15–240 | Departures beyond this are ignored by the disruption sensor |
-| Favorite trains | none | — | Train numbers you usually catch, e.g. `6662` |
+| Favorite trains | none | — | Picked from the day's direct trains, labelled by departure time |
 
 Changing options reloads the entry, so entities go `unavailable` for a few
 seconds.

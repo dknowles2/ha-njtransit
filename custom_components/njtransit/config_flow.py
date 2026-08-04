@@ -12,6 +12,7 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant.config_entries import (
+    ConfigEntryState,
     ConfigFlow,
     ConfigFlowResult,
     OptionsFlow,
@@ -249,11 +250,57 @@ class NJTransitOptionsFlow(OptionsFlow):
                     vol.Optional(
                         CONF_FAVORITE_TRAINS,
                         default=list(options.get(CONF_FAVORITE_TRAINS, [])),
-                    ): TextSelector(
-                        TextSelectorConfig(multiple=True, type=TextSelectorType.TEXT)
+                    ): self._favorites_selector(
+                        list(options.get(CONF_FAVORITE_TRAINS, []))
                     ),
                 }
             ),
+        )
+
+    def _favorites_selector(self, current: list[str]) -> SelectSelector | TextSelector:
+        """Return a picker of the trains that actually serve this commute.
+
+        Sourced from the route coordinator, so the list is the day's direct
+        services rather than every number on the board. Labelled by departure
+        time, because nobody memorises which number is the 7:33.
+
+        Falls back to free text when the entry is not loaded or the schedule
+        could not be resolved -- an unconfigurable option would be worse than
+        an unvalidated one.
+        """
+        entry = self.config_entry
+        route = (
+            entry.runtime_data.route.data
+            if entry.state is ConfigEntryState.LOADED and hasattr(entry, "runtime_data")
+            else None
+        )
+        if route is None or not route.trips:
+            return TextSelector(
+                TextSelectorConfig(multiple=True, type=TextSelectorType.TEXT)
+            )
+
+        seen: dict[str, str] = {}
+        for trip in sorted(route.trips, key=lambda t: t.departure):
+            clock = trip.departure.strftime("%I:%M %p").lstrip("0")
+            seen.setdefault(trip.train_id, f"{trip.train_id} · {clock}")
+
+        # A favourite saved from a weekday timetable must survive being edited
+        # on a weekend, when it is in no trip and would otherwise vanish from
+        # the form without anyone touching it.
+        for train_id in current:
+            seen.setdefault(train_id, train_id)
+
+        return SelectSelector(
+            SelectSelectorConfig(
+                options=[
+                    SelectOptionDict(value=train_id, label=label)
+                    for train_id, label in seen.items()
+                ],
+                multiple=True,
+                custom_value=True,
+                mode=SelectSelectorMode.DROPDOWN,
+                sort=False,
+            )
         )
 
 
