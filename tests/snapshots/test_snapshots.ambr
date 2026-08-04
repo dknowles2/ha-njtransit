@@ -98,6 +98,7 @@
         'delay_minutes': None,
         'destination': 'New York -SEC',
         <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'timestamp',
+        'favorite': False,
         <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to New York Penn Station Departure 2',
         'inline_message': None,
         'line': 'Morristown Line',
@@ -120,6 +121,7 @@
         'delay_minutes': None,
         'destination': 'New York',
         <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'timestamp',
+        'favorite': False,
         <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to New York Penn Station Departure 3',
         'inline_message': None,
         'line': 'Morristown Line',
@@ -142,6 +144,7 @@
         'delay_minutes': None,
         'destination': 'New York',
         <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'timestamp',
+        'favorite': False,
         <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to New York Penn Station Next departure',
         'inline_message': None,
         'line': 'Morristown Line',
@@ -153,6 +156,16 @@
       }),
       'state': '2026-08-03T12:25:00+00:00',
       'unique_id': 'RT-NY-departure-0',
+    }),
+    'sensor.short_hills_station_to_new_york_penn_station_next_favorite': dict({
+      'attributes': dict({
+        <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'timestamp',
+        'favorites': list([
+        ]),
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to New York Penn Station Next favorite',
+      }),
+      'state': 'unknown',
+      'unique_id': 'RT-NY-next-favorite',
     }),
     'sensor.short_hills_station_to_new_york_penn_station_planned_advisories': dict({
       'attributes': dict({
@@ -288,6 +301,7 @@
         'delay_minutes': None,
         'destination': 'New York',
         <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'timestamp',
+        'favorite': False,
         <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station Departure 2',
         'inline_message': None,
         'line': 'Morristown Line',
@@ -311,6 +325,7 @@
         'delay_minutes': None,
         'destination': 'Summit',
         <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'timestamp',
+        'favorite': False,
         <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station Departure 3',
         'inline_message': None,
         'line': 'Morristown Line',
@@ -349,6 +364,7 @@
         'delay_minutes': None,
         'destination': 'Summit',
         <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'timestamp',
+        'favorite': False,
         <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station Next departure',
         'inline_message': None,
         'line': 'Morristown Line',
@@ -360,6 +376,16 @@
       }),
       'state': '2026-08-03T12:17:00+00:00',
       'unique_id': 'RT-departure-0',
+    }),
+    'sensor.short_hills_station_next_favorite': dict({
+      'attributes': dict({
+        <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'timestamp',
+        'favorites': list([
+        ]),
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station Next favorite',
+      }),
+      'state': 'unknown',
+      'unique_id': 'RT-next-favorite',
     }),
     'sensor.short_hills_station_planned_advisories': dict({
       'attributes': dict({
@@ -527,6 +553,7 @@
         'delay_minutes': None,
         'destination': 'Hoboken',
         <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'timestamp',
+        'favorite': False,
         <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to Hoboken Terminal Departure 2',
         'inline_message': None,
         'line': 'Morristown Line',
@@ -549,6 +576,7 @@
         'delay_minutes': None,
         'destination': 'Hoboken',
         <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'timestamp',
+        'favorite': False,
         <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to Hoboken Terminal Departure 3',
         'inline_message': None,
         'line': 'Gladstone Branch',
@@ -586,6 +614,7 @@
         'delay_minutes': 0,
         'destination': 'Hoboken',
         <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'timestamp',
+        'favorite': False,
         <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to Hoboken Terminal Next departure',
         'inline_message': None,
         'line': 'Gladstone Branch',
@@ -597,6 +626,16 @@
       }),
       'state': '2026-08-03T12:42:00+00:00',
       'unique_id': 'RT-HB-departure-0',
+    }),
+    'sensor.short_hills_station_to_hoboken_terminal_next_favorite': dict({
+      'attributes': dict({
+        <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'timestamp',
+        'favorites': list([
+        ]),
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to Hoboken Terminal Next favorite',
+      }),
+      'state': 'unknown',
+      'unique_id': 'RT-HB-next-favorite',
     }),
     'sensor.short_hills_station_to_hoboken_terminal_planned_advisories': dict({
       'attributes': dict({
@@ -714,6 +753,7 @@
         'delay_minutes': None,
         'destination': 'New York -SEC',
         <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'timestamp',
+        'favorite': False,
         <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to New York Penn Station Departure 2',
         'inline_message': None,
         'line': 'Morristown Line',
@@ -736,6 +776,7 @@
         'delay_minutes': None,
         'destination': 'New York',
         <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'timestamp',
+        'favorite': False,
         <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to New York Penn Station Departure 3',
         'inline_message': None,
         'line': 'Morristown Line',
@@ -758,6 +799,7 @@
         'delay_minutes': None,
         'destination': 'New York',
         <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'timestamp',
+        'favorite': False,
         <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to New York Penn Station Next departure',
         'inline_message': None,
         'line': 'Morristown Line',
@@ -769,6 +811,16 @@
       }),
       'state': '2026-08-03T12:25:00+00:00',
       'unique_id': 'RT-NY-departure-0',
+    }),
+    'sensor.short_hills_station_to_new_york_penn_station_next_favorite': dict({
+      'attributes': dict({
+        <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'timestamp',
+        'favorites': list([
+        ]),
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to New York Penn Station Next favorite',
+      }),
+      'state': 'unknown',
+      'unique_id': 'RT-NY-next-favorite',
     }),
     'sensor.short_hills_station_to_new_york_penn_station_planned_advisories': dict({
       'attributes': dict({

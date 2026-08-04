@@ -26,6 +26,9 @@ from homeassistant.helpers.selector import (
     SelectSelector,
     SelectSelectorConfig,
     SelectSelectorMode,
+    TextSelector,
+    TextSelectorConfig,
+    TextSelectorType,
 )
 
 from .api.client import NJTransitClient
@@ -37,6 +40,7 @@ from .const import (
     CONF_DEPARTURE_INTERVAL,
     CONF_DESTINATION,
     CONF_DESTINATION_ID,
+    CONF_FAVORITE_TRAINS,
     CONF_LOOKAHEAD,
     CONF_ORIGIN,
     CONF_ORIGIN_ID,
@@ -242,6 +246,12 @@ class NJTransitOptionsFlow(OptionsFlow):
                         CONF_LOOKAHEAD,
                         default=options.get(CONF_LOOKAHEAD, DEFAULT_LOOKAHEAD),
                     ): _count(15, 240),
+                    vol.Optional(
+                        CONF_FAVORITE_TRAINS,
+                        default=list(options.get(CONF_FAVORITE_TRAINS, [])),
+                    ): TextSelector(
+                        TextSelectorConfig(multiple=True, type=TextSelectorType.TEXT)
+                    ),
                 }
             ),
         )

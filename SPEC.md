@@ -789,7 +789,8 @@ the commute. For Short Hills to New York Penn that is
 
 | Entity | State | Key attributes |
 |---|---|---|
-| `<commute>_next_departure` | next matching departure (`device_class: timestamp`) | `train_id`, `track`, `destination`, `line`, `status`, `status_raw`, `status_text`, `delay_minutes`, `inline_message`, `crowding`, `cars`, `alerts` |
+| `<commute>_next_favorite` | next departure whose train is in `favorite_trains` (`device_class: timestamp`) | same as the departure sensors, plus `favorites` |
+| `<commute>_next_departure` | next matching departure (`device_class: timestamp`) | `train_id`, `track`, `destination`, `line`, `status`, `status_raw`, `status_text`, `favorite`, `delay_minutes`, `inline_message`, `crowding`, `cars`, `alerts` |
 | `<commute>_departure_2` … `_N` | 2nd..Nth matching departure | same |
 | `<commute>_delay` | `delay_minutes` of next departure (`duration`, `min`) | — |
 | `<commute>_crowding` | `CrowdLevel` of the next departure (`device_class: enum`) | `positions` |

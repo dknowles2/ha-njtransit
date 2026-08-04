@@ -1,0 +1,112 @@
+blueprint:
+  name: NJ Transit favorite train Live Activity
+  description: >
+    Put your next favourite train on the iPhone Lock Screen and Dynamic Island
+    as its departure approaches, and keep it updated until it leaves.
+
+
+    Requires the **Favorite trains** option set on the commute, iOS 17.2+, and
+    Home Assistant 2026.7 or later.
+
+
+    The activity appears once the train is inside the lead time, refreshes when
+    its status or track changes, and clears after it departs. Updates reuse the
+    same `tag`, so they are silent — no banner, no sound.
+
+
+    The countdown is a `chronometer`, which ticks on the phone. That is why
+    this does not push once a minute: only a real change to the train needs to
+    be sent, and iOS rate-limits Live Activity updates.
+  domain: automation
+  source_url: https://github.com/dknowles2/ha-njtransit/blob/main/blueprints/automation/njtransit/favorite_live_activity.yaml
+  homeassistant:
+    min_version: "2026.7.0"
+  input:
+    favorite_sensor:
+      name: Favorite train sensor
+      description: >
+        The `Next favorite` sensor for the commute. Set the commute's
+        **Favorite trains** option first, or this never has anything to show.
+      selector:
+        entity:
+          filter:
+            - integration: njtransit
+              domain: sensor
+              device_class: timestamp
+    notify_target:
+      name: Notify action
+      description: >
+        The mobile_app action for the iPhone, e.g.
+        `notify.mobile_app_my_iphone`.
+      selector:
+        text: {}
+    lead_time:
+      name: Start this many minutes before departure
+      default: 30
+      selector:
+        number:
+          min: 5
+          max: 120
+          step: 5
+          unit_of_measurement: min
+          mode: slider
+
+mode: single
+max_exceeded: silent
+
+triggers:
+  # A bare state trigger also fires on attribute changes, which is what
+  # carries a new track or a slip to "12 min late".
+  - trigger: state
+    entity_id: !input favorite_sensor
+  # Crossing into or out of the lead window is the passage of time, which no
+  # state change announces. Five minutes is enough because the chronometer
+  # counts down on the phone between updates.
+  - trigger: time_pattern
+    minutes: "/5"
+
+variables:
+  sensor: !input favorite_sensor
+  lead: !input lead_time
+  scheduled: "{{ states(sensor) }}"
+  known: >-
+    {{ scheduled not in ['unknown', 'unavailable', 'none', ''] }}
+  minutes_out: >-
+    {{ ((as_timestamp(scheduled) - as_timestamp(now())) / 60) | round(0) | int
+       if known else 9999 }}
+  # Kept briefly past departure so the activity does not vanish the instant a
+  # train you are running for slips off the board.
+  showing: >-
+    {{ known and minutes_out <= (lead | int) and minutes_out > -2 }}
+  train: "{{ state_attr(sensor, 'train_id') or '' }}"
+  track: "{{ state_attr(sensor, 'track') }}"
+  status: "{{ state_attr(sensor, 'status_text') or 'Scheduled' }}"
+  headline: >-
+    Train {{ train }}{% if track %} · Track {{ track }}{% endif %}
+
+actions:
+  - choose:
+      - alias: Show or refresh the activity
+        conditions:
+          - condition: template
+            value_template: "{{ showing }}"
+        sequence:
+          - action: !input notify_target
+            data:
+              title: "{{ headline }}"
+              message: "{{ status }}"
+              data:
+                tag: njtransit_favorite
+                live_update: true
+                chronometer: true
+                when: "{{ as_timestamp(scheduled) | int }}"
+                when_relative: true
+                group: njtransit
+    # Clearing a tag that is not showing is a no-op, so this needs no memory
+    # of whether an activity is currently live.
+    default:
+      - action: !input notify_target
+        data:
+          message: clear_notification
+          data:
+            tag: njtransit_favorite
