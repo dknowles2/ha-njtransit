@@ -34,6 +34,20 @@
       'state': 'off',
       'unique_id': 'RT-NY-calendar',
     }),
+    'event.short_hills_station_to_new_york_penn_station_train_event': dict({
+      'attributes': dict({
+        <EventEntityStateAttribute.EVENT_TYPE: 'event_type'>: None,
+        <EventEntityCapabilityAttribute.EVENT_TYPES: 'event_types'>: list([
+          'cancelled',
+          'delayed',
+          'track_changed',
+          'alerted',
+        ]),
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to New York Penn Station Train event',
+      }),
+      'state': 'unknown',
+      'unique_id': 'RT-NY-train-event',
+    }),
     'sensor.short_hills_station_to_new_york_penn_station_crowding': dict({
       'attributes': dict({
         <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'enum',
@@ -255,6 +269,20 @@
       }),
       'state': 'on',
       'unique_id': 'RT-disrupted',
+    }),
+    'event.short_hills_station_train_event': dict({
+      'attributes': dict({
+        <EventEntityStateAttribute.EVENT_TYPE: 'event_type'>: None,
+        <EventEntityCapabilityAttribute.EVENT_TYPES: 'event_types'>: list([
+          'cancelled',
+          'delayed',
+          'track_changed',
+          'alerted',
+        ]),
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station Train event',
+      }),
+      'state': 'unknown',
+      'unique_id': 'RT-train-event',
     }),
     'sensor.short_hills_station_crowding': dict({
       'attributes': dict({
@@ -507,6 +535,34 @@
       }),
       'state': 'off',
       'unique_id': 'RT-NY-calendar',
+    }),
+    'event.short_hills_station_to_hoboken_terminal_train_event': dict({
+      'attributes': dict({
+        <EventEntityStateAttribute.EVENT_TYPE: 'event_type'>: None,
+        <EventEntityCapabilityAttribute.EVENT_TYPES: 'event_types'>: list([
+          'cancelled',
+          'delayed',
+          'track_changed',
+          'alerted',
+        ]),
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to Hoboken Terminal Train event',
+      }),
+      'state': 'unknown',
+      'unique_id': 'RT-HB-train-event',
+    }),
+    'event.short_hills_station_to_new_york_penn_station_train_event': dict({
+      'attributes': dict({
+        <EventEntityStateAttribute.EVENT_TYPE: 'event_type'>: None,
+        <EventEntityCapabilityAttribute.EVENT_TYPES: 'event_types'>: list([
+          'cancelled',
+          'delayed',
+          'track_changed',
+          'alerted',
+        ]),
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to New York Penn Station Train event',
+      }),
+      'state': 'unknown',
+      'unique_id': 'RT-NY-train-event',
     }),
     'sensor.short_hills_station_to_hoboken_terminal_crowding': dict({
       'attributes': dict({
