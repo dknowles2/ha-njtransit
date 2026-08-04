@@ -345,6 +345,18 @@ The countdown is a `chronometer`, which ticks on the phone. That is why the
 automation does not push once a minute — only a real change needs sending, and
 iOS rate-limits Live Activity updates.
 
+**Dismissing it.** Live Activities cannot carry buttons, and iOS does not
+report when you swipe one away, so a plain notification with an **On board**
+button is sent alongside the first one. Tapping it ends the activity and stays
+quiet for the rest of the window — without it, a second favourite departing
+soon after the one you actually caught starts counting down at you on the
+train.
+
+That needs somewhere to remember you boarded, so the blueprint takes an
+`input_boolean` helper. It is reset when the commute schedule ends, or at 3am
+if you are not using one. Leave the input empty to skip the button; the
+activity still appears and still clears after departure.
+
 ### Or write it yourself
 
 Trigger on the `reasons` **attribute**, not on the sensor turning on. If a
