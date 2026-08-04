@@ -74,6 +74,9 @@
       },
       "next_favorite": {
         "name": "Next favorite"
+      },
+      "stops_away": {
+        "name": "Stops away"
       }
     },
     "binary_sensor": {

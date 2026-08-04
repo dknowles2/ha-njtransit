@@ -8,6 +8,7 @@ degrades gracefully or falls over.
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -23,6 +24,7 @@ from custom_components.njtransit.api.client import NJTransitClient
 from custom_components.njtransit.api.parsing import TZ
 from custom_components.njtransit.coordinator import (
     DepartureCoordinator,
+    ProgressCoordinator,
     RouteCoordinator,
     StaticCoordinator,
     SystemStatusCoordinator,
@@ -211,3 +213,48 @@ class TestBoardSharing:
         await store.release_board(SHORT_HILLS, first.entry_id)
 
         assert SHORT_HILLS in store.boards, "the second commute lost its board"
+
+
+class TestProgressCoordinator:
+    """Following one train, and knowing when not to."""
+
+    async def test_returns_none_without_a_train_to_follow(
+        self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+    ) -> None:
+        """No request at all -- that is what keeps this affordable.
+
+        The stop list cannot be batched, so following every train would be a
+        request each. Skipping when nothing is close is the whole reason
+        per-train tracking is viable here.
+        """
+        mocker = AiohttpClientMocker()
+        called = install_api_mock(mocker)
+        session = mocker.create_session(asyncio.get_running_loop())
+        try:
+            coordinator = ProgressCoordinator(
+                hass, NJTransitClient(session), lambda: None, timedelta(minutes=1)
+            )
+            await coordinator.async_refresh()
+            assert coordinator.data is None
+            assert "TrainStopList" not in called
+        finally:
+            await session.close()
+
+    async def test_a_train_not_running_today_is_not_a_failure(
+        self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+    ) -> None:
+        """Normal on a weekend, or after a timetable change."""
+        mocker = AiohttpClientMocker()
+        install_api_mock(
+            mocker, {"TrainStopList": {"data": {"getTrainStopList": None}}}
+        )
+        session = mocker.create_session(asyncio.get_running_loop())
+        try:
+            coordinator = ProgressCoordinator(
+                hass, NJTransitClient(session), lambda: "9999", timedelta(minutes=1)
+            )
+            await coordinator.async_refresh()
+            assert coordinator.last_update_success is True
+            assert coordinator.data is None
+        finally:
+            await session.close()
