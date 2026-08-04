@@ -7,14 +7,17 @@ entering the lookahead window. Those are the cases here.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 import pytest
+from freezegun.api import FrozenDateTimeFactory
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.test_util.aiohttp import (
     AiohttpClientMocker,
 )
 
+from custom_components.njtransit.api.parsing import TZ
 from custom_components.njtransit.event import (
     EVENT_ALERTED,
     EVENT_CANCELLED,
@@ -27,6 +30,18 @@ from .conftest import install_api_mock, load_fixture
 from .test_init import make_entry, setup_entry
 
 ENTITY = "event.short_hills_station_to_new_york_penn_station_train_event"
+
+# The capture is a morning board. Resolved against an afternoon clock those
+# departures roll to tomorrow, fall outside the lookahead window, and every
+# assertion here silently has nothing to work on -- so these tests pass or
+# fail by time of day unless the clock is pinned.
+CAPTURED_AT = datetime(2026, 8, 3, 8, 20, tzinfo=TZ)
+
+
+@pytest.fixture(name="at_capture_time", autouse=True)
+def at_capture_time_fixture(freezer: FrozenDateTimeFactory) -> None:
+    """Freeze the clock at the moment the fixtures were recorded."""
+    freezer.move_to(CAPTURED_AT)
 
 
 def board_with(**changes: dict[str, Any]) -> dict[str, Any]:
