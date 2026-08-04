@@ -102,6 +102,8 @@ class TestStatus:
             ("in 21 Min", TrainStatus.ON_TIME),
             ("in 4 Min", TrainStatus.ON_TIME),
             ("BOARDING", TrainStatus.BOARDING),
+            # The stop list spells it unspaced; the board does not.
+            ("OnTime", TrainStatus.ON_TIME),
             ("ALL ABOARD", TrainStatus.ALL_ABOARD),
             ("Late", TrainStatus.DELAYED),
             ("Delayed", TrainStatus.DELAYED),

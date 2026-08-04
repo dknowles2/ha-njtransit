@@ -233,6 +233,14 @@
       'state': '4',
       'unique_id': 'RT-NY-alerts',
     }),
+    'sensor.short_hills_station_to_new_york_penn_station_stops_away': dict({
+      'attributes': dict({
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to New York Penn Station Stops away',
+        <EntityStateAttribute.UNIT_OF_MEASUREMENT: 'unit_of_measurement'>: 'stops',
+      }),
+      'state': 'unknown',
+      'unique_id': 'RT-NY-stops-away',
+    }),
   })
 # ---
 # name: test_entities_without_a_destination
@@ -466,6 +474,14 @@
       }),
       'state': '4',
       'unique_id': 'RT-alerts',
+    }),
+    'sensor.short_hills_station_stops_away': dict({
+      'attributes': dict({
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station Stops away',
+        <EntityStateAttribute.UNIT_OF_MEASUREMENT: 'unit_of_measurement'>: 'stops',
+      }),
+      'state': 'unknown',
+      'unique_id': 'RT-stops-away',
     }),
   })
 # ---
@@ -745,6 +761,14 @@
       'state': '4',
       'unique_id': 'RT-HB-alerts',
     }),
+    'sensor.short_hills_station_to_hoboken_terminal_stops_away': dict({
+      'attributes': dict({
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to Hoboken Terminal Stops away',
+        <EntityStateAttribute.UNIT_OF_MEASUREMENT: 'unit_of_measurement'>: 'stops',
+      }),
+      'state': 'unknown',
+      'unique_id': 'RT-HB-stops-away',
+    }),
     'sensor.short_hills_station_to_new_york_penn_station_crowding': dict({
       'attributes': dict({
         <EntityStateAttribute.DEVICE_CLASS: 'device_class'>: 'enum',
@@ -929,6 +953,14 @@
       }),
       'state': '4',
       'unique_id': 'RT-NY-alerts',
+    }),
+    'sensor.short_hills_station_to_new_york_penn_station_stops_away': dict({
+      'attributes': dict({
+        <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to New York Penn Station Stops away',
+        <EntityStateAttribute.UNIT_OF_MEASUREMENT: 'unit_of_measurement'>: 'stops',
+      }),
+      'state': 'unknown',
+      'unique_id': 'RT-NY-stops-away',
     }),
   })
 # ---

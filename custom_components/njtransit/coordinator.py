@@ -10,6 +10,7 @@ commutes out of the same station, so the shared ones are kept in
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 
@@ -23,7 +24,14 @@ from .api.exceptions import (
     NJTransitError,
     NJTransitNotFoundError,
 )
-from .api.models import DepartureBoard, RailLine, ScheduledTrip, Station, SystemAlert
+from .api.models import (
+    DepartureBoard,
+    RailLine,
+    ScheduledTrip,
+    Station,
+    SystemAlert,
+    TrainRun,
+)
 from .api.parsing import now_local
 from .const import DOMAIN, ROUTE_INTERVAL, STATIC_INTERVAL
 
@@ -315,6 +323,46 @@ def store_for(hass: HomeAssistant) -> CoordinatorStore | None:
     return store if isinstance(store, CoordinatorStore) else None
 
 
+class ProgressCoordinator(NJTransitCoordinator[TrainRun | None]):
+    """Follows one train along its route.
+
+    The stop list costs a request per train and cannot be batched from the
+    board (SPEC 2.2), which is why per-train tracking was deferred. Following
+    only the favourite makes it one request per poll instead of nineteen.
+
+    Which train to follow is injected rather than computed here: choosing it
+    needs the destination filter, which lives in the entity layer, and
+    importing that from a coordinator would be circular.
+    """
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        client: NJTransitClient,
+        pick: Callable[[], str | None],
+        interval: timedelta,
+    ) -> None:
+        """Initialize the coordinator."""
+        super().__init__(hass, client, "train progress", interval)
+        self._pick = pick
+
+    async def _async_update_data(self) -> TrainRun | None:
+        train_id = self._pick()
+        if train_id is None:
+            # No favourite worth following right now. Returning early is the
+            # point: it is what keeps this from being a request per minute all
+            # day for a train nobody is waiting for.
+            return None
+
+        try:
+            return await self.client.train_run(train_id)
+        except NJTransitNotFoundError:
+            # A favourite that is not running today. Normal on a weekend or
+            # after a timetable change, and not a reason to fail the refresh.
+            _LOGGER.debug("Train %s is not in service", train_id)
+            return None
+
+
 @dataclass
 class EntryRuntime:
     """Everything one config entry needs at runtime."""
@@ -324,6 +372,7 @@ class EntryRuntime:
     status: SystemStatusCoordinator
     board: DepartureCoordinator
     route: RouteCoordinator
+    progress: ProgressCoordinator
     origin: str
     destination: str | None
 

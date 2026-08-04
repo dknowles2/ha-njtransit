@@ -28,6 +28,7 @@ from .models import (
     RailLine,
     ScheduledTrip,
     Station,
+    Stop,
     SystemAlert,
     TrainStatus,
 )
@@ -62,6 +63,10 @@ _STATUS_KEYWORDS: tuple[tuple[str, TrainStatus], ...] = (
     ("late", TrainStatus.DELAYED),
     ("delay", TrainStatus.DELAYED),
     ("on time", TrainStatus.ON_TIME),
+    # The stop list writes it unspaced -- "OnTime" -- where the board writes
+    # "on time". Same field name, same meaning, different spelling: one more
+    # place this endpoint disagrees with itself.
+    ("ontime", TrainStatus.ON_TIME),
 )
 
 _CROWD_COLORS = {
@@ -491,3 +496,29 @@ def alert_line_codes(
             umbrella for umbrella, covered in _LINE_UMBRELLAS.items() if code in covered
         )
     return frozenset(resolved)
+
+
+def parse_stops(
+    payload: list[dict[str, Any]] | None,
+    reference: datetime,
+) -> tuple[Stop, ...]:
+    """Build a train's stop list.
+
+    Rows without a usable name are dropped; a stop that cannot be identified
+    cannot be counted against, and keeping it would shift every "stops away"
+    figure by one.
+    """
+    stops: list[Stop] = []
+    for item in payload or ():
+        name = (item.get("name") or "").strip()
+        if not name:
+            continue
+        stops.append(
+            Stop(
+                name=name,
+                scheduled=resolve_time(item.get("time"), reference),
+                departed=bool(item.get("departed")),
+                status=parse_status(item.get("status")),
+            )
+        )
+    return tuple(stops)

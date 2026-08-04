@@ -242,6 +242,34 @@ automation need not care which entity it read a train from, plus:
 Every departure sensor also gains a `favorite` boolean, so a dashboard can
 highlight your train in a list without a second lookup.
 
+### `sensor.<commute>_stops_away`
+
+How far your favourite train is from your station, in stops.
+
+The board says when a train is *due*. Only the stop list says where it
+actually **is** — the difference between "the 7:33 is 4 late" and "the 7:33
+has just left Summit, one stop away".
+
+`0` means your station is the next call. `unknown` when the train has already
+passed, is not running today, or no favourite is close enough to follow.
+
+| Attribute | Description |
+|---|---|
+| `train_id` | The train being followed |
+| `last_departed` | The most recent stop it has left |
+| `next_stop` | Where it is heading |
+| `due_at_origin` | Scheduled time at your station |
+| `due_at_destination` | Scheduled time at the other end |
+| `stops_total` | Stops on the whole run |
+| `stops_remaining` | Names of the stops still ahead |
+
+This costs **one extra request per poll**, and only while a favourite is
+inside the lookahead window. The stop list cannot be batched from the board,
+so following every train would be a request each — which is why per-train
+tracking waited for favourites to exist.
+
+Requires **Favorite trains** to be set; without it there is nothing to follow.
+
 ### `sensor.<commute>_delay`
 
 `device_class: duration`, minutes. How late the next usable train is running.

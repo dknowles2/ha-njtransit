@@ -1,0 +1,69 @@
+{
+    "data": {
+        "getTrainStopList": [
+            {
+                "departed": true,
+                "dropOff": "",
+                "name": "Summit",
+                "status": "OnTime",
+                "time": "8:20 AM"
+            },
+            {
+                "departed": true,
+                "dropOff": "",
+                "name": "Short Hills",
+                "status": "OnTime",
+                "time": "8:24 AM"
+            },
+            {
+                "departed": true,
+                "dropOff": "",
+                "name": "Millburn",
+                "status": "OnTime",
+                "time": "8:27 AM"
+            },
+            {
+                "departed": false,
+                "dropOff": "",
+                "name": "Maplewood",
+                "status": "OnTime",
+                "time": "8:32 AM"
+            },
+            {
+                "departed": false,
+                "dropOff": "",
+                "name": "South Orange",
+                "status": "OnTime",
+                "time": "8:35 AM"
+            },
+            {
+                "departed": false,
+                "dropOff": "",
+                "name": "Orange",
+                "status": "OnTime",
+                "time": "8:41 AM"
+            },
+            {
+                "departed": false,
+                "dropOff": "",
+                "name": "Brick Church",
+                "status": "OnTime",
+                "time": "8:44 AM"
+            },
+            {
+                "departed": false,
+                "dropOff": "",
+                "name": "Newark Broad Street",
+                "status": "OnTime",
+                "time": "8:50 AM"
+            },
+            {
+                "departed": false,
+                "dropOff": "",
+                "name": "New York Penn Station",
+                "status": "OnTime",
+                "time": "9:12 AM"
+            }
+        ]
+    }
+}

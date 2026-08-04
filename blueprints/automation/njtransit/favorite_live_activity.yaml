@@ -3,7 +3,7 @@ blueprint:
   description: >
     Put your next favourite train on the iPhone Lock Screen and Dynamic Island
     as its departure approaches, keep it updated until it leaves, and stop
-    once you say you are on board.
+    when you dismiss it.
 
 
     Requires the **Favorite trains** option set on the commute, iOS 17.2+, and
@@ -20,13 +20,14 @@ blueprint:
     be sent, and iOS rate-limits Live Activity updates.
 
 
-    **Boarding.** Live Activities cannot carry buttons, and iOS does not report
-    when you swipe one away, so a plain notification with an **On board**
-    button is sent alongside the first one. Tapping it ends the activity and
-    stays quiet for the rest of the window — otherwise a second favourite
-    leaving soon after the one you actually caught would start nagging you on
-    the train. It resets when the commute window ends, or at 3am if you are not
-    using a schedule.
+    **Dismissing.** Live Activities cannot carry buttons, and swiping one
+    away tells iOS but not Home Assistant — so the next refresh puts it back.
+    A plain, silent notification carrying a **Dismiss** button is therefore
+    sent alongside it. Tapping that ends the activity and stays quiet for the
+    rest of the window, which is what stops a second favourite departing soon
+    after the one you caught from counting down at you on the train. It
+    resets when the commute window ends, or at 3am if you are not using a
+    schedule.
   domain: automation
   source_url: https://github.com/dknowles2/ha-njtransit/blob/main/blueprints/automation/njtransit/favorite_live_activity.yaml
   homeassistant:
@@ -51,12 +52,12 @@ blueprint:
       selector:
         text: {}
     boarded_helper:
-      name: "\"On board\" flag"
+      name: Dismissed flag
       description: >
-        A toggle helper this automation owns. Turned on when you tap **On
-        board**, turned off when the window resets. Create one under Settings →
-        Devices & Services → Helpers. Leave empty to skip the button
-        entirely -- the activity still appears and still clears after
+        A toggle helper this automation owns. Turned on when you tap
+        **Dismiss**, turned off when the window resets. Create one under
+        Settings → Devices & Services → Helpers. Leave empty to skip the
+        button entirely -- the activity still appears and still clears after
         departure, it just cannot be dismissed early.
       default: ""
       selector:
@@ -67,7 +68,7 @@ blueprint:
       name: Commute window
       description: >
         Optional. A schedule covering the hours you travel. Its end is what
-        resets the "on board" flag; without one the flag resets at 3am.
+        resets the dismissed flag; without one it resets at 3am.
       default: []
       selector:
         entity:
@@ -155,7 +156,7 @@ variables:
 
 actions:
   - choose:
-      - alias: You tapped "On board"
+      - alias: You tapped Dismiss
         conditions:
           - condition: trigger
             id: boarded
@@ -171,6 +172,13 @@ actions:
               message: clear_notification
               data:
                 tag: njtransit_favorite
+          # The button's own notification has to go too, or it sits there
+          # offering to dismiss something already gone.
+          - action: !input notify_target
+            data:
+              message: clear_notification
+              data:
+                tag: njtransit_favorite_board
 
       - alias: The window ended, so arm for next time
         conditions:
@@ -207,24 +215,31 @@ actions:
                 notification_icon: !input icon
                 group: njtransit
           # The button has to ride on a separate, ordinary notification:
-          # Live Activities cannot carry actions. Sent once, when the activity
-          # first appears, rather than on every silent refresh.
+          # Live Activities cannot carry actions.
+          #
+          # Sent on every refresh rather than only the first. Trying to catch
+          # the first meant a narrow "is this the start of the window" test,
+          # and a refresh landing just inside it left no button at all. The
+          # same `tag` makes each send replace the last rather than stack, and
+          # `passive` keeps them from making a sound -- so repeating is free
+          # and missing one is not.
           - if:
               - condition: template
-                value_template: >-
-                  {{ boarded and minutes_out >= (lead | int) - 5 }}
+                value_template: "{{ boarded | length > 0 }}"
             then:
               - action: !input notify_target
                 data:
                   title: "{{ headline }}"
-                  message: "{{ ('to ' ~ destination) if destination else status }}"
+                  message: Tap to dismiss until the next commute
                   data:
                     tag: njtransit_favorite_board
                     group: njtransit
                     notification_icon: !input icon
+                    push:
+                      interruption-level: passive
                     actions:
                       - action: "{{ action_id }}"
-                        title: On board
+                        title: Dismiss
 
       # A refresh outside the window, or after boarding, ends the activity.
       # Clearing a tag that is not showing is a no-op, so this needs no memory
@@ -244,3 +259,8 @@ actions:
               message: clear_notification
               data:
                 tag: njtransit_favorite
+          - action: !input notify_target
+            data:
+              message: clear_notification
+              data:
+                tag: njtransit_favorite_board

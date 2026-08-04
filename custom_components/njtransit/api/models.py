@@ -8,6 +8,7 @@ an unrecognized value.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
@@ -256,3 +257,89 @@ class ScheduledTrip:
         rail leg.
         """
         return self.transport_legs > 1
+
+
+@dataclass(frozen=True)
+class Stop:
+    """One station on a train's run."""
+
+    name: str
+    """Station name as the stop list reports it, e.g. ``Short Hills``.
+
+    A fourth vocabulary: shorter than the canonical titles the config flow
+    uses (``Short Hills Station``) and than the board's headsigns. Match
+    loosely."""
+
+    scheduled: datetime | None
+    """Scheduled time at this stop, timezone-aware. ``None`` when unparseable."""
+
+    departed: bool
+    """Whether the train has left this stop."""
+
+    status: TrainStatus
+    """Per-stop status. ``Delayed`` on one stop and ``OnTime`` on the rest is
+    normal -- it describes that stop, not the whole run."""
+
+
+@dataclass(frozen=True)
+class TrainRun:
+    """Where a train is along its route.
+
+    Built from the stop list, which is the only feed that says where a train
+    actually *is* rather than when it is due.
+    """
+
+    train_id: str
+    stops: tuple[Stop, ...] = ()
+
+    @property
+    def last_departed(self) -> Stop | None:
+        """Return the most recent stop the train has left."""
+        departed = [stop for stop in self.stops if stop.departed]
+        return departed[-1] if departed else None
+
+    @property
+    def next_stop(self) -> Stop | None:
+        """Return the stop the train is heading for."""
+        return next((stop for stop in self.stops if not stop.departed), None)
+
+    def stops_until(self, station: str) -> int | None:
+        """Return how many stops remain before reaching ``station``.
+
+        Zero means the train is between the previous stop and this one --
+        it is the next call. ``None`` when the station is not on this run, or
+        the train has already passed it.
+        """
+        remaining = [stop for stop in self.stops if not stop.departed]
+        for index, stop in enumerate(remaining):
+            if _same_station(stop.name, station):
+                return index
+        return None
+
+    def due_at(self, station: str) -> datetime | None:
+        """Return the scheduled time at ``station``, if it is on this run."""
+        for stop in self.stops:
+            if _same_station(stop.name, station):
+                return stop.scheduled
+        return None
+
+
+def _same_station(stop_name: str, station: str) -> bool:
+    """Compare a stop-list name against a configured station title.
+
+    The stop list says ``Short Hills``; the config flow stores ``Short Hills
+    Station``. Neither is a prefix of the other in every case, so compare on
+    the significant words both forms share.
+
+    ``penn`` is dropped alongside the generic suffixes: it distinguishes
+    nothing between New York Penn and Newark Penn, and leaving it in lets a
+    stop named only ``Penn Station`` match both. This mirrors the noise-word
+    list the destination filter uses for the same reason.
+    """
+    trim = {"station", "terminal", "the", "penn"}
+
+    def words(value: str) -> set[str]:
+        return {word for word in re.findall(r"[a-z0-9]+", value.casefold())} - trim
+
+    stop_words = words(stop_name)
+    return bool(stop_words) and stop_words <= words(station)

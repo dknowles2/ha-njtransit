@@ -109,6 +109,11 @@ Do not regenerate these fixtures to make a test pass.
   differ whenever the journey continues by another mode, and the rail-leg
   reading always flatters: it called a 1 hr 7 min journey 42 minutes. Reach
   for `_terminal_time`, not `rail_legs[-1]`.
+- **The stop list spells statuses differently from the board.** It writes
+  `OnTime`; the board writes `on time`. Same field, same meaning, different
+  spelling -- caught only because a recorded fixture asserted the parse. Its
+  station names are a fourth vocabulary too: `Short Hills`, where the config
+  flow stores `Short Hills Station`.
 - **Train IDs are strings, not numbers.** Trenton's board carries Amtrak `A79`
   and SEPTA services.
 - **Status casing is inconsistent** for the same semantic state — `Cancelled`

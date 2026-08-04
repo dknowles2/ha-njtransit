@@ -21,6 +21,7 @@ from .models import (
     ScheduledTrip,
     Station,
     SystemAlert,
+    TrainRun,
 )
 from .parsing import (
     TZ,
@@ -29,6 +30,7 @@ from .parsing import (
     parse_board,
     parse_lines,
     parse_stations,
+    parse_stops,
     parse_trips,
 )
 from .queries import (
@@ -37,6 +39,7 @@ from .queries import (
     PLANNER_DATE_FORMAT,
     PLANNER_TIME_FORMAT,
     STATIONS,
+    STOP_LIST,
     SYSTEM_STATUS,
     TRAIN_LINES,
     TRIP_PLANNER,
@@ -178,6 +181,22 @@ class NJTransitClient:
     async def train_lines(self) -> tuple[RailLine, ...]:
         """Return every rail line."""
         return parse_lines(await self._execute(TRAIN_LINES))
+
+    async def train_run(self, train: str) -> TrainRun:
+        """Return where a train is along its route.
+
+        The only feed that says where a train actually *is* rather than when
+        it is due. One request per train and it cannot be batched from the
+        board (SPEC 2.2), so callers should ask only about trains they care
+        about.
+
+        :raise NJTransitNotFoundError: The train is not running today. The
+            endpoint returns a null payload for an ID it does not recognize
+            and for one that is simply not in service, and does not
+            distinguish them.
+        """
+        payload = await self._execute(STOP_LIST, {"train": train})
+        return TrainRun(train_id=train, stops=parse_stops(payload, now_local()))
 
     async def _planner_page(
         self,

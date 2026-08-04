@@ -42,6 +42,7 @@ async def async_setup_entry(
         [
             *(DepartureSensor(entry, index) for index in range(count)),
             FavoriteDepartureSensor(entry),
+            ProgressSensor(entry),
             DelaySensor(entry),
             CrowdingSensor(entry),
             AlertSensor(entry, advisories=False),
@@ -179,6 +180,66 @@ class FavoriteDepartureSensor(NJTransitEntity, SensorEntity):
         return {
             **_details(departure, self.favorites, self.runtime.status.data),
             "favorites": sorted(self.favorites),
+        }
+
+
+class ProgressSensor(NJTransitEntity, SensorEntity):
+    """How far away your favourite train is, in stops.
+
+    The board says when a train is *due*. Only the stop list says where it
+    actually *is*, which is the difference between "the 7:33 is 4 late" and
+    "the 7:33 has just left Summit, one stop away".
+
+    Zero means this station is the next call -- the train is between the
+    previous stop and here. ``None`` when it has already passed, is not
+    running, or no favourite is close enough to be worth following.
+    """
+
+    _attr_native_unit_of_measurement = "stops"
+    _attr_translation_key = "stops_away"
+
+    def __init__(self, entry: NJTransitConfigEntry) -> None:
+        """Initialize the sensor."""
+        super().__init__(entry, "stops-away")
+
+    async def async_added_to_hass(self) -> None:
+        """Also follow the progress coordinator, which polls separately."""
+        await super().async_added_to_hass()
+        self.async_on_remove(
+            self.runtime.progress.async_add_listener(self._handle_coordinator_update)
+        )
+
+    @property
+    def native_value(self) -> int | None:
+        """Return how many stops out the train is from this origin."""
+        run = self.runtime.progress.data
+        if run is None:
+            return None
+        return run.stops_until(self.runtime.origin)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Return where the train is and when it is due."""
+        run = self.runtime.progress.data
+        if run is None:
+            return None
+
+        last = run.last_departed
+        upcoming = run.next_stop
+        due_origin = run.due_at(self.runtime.origin)
+        due_destination = (
+            run.due_at(self.runtime.destination) if self.runtime.destination else None
+        )
+        return {
+            "train_id": run.train_id,
+            "last_departed": last.name if last else None,
+            "next_stop": upcoming.name if upcoming else None,
+            "due_at_origin": due_origin.isoformat() if due_origin else None,
+            "due_at_destination": (
+                due_destination.isoformat() if due_destination else None
+            ),
+            "stops_total": len(run.stops),
+            "stops_remaining": [stop.name for stop in run.stops if not stop.departed],
         }
 
 

@@ -6,6 +6,7 @@ describe a real Morris & Essex morning rather than invented data.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 import pytest
@@ -18,15 +19,19 @@ from custom_components.njtransit.api.models import (
     Departure,
     DepartureBoard,
     RailLine,
+    TrainRun,
     TrainStatus,
 )
 from custom_components.njtransit.api.parsing import (
+    TZ,
     alert_line_codes,
     line_code_for_title,
+    parse_stops,
 )
 from custom_components.njtransit.const import (
     CONF_DEPARTURE_COUNT,
     CONF_FAVORITE_TRAINS,
+    DOMAIN,
 )
 from custom_components.njtransit.coordinator import RouteData
 from custom_components.njtransit.entity import usable_departures
@@ -429,3 +434,73 @@ class TestFavorites:
 
         assert flags["6624"] is True
         assert any(value is False for value in flags.values())
+
+
+class TestProgress:
+    """The stops-away sensor, which reads the progress coordinator."""
+
+    @staticmethod
+    def _install(hass: HomeAssistant, stops: list[dict[str, Any]] | None) -> None:
+        """Put a run (or nothing) into the progress coordinator."""
+        entry = hass.config_entries.async_entries(DOMAIN)[0]
+        runtime = entry.runtime_data
+        runtime.progress.async_set_updated_data(
+            None
+            if stops is None
+            else TrainRun(
+                train_id="6320",
+                stops=parse_stops(stops, datetime(2026, 8, 4, 8, 28, tzinfo=TZ)),
+            )
+        )
+
+    async def test_reports_stops_away_and_position(
+        self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+    ) -> None:
+        install_api_mock(aioclient_mock)
+        await setup_entry(hass, make_entry())
+        self._install(hass, load_payload("stop_list_6320", "getTrainStopList"))
+        await hass.async_block_till_done()
+
+        state = hass.states.get(f"{PREFIX}_stops_away")
+        assert state is not None
+        # Short Hills is behind this train, so there is no count to give.
+        assert state.state == "unknown"
+        assert state.attributes["last_departed"] == "Millburn"
+        assert state.attributes["next_stop"] == "Maplewood"
+        assert state.attributes["train_id"] == "6320"
+        assert state.attributes["due_at_destination"] is not None
+
+    async def test_unknown_without_a_tracked_train(
+        self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+    ) -> None:
+        """No favourite close enough is not an error, and not zero stops."""
+        install_api_mock(aioclient_mock)
+        await setup_entry(hass, make_entry())
+        self._install(hass, None)
+        await hass.async_block_till_done()
+
+        state = hass.states.get(f"{PREFIX}_stops_away")
+        assert state is not None
+        assert state.state == "unknown"
+        assert "last_departed" not in state.attributes
+
+    async def test_counts_stops_when_the_train_is_still_coming(
+        self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+    ) -> None:
+        """Two stops out from Short Hills, rather than already past it."""
+        install_api_mock(aioclient_mock)
+        await setup_entry(hass, make_entry())
+        self._install(
+            hass,
+            [
+                {"name": "Summit", "time": "8:20 AM", "departed": True},
+                {"name": "Millburn", "time": "8:27 AM", "departed": False},
+                {"name": "Short Hills", "time": "8:31 AM", "departed": False},
+            ],
+        )
+        await hass.async_block_till_done()
+
+        state = hass.states.get(f"{PREFIX}_stops_away")
+        assert state is not None
+        assert state.state == "1"
+        assert state.attributes["stops_remaining"] == ["Millburn", "Short Hills"]

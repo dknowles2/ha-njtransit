@@ -9,12 +9,16 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api.client import NJTransitClient
+from .api.parsing import now_local
 from .const import (
     CONF_DEPARTURE_INTERVAL,
     CONF_DESTINATION,
+    CONF_FAVORITE_TRAINS,
+    CONF_LOOKAHEAD,
     CONF_ORIGIN,
     CONF_STATUS_INTERVAL,
     DEFAULT_DEPARTURE_INTERVAL,
+    DEFAULT_LOOKAHEAD,
     DEFAULT_STATUS_INTERVAL,
     DOMAIN,
     MIN_INTERVAL,
@@ -23,11 +27,13 @@ from .coordinator import (
     CoordinatorStore,
     EntryRuntime,
     NJTransitConfigEntry,
+    ProgressCoordinator,
     RouteCoordinator,
     StaticCoordinator,
     SystemStatusCoordinator,
     store_for,
 )
+from .entity import normalize_train_ids, usable_departures
 
 PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,
@@ -82,12 +88,45 @@ async def async_setup_entry(hass: HomeAssistant, entry: NJTransitConfigEntry) ->
         # async_config_entry_first_refresh.
         await route.async_refresh()
 
+    def pick_favorite() -> str | None:
+        """Return the favourite worth following right now, if any.
+
+        Gated on the lookahead window so this is not a request a minute, all
+        day, for a train nobody is waiting for. Defined here rather than in
+        the coordinator because choosing needs the destination filter, which
+        lives in the entity layer.
+        """
+        favorites = normalize_train_ids(entry.options.get(CONF_FAVORITE_TRAINS))
+        if not favorites:
+            return None
+
+        horizon = now_local() + timedelta(
+            minutes=int(entry.options.get(CONF_LOOKAHEAD, DEFAULT_LOOKAHEAD))
+        )
+        for departure in usable_departures(board.data, route.data, destination):
+            if departure.scheduled > horizon:
+                break
+            if departure.train_id.upper() in favorites:
+                return departure.train_id
+        return None
+
+    progress = ProgressCoordinator(
+        hass,
+        client,
+        pick_favorite,
+        _interval(entry, CONF_DEPARTURE_INTERVAL, DEFAULT_DEPARTURE_INTERVAL),
+    )
+    # Not a first_refresh: a train not running today is normal, and must not
+    # take setup down with it.
+    await progress.async_refresh()
+
     entry.runtime_data = EntryRuntime(
         client=client,
         static=store.static,
         status=store.status,
         board=board,
         route=route,
+        progress=progress,
         origin=origin,
         destination=destination,
     )
