@@ -104,7 +104,7 @@ class NJTransitEntity(CoordinatorEntity[DepartureCoordinator]):
         """Initialize the entity."""
         super().__init__(entry.runtime_data.board)
         self.runtime: EntryRuntime = entry.runtime_data
-        self.favorites = normalize_train_ids(entry.options.get(CONF_FAVORITE_TRAINS))
+        self._entry = entry
         self._attr_unique_id = f"{entry.unique_id}-{key}"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
@@ -113,6 +113,16 @@ class NJTransitEntity(CoordinatorEntity[DepartureCoordinator]):
             entry_type=DeviceEntryType.SERVICE,
             configuration_url="https://www.njtransit.com/dv-to",
         )
+
+    @property
+    def favorites(self) -> frozenset[str]:
+        """Return the configured favourite train IDs.
+
+        Read live rather than cached at construction, so changing them does
+        not need an entry reload -- which would tear down every entity and
+        re-page the trip planner for an option no coordinator depends on.
+        """
+        return normalize_train_ids(self._entry.options.get(CONF_FAVORITE_TRAINS))
 
     @property
     def departures(self) -> list[Departure]:

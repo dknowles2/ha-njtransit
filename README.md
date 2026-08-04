@@ -114,8 +114,9 @@ commute, so directions can differ.
 | Lookahead | 90 min | 15–240 | Departures beyond this are ignored by the disruption sensor |
 | Favorite trains | none | — | Picked from the day's direct trains, labelled by departure time |
 
-Changing options reloads the entry, so entities go `unavailable` for a few
-seconds.
+Changing most options reloads the entry, so entities go `unavailable` for a
+few seconds. **Favorite trains is the exception** — entities read it live, so
+changing it takes effect immediately with nothing going unavailable.
 
 **Lookahead is the option to reach for first if alerts feel wrong.** At 90
 minutes the disruption sensor reports on trains an hour and a half out, which

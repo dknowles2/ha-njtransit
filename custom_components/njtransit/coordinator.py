@@ -13,6 +13,7 @@ import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, timedelta
+from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -375,6 +376,11 @@ class EntryRuntime:
     progress: ProgressCoordinator
     origin: str
     destination: str | None
+    options: dict[str, Any] = field(default_factory=dict)
+    """The options this entry was built with.
+
+    Kept so the update listener can compare against the new ones and skip
+    a reload when nothing structural changed."""
 
 
 type NJTransitConfigEntry = ConfigEntry[EntryRuntime]

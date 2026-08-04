@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from typing import Final
 
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
@@ -129,6 +130,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: NJTransitConfigEntry) ->
         progress=progress,
         origin=origin,
         destination=destination,
+        options=dict(entry.options),
     )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -155,6 +157,29 @@ async def async_unload_entry(hass: HomeAssistant, entry: NJTransitConfigEntry) -
     return True
 
 
+# Options every entity reads live. Changing one of these needs no reload,
+# and reloading for them is expensive out of proportion: it tears down every
+# entity and re-pages the trip planner (~18 requests) to rebuild state that
+# did not depend on the option in the first place.
+HOT_OPTIONS: Final = frozenset({CONF_FAVORITE_TRAINS})
+
+
 async def _async_reload_entry(hass: HomeAssistant, entry: NJTransitConfigEntry) -> None:
-    """Reload when options change."""
+    """Reload when options change, unless nothing structural did."""
+    runtime = entry.runtime_data
+    previous = runtime.options
+    changed = {
+        key
+        for key in set(entry.options) | set(previous)
+        if entry.options.get(key) != previous.get(key)
+    }
+    runtime.options = dict(entry.options)
+
+    if changed and changed <= HOT_OPTIONS:
+        # Nudge the entities so the new value is reflected at once, and let
+        # the progress coordinator re-pick which train it is following.
+        runtime.board.async_update_listeners()
+        await runtime.progress.async_request_refresh()
+        return
+
     await hass.config_entries.async_reload(entry.entry_id)

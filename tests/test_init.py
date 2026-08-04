@@ -20,9 +20,11 @@ from pytest_homeassistant_custom_component.test_util.aiohttp import (
 )
 
 from custom_components.njtransit.const import (
+    CONF_DEPARTURE_COUNT,
     CONF_DEPARTURE_INTERVAL,
     CONF_DESTINATION,
     CONF_DESTINATION_ID,
+    CONF_FAVORITE_TRAINS,
     CONF_ORIGIN,
     CONF_ORIGIN_ID,
     DOMAIN,
@@ -284,3 +286,66 @@ async def test_unload_is_clean(
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
     assert entry.state is ConfigEntryState.NOT_LOADED
+
+
+class TestOptionReloads:
+    """Which option changes tear the entry down, and which do not."""
+
+    async def test_changing_favorites_does_not_reload(
+        self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+    ) -> None:
+        """Entities read favourites live, so a reload buys nothing.
+
+        Reloading re-pages the trip planner and blanks every entity on the
+        way through, which is a lot of disruption for an option no
+        coordinator depends on.
+        """
+        install_api_mock(aioclient_mock)
+        entry = make_entry()
+        await setup_entry(hass, entry)
+
+        before = entry.runtime_data
+        sensor = hass.states.get(
+            "sensor.short_hills_station_to_new_york_penn_station_next_departure"
+        )
+        assert sensor is not None and sensor.state not in ("unknown", "unavailable")
+
+        hass.config_entries.async_update_entry(
+            entry, options={**entry.options, CONF_FAVORITE_TRAINS: ["6624"]}
+        )
+        await hass.async_block_till_done()
+
+        # Same runtime object means the entry was never torn down.
+        assert entry.runtime_data is before
+        after = hass.states.get(
+            "sensor.short_hills_station_to_new_york_penn_station_next_departure"
+        )
+        assert after is not None and after.state == sensor.state
+        # And the new value took effect anyway.
+        favorite = hass.states.get(
+            "sensor.short_hills_station_to_new_york_penn_station_next_favorite"
+        )
+        assert favorite is not None
+        assert favorite.attributes["favorites"] == ["6624"]
+
+    async def test_changing_departure_count_does_reload(
+        self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+    ) -> None:
+        """This one changes how many entities exist, so it must."""
+        install_api_mock(aioclient_mock)
+        entry = make_entry()
+        await setup_entry(hass, entry)
+
+        before = entry.runtime_data
+        hass.config_entries.async_update_entry(
+            entry, options={**entry.options, CONF_DEPARTURE_COUNT: 5}
+        )
+        await hass.async_block_till_done()
+
+        assert entry.runtime_data is not before
+        created = [
+            state
+            for state in hass.states.async_all("sensor")
+            if "departure" in state.entity_id and "next_favorite" not in state.entity_id
+        ]
+        assert len(created) == 5
