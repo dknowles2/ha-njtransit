@@ -555,6 +555,7 @@ class Departure:
     track: str | None
     status: TrainStatus
     status_raw: str  # always preserved
+    status_text: str  # derived: "Cancelled" / "22 min late" / "On time" / ""
     delay_minutes: int | None
     inline_message: str | None
     cars: tuple[Car, ...]  # empty when capacity absent (§2.3)
@@ -788,7 +789,7 @@ the commute. For Short Hills to New York Penn that is
 
 | Entity | State | Key attributes |
 |---|---|---|
-| `<commute>_next_departure` | next matching departure (`device_class: timestamp`) | `train_id`, `track`, `destination`, `line`, `status`, `status_raw`, `delay_minutes`, `inline_message`, `crowding`, `cars`, `alerts` |
+| `<commute>_next_departure` | next matching departure (`device_class: timestamp`) | `train_id`, `track`, `destination`, `line`, `status`, `status_raw`, `status_text`, `delay_minutes`, `inline_message`, `crowding`, `cars`, `alerts` |
 | `<commute>_departure_2` … `_N` | 2nd..Nth matching departure | same |
 | `<commute>_delay` | `delay_minutes` of next departure (`duration`, `min`) | — |
 | `<commute>_crowding` | `CrowdLevel` of the next departure (`device_class: enum`) | `positions` |

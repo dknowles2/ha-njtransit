@@ -97,6 +97,7 @@ class DepartureSensor(NJTransitEntity, SensorEntity):
             "track": departure.track,
             "status": departure.status.value,
             "status_raw": departure.status_raw,
+            "status_text": departure.status_text,
             "delay_minutes": departure.delay_minutes,
             "inline_message": departure.inline_message,
             "crowding": departure.crowding.value,

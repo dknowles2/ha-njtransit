@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from custom_components.njtransit.api.models import CrowdLevel, TrainStatus
+from custom_components.njtransit.api.models import CrowdLevel, Departure, TrainStatus
 from custom_components.njtransit.api.parsing import (
     TZ,
     compute_delay,
@@ -256,6 +256,56 @@ class TestParseBoard:
         by_id = {departure.train_id: departure for departure in board.departures}
         assert by_id["6320"].status_raw == "Cancelled"
         assert by_id["6311"].status_raw == "CANCELLED"
+
+    @pytest.mark.parametrize(
+        ("status", "delay", "expected"),
+        [
+            # Cancelled wins outright: the delay is None for a cancelled
+            # train, so a delay-first reading would report nothing at all.
+            (TrainStatus.CANCELLED, None, "Cancelled"),
+            (TrainStatus.CANCELLED, 12, "Cancelled"),
+            # How late beats the enum, which cannot say how late.
+            (TrainStatus.DELAYED, 22, "22 min late"),
+            (TrainStatus.BOARDING, 5, "5 min late"),
+            (TrainStatus.BOARDING, None, "Boarding"),
+            (TrainStatus.ALL_ABOARD, 0, "All aboard"),
+            (TrainStatus.DEPARTED, 0, "Departed"),
+            (TrainStatus.ON_TIME, 0, "On time"),
+            # No realtime data yet is not the same as running on time.
+            (TrainStatus.ON_TIME, None, ""),
+            (TrainStatus.UNKNOWN, None, ""),
+        ],
+    )
+    def test_status_text_combines_status_and_delay(
+        self, status: TrainStatus, delay: int | None, expected: str
+    ) -> None:
+        """One phrase from two fields, neither sufficient alone.
+
+        Consumers were combining these themselves -- the kiosk board reached
+        across columns by index to do it -- which is a correctness problem
+        wearing a presentation costume.
+        """
+        departure = Departure(
+            train_id="6320",
+            scheduled=CAPTURED_AT,
+            destination="New York",
+            line="Morristown Line",
+            line_abbreviation="M&E",
+            status=status,
+            status_raw="",
+            delay_minutes=delay,
+        )
+        assert departure.status_text == expected
+
+    def test_status_text_on_the_recorded_disruption(
+        self, departure_board: dict[str, Any]
+    ) -> None:
+        """The cancelled trains say so, and the unknown ones stay silent."""
+        board = parse_board("Short Hills Station", departure_board, CAPTURED_AT)
+        by_id = {departure.train_id: departure for departure in board.departures}
+        assert by_id["6320"].status_text == "Cancelled"
+        assert by_id["6311"].status_text == "Cancelled"
+        assert all(d.status_text == "" for d in board.departures if not d.status_raw)
 
     def test_crowding_is_partial(self, departure_board: dict[str, Any]) -> None:
         board = parse_board("Short Hills Station", departure_board, CAPTURED_AT)
