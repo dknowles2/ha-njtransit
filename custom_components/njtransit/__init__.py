@@ -35,6 +35,7 @@ from .coordinator import (
     store_for,
 )
 from .entity import normalize_train_ids, usable_departures
+from .track_history import TrackHistory
 
 PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,
@@ -69,7 +70,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: NJTransitConfigEntry) ->
         )
         await static.async_config_entry_first_refresh()
         await status.async_config_entry_first_refresh()
-        store = CoordinatorStore(static=static, status=status)
+        history = TrackHistory(hass)
+        await history.async_load()
+        store = CoordinatorStore(static=static, status=status, history=history)
         hass.data[DOMAIN] = store
 
     store.claim(entry.entry_id)
@@ -128,6 +131,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: NJTransitConfigEntry) ->
         board=board,
         route=route,
         progress=progress,
+        history=store.history,
         origin=origin,
         destination=destination,
         options=dict(entry.options),
@@ -152,6 +156,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: NJTransitConfigEntry) -
     if store.release(entry.entry_id):
         await store.static.async_shutdown()
         await store.status.async_shutdown()
+        await store.history.async_flush()
         hass.data.pop(DOMAIN, None)
 
     return True

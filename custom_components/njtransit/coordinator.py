@@ -35,6 +35,7 @@ from .api.models import (
 )
 from .api.parsing import now_local
 from .const import DOMAIN, ROUTE_INTERVAL, STATIC_INTERVAL
+from .track_history import TrackHistory
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -262,9 +263,16 @@ class CoordinatorStore:
 
     static: StaticCoordinator
     status: SystemStatusCoordinator
+    history: TrackHistory
     boards: dict[str, DepartureCoordinator] = field(default_factory=dict)
     _board_users: dict[str, set[str]] = field(default_factory=dict)
     _users: set[str] = field(default_factory=set)
+    _recorders: dict[str, Callable[[], None]] = field(default_factory=dict)
+    """Detach callbacks for the track recorder, one per station board.
+
+    Held here rather than on the entry, because the board is shared: the
+    recorder must outlive any single commute using that station and stop only
+    when the board itself does."""
 
     def claim(self, entry_id: str) -> None:
         """Record that an entry is using the shared coordinators."""
@@ -293,6 +301,13 @@ class CoordinatorStore:
             coordinator = DepartureCoordinator(hass, client, station, interval)
             self.boards[station] = coordinator
             await coordinator.async_config_entry_first_refresh()
+            self._recorders[station] = self.history.attach(coordinator)
+            # The listener fires on subsequent updates only, so the board that
+            # setup just fetched would otherwise go unrecorded until the next
+            # poll -- and on a restart during the ten minutes when a terminal
+            # publishes its tracks, that is the interesting one.
+            if coordinator.data is not None:
+                self.history.record(coordinator.data)
 
         self._board_users.setdefault(station, set()).add(entry_id)
         return coordinator
@@ -313,6 +328,9 @@ class CoordinatorStore:
             return
 
         self._board_users.pop(station, None)
+        detach = self._recorders.pop(station, None)
+        if detach is not None:
+            detach()
         coordinator = self.boards.pop(station, None)
         if coordinator is not None:
             await coordinator.async_shutdown()
@@ -374,6 +392,7 @@ class EntryRuntime:
     board: DepartureCoordinator
     route: RouteCoordinator
     progress: ProgressCoordinator
+    history: TrackHistory
     origin: str
     destination: str | None
     options: dict[str, Any] = field(default_factory=dict)
