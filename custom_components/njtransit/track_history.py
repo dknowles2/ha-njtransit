@@ -1,24 +1,31 @@
-"""Recording track assignments, so a prediction can be evaluated later.
+"""Recording what the board does, so two questions can be settled with data.
 
-This records; it does not predict. The distinction is deliberate. Two days of
-this integration's own recorder history showed 8 of 10 New York Penn trains
-departing from a different track than the same train used the previous
-weekday, with no service disruption on either evening -- barely above chance
-across the ten tracks NJ Transit actually uses there. Shipping a predictor
-built on that would be shipping a coin flip with a confidence percentage
-printed next to it.
+**Which track.** Two days of this integration's own history showed 8 of 10 New
+York Penn trains departing from a different track than the same train used the
+previous weekday, with no disruption on either evening. The reason it may never
+work is structural: at a terminal, departure track follows from which equipment
+turned into the train and where it berthed, and SPEC 3.8 establishes that
+arrival track is unavailable from this API at any price. Every reachable signal
+is a proxy for a hidden variable. ``scripts/analyze_tracks.py`` scores
+candidates against a bar set before the data existed -- 60% top-1.
 
-The honest reason it may be weak is structural. At a terminal, departure track
-is decided by which equipment turns into the train and where it berthed, and
-SPEC 3.8 establishes that arrival track is unavailable from this API at any
-price. Every signal reachable from a departure board is a proxy for that
-hidden variable.
+**When the track is posted.** The more promising question, and it came from
+watching rather than modelling: New York Penn posts NJ Transit tracks a median
+of 9.0 minutes before departure with an interquartile range of *0.2 minutes*.
+That is a scheduled process, not a tendency, which is why a regular traveller
+can feel a deviation from it. The claim to test is that a track arriving late
+predicts a bad commute.
 
-So this collects evidence against a pre-registered bar -- 60% top-1 accuracy
-at New York Penn -- and ``scripts/analyze_tracks.py`` scores candidate models
-against it offline. If nothing clears the bar, the answer is to ship exclusion
-hints or nothing, decided on data rather than on how much work went into the
-collection.
+The confound is the whole difficulty: ``assigned_at`` is measured against the
+*scheduled* time, so a train already running late has its track posted late by
+definition. That would make lateness a restatement of "your train is delayed"
+rather than a warning. ``delay_at_assignment`` is what separates the two -- a
+late assignment on a train still reported on time is the interesting case.
+
+So a row is opened the first time a train is seen at all, not the first time it
+has a track, and it carries how the train turned out. Trains that never get a
+track are not noise to be filtered out; they are the sharpest form of the
+question.
 
 Recording is free: the whole board is already in ``coordinator.data`` every
 poll and all but a handful of rows are discarded. Nothing here issues a
@@ -80,9 +87,6 @@ class TrackHistory:
         # (day key, train) -> the record in ``_days``, so an update is a
         # dictionary lookup rather than a scan of the day.
         self._index: dict[tuple[str, str], dict[str, Any]] = {}
-        # Trains seen on the board *before* they had a track. Only for those
-        # can `assigned_at` be trusted -- see `record`.
-        self._trackless: set[tuple[str, str]] = set()
 
     async def async_load(self) -> None:
         """Read stored history, dropping anything past the window."""
@@ -118,50 +122,75 @@ class TrackHistory:
 
     @callback
     def record(self, board: DepartureBoard) -> None:
-        """Note the track of every row that has one."""
+        """Note every departure, and what became of it.
+
+        A row is opened the first time a train is seen at all, not the first
+        time it has a track. The trains that never get one are not noise to be
+        filtered out -- they are the whole point of the question this data
+        exists to answer, and recording only the assigned ones made the most
+        interesting case invisible.
+        """
         now = now_local()
         changed = False
 
         for departure in board.departures:
             key = day_key(board.station, departure.scheduled.date())
             ident = (key, departure.train_id)
+            record = self._index.get(ident)
 
-            if departure.track is None:
-                # Watching a train go from no track to a track is the only way
-                # to know *when* it was assigned. A train that already had one
-                # the first time we looked -- because Home Assistant started
-                # mid-window -- gets a null `assigned_at` rather than a
-                # plausible-looking wrong one.
-                self._trackless.add(ident)
-                continue
-
-            existing = self._index.get(ident)
-            if existing is None:
-                self._days.setdefault(key, []).append(
-                    record := {
-                        "train_id": departure.train_id,
-                        "track": departure.track,
-                        "scheduled": departure.scheduled.strftime("%H:%M"),
-                        "line": departure.line,
-                        "assigned_at": (
-                            _seconds_before(departure.scheduled, now)
-                            if ident in self._trackless
-                            else None
-                        ),
-                        # Only set once a train is moved, so its absence means
-                        # "assigned once and left alone" rather than "unknown".
-                        "first_track": None,
-                    }
-                )
+            if record is None:
+                record = {
+                    "train_id": departure.train_id,
+                    "scheduled": departure.scheduled.strftime("%H:%M"),
+                    "line": departure.line,
+                    "track": departure.track,
+                    # Whether this train was ever seen *without* a track. Only
+                    # then does `assigned_at` mean anything: a train that
+                    # already had one when Home Assistant started was assigned
+                    # at an unknown time, and a plausible-looking guess there
+                    # would corrupt the one measurement that matters.
+                    "seen_trackless": departure.track is None,
+                    "assigned_at": None,
+                    "delay_at_assignment": None,
+                    # Only set once a train is moved, so its absence means
+                    # "assigned once and left alone" rather than "unknown".
+                    "first_track": None,
+                    "final_status": departure.status.value,
+                    "final_delay": departure.delay_minutes,
+                }
+                self._days.setdefault(key, []).append(record)
                 self._index[ident] = record
                 changed = True
-            elif existing["track"] != departure.track:
+                continue
+
+            if departure.track is None:
+                record["seen_trackless"] = True
+            elif record["track"] is None:
+                # The assignment, caught in the act. `delay_at_assignment` is
+                # what separates a late assignment that predicts trouble from
+                # one that merely reflects a train already known to be late --
+                # measured against the scheduled time, a delayed train's track
+                # is posted late by definition.
+                record["track"] = departure.track
+                if record.get("seen_trackless"):
+                    record["assigned_at"] = _seconds_before(departure.scheduled, now)
+                    record["delay_at_assignment"] = departure.delay_minutes
+                changed = True
+            elif record["track"] != departure.track:
                 # Keep the track the train actually left from as `track`, and
-                # remember the original. How often Penn reassigns is itself
-                # part of what makes a prediction worth having or not.
-                if not existing.get("first_track"):
-                    existing["first_track"] = existing["track"]
-                existing["track"] = departure.track
+                # remember the original.
+                if not record.get("first_track"):
+                    record["first_track"] = record["track"]
+                record["track"] = departure.track
+                changed = True
+
+            # The board drops a train once it has gone, so whatever was last
+            # seen is how it turned out.
+            if record.get("final_status") != departure.status.value:
+                record["final_status"] = departure.status.value
+                changed = True
+            if record.get("final_delay") != departure.delay_minutes:
+                record["final_delay"] = departure.delay_minutes
                 changed = True
 
         if changed:
@@ -191,13 +220,22 @@ class TrackHistory:
             "days_collected": len(days),
             "observations": len(records),
             "distinct_trains": len({record["train_id"] for record in records}),
-            "tracks_seen": sorted({record["track"] for record in records}),
+            "tracks_seen": sorted(
+                {record["track"] for record in records if record.get("track")}
+            ),
             "reassigned": reassigned,
             # The headline number for "how much lead time would a prediction
             # actually buy" -- how long before departure the board itself
             # answers the question.
             "median_assigned_at_seconds": _median(timed),
             "assignments_timed": len(timed),
+            # Seen on the board and gone again without a track ever appearing.
+            # The sharpest version of "the track never came", and invisible
+            # until rows were opened on first sight rather than on assignment.
+            "never_assigned": sum(1 for record in records if not record.get("track")),
+            "cancelled": sum(
+                1 for record in records if record.get("final_status") == "cancelled"
+            ),
         }
 
     def as_dict(self) -> dict[str, Any]:
@@ -227,7 +265,6 @@ class TrackHistory:
             for ident, record in self._index.items()
             if ident[0] not in stale
         }
-        self._trackless = {ident for ident in self._trackless if ident[0] not in stale}
 
     def _reindex(self) -> None:
         """Rebuild the lookup after loading."""

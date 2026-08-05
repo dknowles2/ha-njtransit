@@ -476,6 +476,21 @@ Amtrak rows are present on the shared board (`A177`, `A196`, `A639`, `lineAbbrev
 `AMTK`) and carry tracks where the station publishes them. No LIRR rows were observed, but
 the sample was late-evening and this should be treated as unproven rather than settled.
 
+**The two operators must never be pooled when reasoning about timing.** Over one day at
+New York Penn, split by operator:
+
+| | n | p10 | p25 | median | p75 | at T-0 |
+|---|---|---|---|---|---|---|
+| NJ Transit | 125 | 7.0 | 8.9 | **9.0** | 9.1 | 1% |
+| Amtrak | 43 | 0.0 | 6.0 | 13.0 | 14.1 | **16%** |
+
+NJ Transit's interquartile range is **0.2 minutes**. That is a scheduled process, not a
+tendency, and it is what makes a deviation from it meaningful — see §7.3. Amtrak is a
+different operating practice entirely, announcing later on average while leaving a sixth of
+its departures until the departure minute itself. A figure computed across both describes
+neither, and an earlier "median 9.0 minutes" in this document was pooled and landed on the
+right answer by coincidence.
+
 ## 4. Repository layout
 
 ```
@@ -844,6 +859,38 @@ Two details in the recorder exist to keep that judgement honest:
 Retention is 30 days (`TRACK_HISTORY_DAYS`), matching what choochootracker.com states it
 analyses. Writes are coalesced via `Store.async_delay_save`; Home Assistant flushes pending
 saves at shutdown, and `async_flush` covers the last entry being removed.
+
+### 7.3 A late track is the signal worth having
+
+This came from a rider, not from modelling: *"any time I observe a track assignment not
+happening by the T-10 minute mark I know I'm in for a rough commute."*
+
+It is a better shape of question than track prediction, and for a specific reason. Which
+track a train leaves from depends on the equipment turn, which §3.8 establishes is
+unobservable through this API — every candidate signal is a proxy for a hidden variable.
+*When* the track is posted is not a proxy for anything. It is directly observed, on a
+60-second poll, against a process whose quartile range is 0.2 minutes.
+
+`event.py` fires `track_overdue` when one of your trains is inside `TRACK_OVERDUE_LEAD`
+(8 minutes, below NJ Transit's first quartile) with no track published. Two guards matter:
+
+- **Cancelled trains are excluded.** They were never getting a track, and the cancellation
+  already said the worse thing.
+- **It fires only where the station is publishing tracks at all**, tested as "does any row
+  on this board have one". Without that, a station that never publishes — or a feed that
+  drops the field — reports every train as permanently overdue. The signal is "late while
+  others are getting theirs", which is meaningless where nobody is.
+
+**Whether it is a warning or a restatement is not yet known.** `assigned_at` is measured
+against the *scheduled* time, so a train already running late has its track posted late by
+definition. If the late assignments turn out to be exactly the already-delayed trains, this
+says nothing the board did not. `delay_at_assignment` is recorded to settle it: a late
+assignment on a train still reported on time is the case that would make this genuinely
+predictive. `scripts/analyze_tracks.py` reports both populations separately, and reports
+"outcomes not recorded yet" rather than a misleading 0% while the fields are still filling.
+
+The event ships regardless, because it is actionable on its own terms — you are told the
+track is not up when it should be, which is a fact whatever it turns out to correlate with.
 
 ## 8. Config flow
 

@@ -33,27 +33,53 @@ from typing import NamedTuple
 
 BAR = 0.60
 
+# Below this many seconds before departure, an assignment counts as late.
+# NJ Transit's first quartile at New York Penn is 8.9 minutes, so this is
+# roughly the slowest tenth. Mirrors TRACK_OVERDUE_LEAD in event.py.
+LATE_ASSIGNMENT = 8 * 60
+
 # How close two departures have to be for one's track to rule out the other's.
 # Deliberately generous: a wrong exclusion costs more than a missing one.
 CONFLICT_WINDOW = timedelta(minutes=10)
 
 
 class Observation(NamedTuple):
-    """One recorded departure and the track it left from."""
+    """One recorded departure, and what became of it."""
 
     station: str
     day: date
     train_id: str
-    track: str
+    track: str | None
     scheduled: datetime
     line: str
     assigned_at: int | None
     reassigned: bool
+    delay_at_assignment: int | None
+    final_status: str | None
+    final_delay: int | None
 
     @property
     def weekday(self) -> int:
         """Return the day of week, Monday being 0."""
         return self.day.weekday()
+
+    @property
+    def is_amtrak(self) -> bool:
+        """Return whether this is an Amtrak service.
+
+        They must be split out of anything about *when* a track is posted.
+        Amtrak announces at a median of 13 minutes but leaves 16% until the
+        departure minute itself, against 1% for NJ Transit -- two different
+        operating practices, and pooling them buries both.
+        """
+        return self.line == "Amtrak"
+
+    @property
+    def went_wrong(self) -> bool:
+        """Return whether this train ended up cancelled or meaningfully late."""
+        if self.final_status == "cancelled":
+            return True
+        return self.final_delay is not None and self.final_delay >= 5
 
 
 def load(paths: list[Path]) -> list[Observation]:
@@ -88,6 +114,9 @@ def load(paths: list[Path]) -> list[Observation]:
                         line=record.get("line", ""),
                         assigned_at=record.get("assigned_at"),
                         reassigned=bool(record.get("first_track")),
+                        delay_at_assignment=record.get("delay_at_assignment"),
+                        final_status=record.get("final_status"),
+                        final_delay=record.get("final_delay"),
                     )
                 )
     return observations
@@ -96,7 +125,7 @@ def load(paths: list[Path]) -> list[Observation]:
 def describe(observations: list[Observation]) -> None:
     """Print what was collected, before any model is asked about it."""
     days = sorted({observation.day for observation in observations})
-    tracks = Counter(observation.track for observation in observations)
+    tracks = Counter(o.track for o in observations if o.track)
     timed = [
         observation.assigned_at
         for observation in observations
@@ -134,10 +163,75 @@ def describe(observations: list[Observation]) -> None:
         )
 
 
+def lateness_vs_outcome(observations: list[Observation]) -> None:
+    """Test whether a late track assignment predicts a bad commute.
+
+    The hypothesis, from a decade of riding it: when the track is not up by
+    about ten minutes out, the commute is going to be rough.
+
+    The confound is that `assigned_at` is measured against the *scheduled*
+    time, so a train already running late gets its track posted late by
+    definition. If every late assignment sits on an already-delayed train, this
+    is a restatement of the board rather than a warning from it -- so the
+    interesting population is trains still reported **on time** when their
+    track finally appeared, and those are reported separately below.
+    """
+    njt = [o for o in observations if not o.is_amtrak]
+    timed = [o for o in njt if o.assigned_at is not None]
+    never = [o for o in njt if o.track is None]
+
+    print("\n  late track assignment vs outcome (NJ Transit only)")
+    if not timed and not never:
+        print("    nothing timed yet\n")
+        return
+
+    # Outcome fields were added after collection began, so early rows carry
+    # neither. Reporting those as "0% went wrong" would read as a finding when
+    # it is an absence -- the exact mistake this whole analysis exists to
+    # avoid making about track prediction.
+    if not any(o.final_status is not None or o.final_delay is not None for o in njt):
+        print("    outcomes not recorded yet -- no rows carry a final status\n")
+        return
+
+    def rate(rows: list[Observation], label: str) -> None:
+        if not rows:
+            print(f"    {label:<34} --")
+            return
+        bad = sum(1 for o in rows if o.went_wrong)
+        print(f"    {label:<34} {bad:3}/{len(rows):<4} = {bad / len(rows):5.0%}")
+
+    on_time_at_assignment = [o for o in timed if o.delay_at_assignment in (0, None)]
+    print("    all trains:")
+    rate(
+        [o for o in timed if (o.assigned_at or 0) >= LATE_ASSIGNMENT],
+        "assigned normally (>= 8 min)",
+    )
+    rate(
+        [o for o in timed if (o.assigned_at or 0) < LATE_ASSIGNMENT],
+        "assigned late (< 8 min)",
+    )
+    rate(never, "never assigned a track")
+
+    # The version that actually tests the hypothesis rather than restating the
+    # board: the train looked fine at the moment its track was posted late.
+    print("    reported on time when the track appeared:")
+    rate(
+        [o for o in on_time_at_assignment if (o.assigned_at or 0) >= LATE_ASSIGNMENT],
+        "assigned normally",
+    )
+    rate(
+        [o for o in on_time_at_assignment if (o.assigned_at or 0) < LATE_ASSIGNMENT],
+        "assigned late",
+    )
+    print()
+
+
 def _reuse_gaps(observations: list[Observation]) -> list[float]:
     """Return minutes between consecutive departures from the same track."""
     by_track: dict[tuple[date, str], list[datetime]] = defaultdict(list)
     for observation in observations:
+        if observation.track is None:
+            continue
         by_track[observation.day, observation.track].append(observation.scheduled)
 
     gaps: list[float] = []
@@ -170,14 +264,17 @@ def m0_global_mode(
     history: list[Observation], same_day: list[Observation], target: Observation
 ) -> list[str]:
     """The commonest track at the station. The baseline to beat."""
-    return [track for track, _ in Counter(o.track for o in history).most_common()]
+    counts = Counter(o.track for o in history if o.track)
+    return [track for track, _ in counts.most_common()]
 
 
 def m1_by_train(
     history: list[Observation], same_day: list[Observation], target: Observation
 ) -> list[str]:
     """What this train number usually does."""
-    counts = Counter(o.track for o in history if o.train_id == target.train_id)
+    counts = Counter(
+        o.track for o in history if o.track and o.train_id == target.train_id
+    )
     return [track for track, _ in counts.most_common()]
 
 
@@ -188,7 +285,7 @@ def m2_by_train_and_weekday(
     counts = Counter(
         o.track
         for o in history
-        if o.train_id == target.train_id and o.weekday == target.weekday
+        if o.track and o.train_id == target.train_id and o.weekday == target.weekday
     )
     return [track for track, _ in counts.most_common()]
 
@@ -204,7 +301,7 @@ def m3_by_time_slot(
     counts = Counter(
         o.track
         for o in history
-        if abs(_minutes(o.scheduled) - _minutes(target.scheduled)) <= 5
+        if o.track and abs(_minutes(o.scheduled) - _minutes(target.scheduled)) <= 5
     )
     return [track for track, _ in counts.most_common()]
 
@@ -216,7 +313,7 @@ def m4_by_train_minus_conflicts(
     busy = {
         o.track
         for o in same_day
-        if abs(o.scheduled - target.scheduled) <= CONFLICT_WINDOW
+        if o.track and abs(o.scheduled - target.scheduled) <= CONFLICT_WINDOW
     }
     ranked = m1_by_train(history, same_day, target) or m0_global_mode(
         history, same_day, target
@@ -317,6 +414,7 @@ def main() -> int:
         subset = [o for o in observations if o.station == station]
         print(f"\n{station}")
         describe(subset)
+        lateness_vs_outcome(subset)
         evaluate(subset)
 
     return 0

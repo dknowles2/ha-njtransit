@@ -33,6 +33,8 @@ def departure(
     *,
     at: datetime,
     track: str | None = None,
+    delay: int | None = None,
+    status: TrainStatus = TrainStatus.ON_TIME,
 ) -> Departure:
     """Return a board row with only the fields this module reads."""
     return Departure(
@@ -41,9 +43,10 @@ def departure(
         destination="Dover",
         line="Morristown Line",
         line_abbreviation="M&E",
-        status=TrainStatus.ON_TIME,
+        status=status,
         status_raw="",
         track=track,
+        delay_minutes=delay,
     )
 
 
@@ -71,14 +74,24 @@ def freezer_at_fixture(freezer: FrozenDateTimeFactory) -> FrozenDateTimeFactory:
     return freezer
 
 
-def test_a_row_without_a_track_records_nothing(
+def test_a_row_is_opened_before_a_track_exists(
     history: TrackHistory, freezer_at: FrozenDateTimeFactory
 ) -> None:
-    """Most of a terminal's board has no track for most of the day."""
+    """Most of a terminal's board has no track for most of the day.
+
+    Those rows are recorded anyway. A train that never gets a track is the
+    sharpest form of the question this data exists to answer, and opening the
+    row only on assignment made exactly that case invisible.
+    """
     when = datetime(2026, 8, 4, 18, 30, tzinfo=TZ)
     history.record(board(departure("6643", at=when)))
 
-    assert history.days_for(STATION) == {}
+    [record] = history.days_for(STATION)["2026-08-04"]
+    assert record["train_id"] == "6643"
+    assert record["track"] is None
+    assert record["seen_trackless"] is True
+    assert record["assigned_at"] is None
+    assert history.summary(STATION)["never_assigned"] == 1
 
 
 def test_assignment_seen_happening_is_timed(
@@ -293,6 +306,70 @@ def test_summary_reports_what_collection_looks_like(
     assert summary["median_assigned_at_seconds"] == 1050
 
 
+def test_the_delay_at_assignment_is_captured(
+    history: TrackHistory, freezer_at: FrozenDateTimeFactory
+) -> None:
+    """The field that separates a warning from a restatement.
+
+    `assigned_at` is measured against the *scheduled* time, so a train already
+    running late has its track posted late by definition. Without knowing what
+    the delay was at that moment, a late assignment cannot be told apart from
+    a late train -- and only the first is worth knowing about.
+    """
+    when = datetime(2026, 8, 4, 18, 30, tzinfo=TZ)
+    history.record(board(departure("6643", at=when)))
+
+    freezer_at.move_to(datetime(2026, 8, 4, 18, 24, tzinfo=TZ))
+    history.record(board(departure("6643", at=when, track="4", delay=11)))
+
+    [record] = history.days_for(STATION)["2026-08-04"]
+    assert record["assigned_at"] == 360
+    assert record["delay_at_assignment"] == 11
+
+
+def test_a_train_on_time_at_assignment_records_zero_not_none(
+    history: TrackHistory, freezer_at: FrozenDateTimeFactory
+) -> None:
+    """`None` means the board had no realtime data; 0 means it said on time."""
+    when = datetime(2026, 8, 4, 18, 30, tzinfo=TZ)
+    history.record(board(departure("6643", at=when)))
+    history.record(board(departure("6643", at=when, track="4", delay=0)))
+
+    [record] = history.days_for(STATION)["2026-08-04"]
+    assert record["delay_at_assignment"] == 0
+
+
+def test_the_outcome_follows_the_train(
+    history: TrackHistory, freezer_at: FrozenDateTimeFactory
+) -> None:
+    """Whatever was last seen is how it turned out -- the board drops it after."""
+    when = datetime(2026, 8, 4, 18, 30, tzinfo=TZ)
+    history.record(board(departure("6643", at=when, track="4", delay=0)))
+    history.record(board(departure("6643", at=when, track="4", delay=6)))
+    history.record(
+        board(departure("6643", at=when, track="4", status=TrainStatus.CANCELLED))
+    )
+
+    [record] = history.days_for(STATION)["2026-08-04"]
+    assert record["final_status"] == "cancelled"
+    assert history.summary(STATION)["cancelled"] == 1
+
+
+def test_a_train_that_never_got_a_track_is_counted(
+    history: TrackHistory, freezer_at: FrozenDateTimeFactory
+) -> None:
+    """The case the whole hypothesis is about."""
+    when = datetime(2026, 8, 4, 18, 30, tzinfo=TZ)
+    for _ in range(3):
+        history.record(board(departure("6643", at=when)))
+    history.record(board(departure("6647", at=when, track="2")))
+
+    summary = history.summary(STATION)
+    assert summary["observations"] == 2
+    assert summary["never_assigned"] == 1
+    assert summary["tracks_seen"] == ["2"]
+
+
 def test_median_lead_time_over_an_odd_number_of_assignments(
     history: TrackHistory, freezer_at: FrozenDateTimeFactory
 ) -> None:
@@ -318,4 +395,6 @@ def test_summary_of_an_unwatched_station_is_empty(history: TrackHistory) -> None
         "reassigned": 0,
         "median_assigned_at_seconds": None,
         "assignments_timed": 0,
+        "never_assigned": 0,
+        "cancelled": 0,
     }

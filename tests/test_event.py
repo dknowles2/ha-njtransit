@@ -7,7 +7,8 @@ entering the lookahead window. Those are the cases here.
 
 from __future__ import annotations
 
-from datetime import datetime
+from dataclasses import replace
+from datetime import datetime, timedelta
 from typing import Any
 
 import pytest
@@ -17,13 +18,15 @@ from pytest_homeassistant_custom_component.test_util.aiohttp import (
     AiohttpClientMocker,
 )
 
-from custom_components.njtransit.api.parsing import TZ
+from custom_components.njtransit.api.models import TrainStatus
+from custom_components.njtransit.api.parsing import TZ, now_local
 from custom_components.njtransit.event import (
     EVENT_ALERTED,
     EVENT_CANCELLED,
     EVENT_DELAYED,
     EVENT_LINE_CANCELLATION,
     EVENT_TRACK_CHANGED,
+    EVENT_TRACK_OVERDUE,
     TrainEvent,
 )
 
@@ -80,6 +83,7 @@ async def test_created_for_a_commute(
         EVENT_TRACK_CHANGED,
         EVENT_ALERTED,
         EVENT_LINE_CANCELLATION,
+        EVENT_TRACK_OVERDUE,
     }
 
 
@@ -358,3 +362,119 @@ async def test_other_lines_are_ignored(
     lines = {d.line for d, affects in target._watched() if affects is not None}
     ours = {d.line for d in target._upcoming()}
     assert lines <= ours
+
+
+async def test_a_track_that_never_arrives_fires(
+    hass: HomeAssistant,
+    aioclient_mock: AiohttpClientMocker,
+    monkeypatch: pytest.MonkeyPatch,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """The signal a regular traveller reads before anything is announced.
+
+    New York Penn posts NJ Transit tracks a median of 9.0 minutes before
+    departure, with a quartile range of 0.2 minutes. A train still without one
+    inside eight minutes is in the slowest tenth, and nothing else on the board
+    says so.
+    """
+    install_api_mock(aioclient_mock, {"TrainDepartureScreens": board_with()})
+    await setup_entry(hass, make_entry())
+
+    target = entity(hass)
+    fired: list[tuple[str, dict[str, Any]]] = []
+    monkeypatch.setattr(
+        target,
+        "_trigger_event",
+        lambda event_type, attrs=None: fired.append((event_type, attrs or {})),
+    )
+    seen = type(target._seen[target.departures[0].train_id])  # type: ignore[index]
+    # A genuinely overdue train has no track; the fixture row has one.
+    departure = replace(target.departures[0], track=None)
+
+    # Far enough out that a missing track is simply normal, then inside the
+    # window where it is not.
+    early = seen(cancelled=False, track=None, over_threshold=False, alerted=False)
+    overdue = seen(
+        cancelled=False,
+        track=None,
+        over_threshold=False,
+        alerted=False,
+        track_overdue=True,
+    )
+
+    target._fire_changes(departure, early, overdue)
+    assert [event for event, _ in fired] == [EVENT_TRACK_OVERDUE]
+    assert fired[0][1]["expected_by_minutes"] == 8
+    assert fired[0][1]["track"] is None
+
+    # Still overdue on the next poll is not a second piece of news.
+    fired.clear()
+    target._fire_changes(departure, overdue, overdue)
+    assert fired == []
+
+
+async def test_a_cancelled_train_is_not_reported_as_overdue(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """It is never getting a track, and cancellation already said the worse thing."""
+    install_api_mock(aioclient_mock)
+    await setup_entry(hass, make_entry())
+
+    target = entity(hass)
+    departure = target.departures[0]
+    cancelled = replace(
+        departure, status=TrainStatus.CANCELLED, track=None, scheduled=now_local()
+    )
+
+    assert (
+        target._snapshot(cancelled, frozenset(), publishes=True).track_overdue is False
+    )
+
+
+async def test_a_station_publishing_no_tracks_reports_nothing_overdue(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """Otherwise every train at such a station is permanently "overdue".
+
+    The signal is "late getting a track while others are getting theirs",
+    which is meaningless where nobody is.
+    """
+    install_api_mock(aioclient_mock)
+    await setup_entry(hass, make_entry())
+
+    target = entity(hass)
+    # The first row of the capture is cancelled, which is excluded on its own
+    # grounds -- this test is about the station, not the train.
+    departure = replace(
+        target.departures[0],
+        track=None,
+        status=TrainStatus.ON_TIME,
+        scheduled=now_local(),
+    )
+
+    assert (
+        target._snapshot(departure, frozenset(), publishes=False).track_overdue is False
+    )
+    assert (
+        target._snapshot(departure, frozenset(), publishes=True).track_overdue is True
+    )
+
+
+async def test_a_train_still_far_out_is_not_overdue(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """Most of a terminal's board has no track for most of the day."""
+    install_api_mock(aioclient_mock)
+    await setup_entry(hass, make_entry())
+
+    target = entity(hass)
+    departure = replace(
+        target.departures[0],
+        track=None,
+        status=TrainStatus.ON_TIME,
+        scheduled=now_local() + timedelta(minutes=40),
+    )
+
+    assert (
+        target._snapshot(departure, frozenset(), publishes=True).track_overdue is False
+    )
