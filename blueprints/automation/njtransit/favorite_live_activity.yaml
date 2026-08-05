@@ -161,6 +161,16 @@ variables:
   # Namespaced per commute, so two directions do not dismiss each other.
   action_id: >-
     {{ 'NJT_ONBOARD_' ~ (sensor | replace('sensor.', '') | upper) }}
+  # The tags need namespacing for the same reason, and originally did not get
+  # it. Two automations on one phone -- outbound and return -- shared a single
+  # tag, so the one with nothing to show spent all evening clearing the tag the
+  # other was actively using, wiping a live countdown off the Lock Screen every
+  # five minutes. `clear_notification` on a tag you do not own is silent and
+  # looks like nothing happened, which is what made it read as the activity
+  # expiring on its own.
+  tag: >-
+    {{ 'njt_' ~ (sensor | replace('sensor.', '') | replace('_next_favorite', '')) }}
+  dismiss_tag: "{{ tag ~ '_dismiss' }}"
   scheduled: "{{ states(sensor) }}"
   known: >-
     {{ scheduled not in ['unknown', 'unavailable', 'none', ''] }}
@@ -223,14 +233,14 @@ actions:
             data:
               message: clear_notification
               data:
-                tag: njtransit_favorite
+                tag: "{{ tag }}"
           # The button's own notification has to go too, or it sits there
           # offering to dismiss something already gone.
           - action: !input notify_target
             data:
               message: clear_notification
               data:
-                tag: njtransit_favorite_board
+                tag: "{{ dismiss_tag }}"
 
       - alias: The window ended, so arm for next time
         conditions:
@@ -261,7 +271,7 @@ actions:
                 {{ ('to ' ~ destination) if destination else status }}
                 {{- ' · ' ~ busy if busy else '' }}
               data:
-                tag: njtransit_favorite
+                tag: "{{ tag }}"
                 live_update: true
                 chronometer: true
                 # An absolute Unix timestamp. `when_relative: true` would mean
@@ -300,7 +310,7 @@ actions:
                   message: Tap to dismiss until the next commute
                   data: >-
                     {{ {
-                         'tag': 'njtransit_favorite_board',
+                         'tag': dismiss_tag,
                          'group': 'njtransit',
                          'notification_icon': icon,
                          'push': {'interruption-level': 'passive'},
@@ -324,9 +334,9 @@ actions:
             data:
               message: clear_notification
               data:
-                tag: njtransit_favorite
+                tag: "{{ tag }}"
           - action: !input notify_target
             data:
               message: clear_notification
               data:
-                tag: njtransit_favorite_board
+                tag: "{{ dismiss_tag }}"
