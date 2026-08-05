@@ -478,3 +478,84 @@ async def test_a_train_still_far_out_is_not_overdue(
     assert (
         target._snapshot(departure, frozenset(), publishes=True).track_overdue is False
     )
+
+
+async def test_a_line_cancellation_reaches_you_through_a_real_poll(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """The same path an automation actually takes.
+
+    A sibling test builds the event by calling `_fire` directly, which proves
+    the payload but skips the diffing loop that decides whether to fire at
+    all -- the entity's whole reason to exist.
+    """
+    install_api_mock(aioclient_mock)
+    entry = make_entry()
+    await setup_entry(hass, entry)
+
+    target = entity(hass)
+    assert target._seen, "baseline was not primed at startup"
+    ours = {d.train_id for d in target.departures}
+    theirs = next((train_id for train_id in target._seen if train_id not in ours), None)
+    assert theirs is not None, "capture has no unusable same-line train ahead"
+
+    aioclient_mock.clear_requests()
+    install_api_mock(
+        aioclient_mock,
+        {"TrainDepartureScreens": board_with(**{theirs: {"status": "Cancelled"}})},
+    )
+    await entry.runtime_data.board.async_refresh()
+    await hass.async_block_till_done()
+
+    state = hass.states.get(ENTITY)
+    assert state is not None
+    assert state.attributes["event_type"] == EVENT_LINE_CANCELLATION
+    assert state.attributes["train_id"] == theirs
+    assert state.attributes["affects_train"] in ours
+
+
+async def test_a_train_arriving_in_the_window_fires_nothing(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """A train appearing is the clock moving, not news.
+
+    Without this the diff would announce every train as it drifts into the
+    lookahead, which is a notification a minute and nothing to act on.
+    """
+    install_api_mock(aioclient_mock)
+    entry = make_entry()
+    await setup_entry(hass, entry)
+
+    target = entity(hass)
+    known = set(target._seen or {})
+    assert known
+
+    # A board carrying an extra departure the entity has never seen.
+    payload = board_with()
+    items = payload["data"]["getTrainDepartureScreens"]["items"]
+    newcomer = dict(items[0])
+    newcomer["trainID"] = "9999"
+    items.append(newcomer)
+
+    aioclient_mock.clear_requests()
+    install_api_mock(aioclient_mock, {"TrainDepartureScreens": payload})
+    await entry.runtime_data.board.async_refresh()
+    await hass.async_block_till_done()
+
+    assert "9999" in (target._seen or {}), "the newcomer was never watched"
+    assert hass.states.get(ENTITY).state == "unknown"  # type: ignore[union-attr]
+
+
+async def test_nothing_is_overdue_before_the_first_board_arrives(
+    hass: HomeAssistant,
+    aioclient_mock: AiohttpClientMocker,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A coordinator with no data cannot say whether anyone has a track."""
+    install_api_mock(aioclient_mock)
+    await setup_entry(hass, make_entry())
+
+    target = entity(hass)
+    target.coordinator.data = None  # type: ignore[assignment]
+
+    assert target._publishes_tracks() is False

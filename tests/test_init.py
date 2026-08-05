@@ -10,9 +10,11 @@ surviving entry.
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime
 from typing import Any
 
 import pytest
+from freezegun.api import FrozenDateTimeFactory
 from homeassistant.config_entries import ConfigEntryState, current_entry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
@@ -24,6 +26,7 @@ from pytest_homeassistant_custom_component.test_util.aiohttp import (
 from custom_components.njtransit import (
     async_setup_entry as njtransit_setup_entry,
 )
+from custom_components.njtransit.api.parsing import TZ
 from custom_components.njtransit.const import (
     CONF_DEPARTURE_COUNT,
     CONF_DEPARTURE_INTERVAL,
@@ -443,3 +446,37 @@ class TestOptionReloads:
             if "departure" in state.entity_id and "next_favorite" not in state.entity_id
         ]
         assert len(created) == 5
+
+
+async def test_the_progress_coordinator_follows_a_favorite(
+    hass: HomeAssistant,
+    aioclient_mock: AiohttpClientMocker,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """`pick_favorite` finding one, which nothing exercised before.
+
+    It gates on the lookahead window, so against a morning capture and a real
+    clock every departure has rolled to tomorrow and it returns None on the
+    first comparison -- passing, while never reaching the branch that matters.
+    Pinning the clock to the capture is what makes the success path reachable.
+    """
+    freezer.move_to(datetime(2026, 8, 3, 8, 20, tzinfo=TZ))
+    install_api_mock(aioclient_mock)
+    entry = make_entry(options={CONF_FAVORITE_TRAINS: ["6624"]})
+    await setup_entry(hass, entry)
+
+    assert entry.runtime_data.progress.data is not None
+
+
+async def test_no_favorite_in_the_window_follows_nothing(
+    hass: HomeAssistant,
+    aioclient_mock: AiohttpClientMocker,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """The early return that keeps this from being a request a minute."""
+    freezer.move_to(datetime(2026, 8, 3, 8, 20, tzinfo=TZ))
+    install_api_mock(aioclient_mock)
+    entry = make_entry(options={CONF_FAVORITE_TRAINS: ["9999"]})
+    await setup_entry(hass, entry)
+
+    assert entry.runtime_data.progress.data is None
