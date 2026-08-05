@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import datetime, timedelta
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -442,3 +443,44 @@ def test_a_constant_stream_of_changes_still_reaches_disk(
     countdown = delays[: delays.index(0) + 1]
     assert countdown == sorted(countdown, reverse=True), countdown
     assert countdown[0] == TRACK_HISTORY_SAVE_DELAY
+
+
+def test_the_invariant_behind_untimed_assignments_holds(
+    history: TrackHistory, freezer_at: FrozenDateTimeFactory
+) -> None:
+    """A row created with a track never later gains a timing.
+
+    `record` no longer guards on `seen_trackless` when a track first appears,
+    because reaching that line implies it. This pins the implication: a train
+    that already had a track when first seen must keep a null `assigned_at`
+    for the rest of its life, however the board wobbles afterwards.
+    """
+    when = datetime(2026, 8, 4, 18, 30, tzinfo=TZ)
+    history.record(board(departure("6643", at=when, track="4")))
+
+    freezer_at.move_to(datetime(2026, 8, 4, 18, 25, tzinfo=TZ))
+    # The board briefly drops the track, then restores it.
+    history.record(board(departure("6643", at=when)))
+    history.record(board(departure("6643", at=when, track="4")))
+
+    [record] = history.days_for(STATION)["2026-08-04"]
+    assert record["assigned_at"] is None
+    assert record["seen_trackless"] is True
+
+
+async def test_a_board_that_never_arrived_records_nothing(
+    hass: HomeAssistant, freezer_at: FrozenDateTimeFactory
+) -> None:
+    """A coordinator can notify its listeners before it has any data."""
+    history = TrackHistory(hass)
+    await history.async_load()
+
+    coordinator: Any = SimpleNamespace(data=None, listeners=[])
+    coordinator.async_add_listener = lambda cb: (
+        coordinator.listeners.append(cb) or (lambda: None)
+    )
+    history.attach(coordinator)
+    for listener in coordinator.listeners:
+        listener()
+
+    assert history.days_for(STATION) == {}

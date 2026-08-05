@@ -174,10 +174,17 @@ class TrackHistory:
                 # one that merely reflects a train already known to be late --
                 # measured against the scheduled time, a delayed train's track
                 # is posted late by definition.
+                #
+                # No `seen_trackless` check here, though the timing is only
+                # trustworthy when it holds: reaching this line *means* it
+                # does. A row is only created with a null track when the train
+                # was seen without one, and a track is never cleared once set,
+                # so a null track here always came with `seen_trackless`. The
+                # guard that used to sit here could not fail, which read as
+                # though a case existed that does not.
                 record["track"] = departure.track
-                if record.get("seen_trackless"):
-                    record["assigned_at"] = _seconds_before(departure.scheduled, now)
-                    record["delay_at_assignment"] = departure.delay_minutes
+                record["assigned_at"] = _seconds_before(departure.scheduled, now)
+                record["delay_at_assignment"] = departure.delay_minutes
                 changed = True
             elif record["track"] != departure.track:
                 # Keep the track the train actually left from as `track`, and
