@@ -9,6 +9,7 @@ surviving entry.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 import pytest
@@ -31,6 +32,7 @@ from custom_components.njtransit.const import (
     MIN_INTERVAL,
 )
 from custom_components.njtransit.coordinator import store_for
+from custom_components.njtransit.track_history import TrackHistory
 
 from .conftest import install_api_mock
 
@@ -162,6 +164,59 @@ class TestCoordinatorSharing:
         store = store_for(hass)
         assert store is not None
         assert list(store.boards) == [SHORT_HILLS]
+
+    async def test_concurrent_setup_still_shares_one_store(
+        self,
+        hass: HomeAssistant,
+        aioclient_mock: AiohttpClientMocker,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Home Assistant sets a domain's entries up in parallel.
+
+        Every other test here sets them up one after another, which is why
+        this went unnoticed: building the shared store awaits several times,
+        so raced, both entries see no store, both build one, and the second
+        assignment wins -- leaving the loser holding an orphan.
+
+        The damage is not theoretical. It means duplicate polling of the
+        system-wide alert feed, no board sharing between commutes out of one
+        station, and two TrackHistory objects writing to a single storage key
+        where each save silently discards the other station's collection.
+        """
+        install_api_mock(aioclient_mock)
+
+        # The mocked transport resolves without ever suspending, so a plain
+        # gather runs each setup start to finish and the race cannot happen.
+        # Real setup awaits the network here. Forcing one yield inside the
+        # critical section is what makes this test able to fail at all --
+        # without it, it passes with the lock removed.
+        original = TrackHistory.async_load
+
+        async def slow_load(self: TrackHistory) -> None:
+            await asyncio.sleep(0)
+            await original(self)
+
+        monkeypatch.setattr(TrackHistory, "async_load", slow_load)
+
+        outbound = make_entry()
+        inbound = make_entry(
+            origin=NY_PENN,
+            origin_id="NY",
+            destination=SHORT_HILLS,
+            destination_id="RT",
+        )
+        outbound.add_to_hass(hass)
+        inbound.add_to_hass(hass)
+
+        await asyncio.gather(
+            hass.config_entries.async_setup(outbound.entry_id),
+            hass.config_entries.async_setup(inbound.entry_id),
+        )
+        await hass.async_block_till_done()
+
+        assert outbound.runtime_data.history is inbound.runtime_data.history
+        assert outbound.runtime_data.status is inbound.runtime_data.status
+        assert outbound.runtime_data.static is inbound.runtime_data.static
 
     async def test_different_origins_get_their_own_boards(
         self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
