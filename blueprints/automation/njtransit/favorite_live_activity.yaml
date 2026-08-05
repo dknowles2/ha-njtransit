@@ -90,8 +90,12 @@ blueprint:
     dashboard_url:
       name: Open when tapped
       description: >
-        Optional. Where tapping the activity takes you, e.g.
-        `/nj-trains/morning`.
+        Optional. Where tapping takes you, e.g. `/nj-trains/morning`.
+
+
+        This rides on the **Dismiss** notification, not the Live Activity
+        itself — putting a URL on the activity stopped it rendering at all. So
+        it needs the dismissed-flag helper set to be reachable.
 
 
         **This is the one input that does not stand alone.** The blueprint
@@ -256,20 +260,27 @@ actions:
               message: >-
                 {{ ('to ' ~ destination) if destination else status }}
                 {{- ' · ' ~ busy if busy else '' }}
-              # `when` is an absolute Unix timestamp. `when_relative: true`
-              # would mean "seconds from now" -- passing an epoch with it set
-              # makes the phone count down from about 1.75 billion. Absolute is
-              # also steadier: it cannot drift between this firing and the push
-              # landing.
-              data: >-
-                {{ {
-                     'tag': 'njtransit_favorite',
-                     'live_update': true,
-                     'chronometer': true,
-                     'when': as_timestamp(scheduled) | int,
-                     'notification_icon': icon,
-                     'group': 'njtransit',
-                   } | combine({'url': dashboard} if dashboard else {}) }}
+              data:
+                tag: njtransit_favorite
+                live_update: true
+                chronometer: true
+                # An absolute Unix timestamp. `when_relative: true` would mean
+                # "seconds from now" -- passing an epoch with it set makes the
+                # phone count down from about 1.75 billion. Absolute is also
+                # steadier: it cannot drift between this firing and the push
+                # landing.
+                when: "{{ as_timestamp(scheduled) | int }}"
+                notification_icon: !input icon
+                group: njtransit
+                # Deliberately no `url` here. Adding one stopped the activity
+                # rendering at all -- the payload was verified to reach the
+                # notify service as a correct dict with `live_update` and
+                # `chronometer` intact, so the extra key is the only thing that
+                # changed. Live Activities are a narrow, undocumented surface
+                # and are not the place to find out what else they tolerate.
+                #
+                # The tap-through lives on the companion notification below,
+                # where `url` is ordinary and well understood.
           # The button has to ride on a separate, ordinary notification:
           # Live Activities cannot carry actions.
           #

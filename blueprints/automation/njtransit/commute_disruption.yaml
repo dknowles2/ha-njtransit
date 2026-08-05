@@ -27,6 +27,24 @@ blueprint:
     How late a train must be before it counts is the **delay threshold**
     option on the integration entry, not a setting here — the sensor's
     `reasons` are generated from it.
+
+
+    **Lateness is announced once, not continuously.** A delay is reported in
+    five-minute bands, and only a move to a worse band speaks again: a train
+    drifting between 5, 6 and 7 minutes late says nothing after the first
+    alert, while one going from 6 to 12 does. A train recovering says nothing
+    at all. Without this, the minute count is part of the reason text and
+    every wobble reads as a fresh problem — which in practice meant five
+    notifications in seven minutes about one train.
+
+
+    A train that crosses back and forth over a band boundary can still alert
+    more than once. That is deliberate: repeatedly passing ten minutes late is
+    worth hearing about twice.
+
+
+    Cancellations and alert messages have no volatile part, so they are
+    announced exactly once each.
   domain: automation
   source_url: https://github.com/dknowles2/ha-njtransit/blob/main/blueprints/automation/njtransit/commute_disruption.yaml
   homeassistant:
@@ -82,7 +100,49 @@ variables:
   current: >-
     {{ (trigger.to_state.attributes.reasons
         if trigger.to_state is not none else []) or [] }}
-  fresh_reasons: "{{ current | reject('in', previous) | list }}"
+  # Reasons carry the delay in their text -- "Train 6624 (8:52 AM) is 6
+  # minutes late" -- and that number wobbles. A train sitting at 5, 6, 7
+  # minutes late is one unchanged fact wearing three different strings, so
+  # diffing the raw text re-announced it on almost every poll: five
+  # notifications in seven minutes, observed in the wild.
+  #
+  # So the comparison runs on a key with the minute count bucketed into
+  # five-minute bands instead. Drifting inside a band is silent; crossing into
+  # a worse one is a genuine escalation and still fires, which is why this
+  # buckets rather than dropping the number entirely. Cancellations and alert
+  # text have no volatile part and are compared as-is.
+  #
+  # The *message* still uses the untouched reason, so it reads "is 7 minutes
+  # late" -- only the decision to speak is debounced, not the wording.
+  # Lateness is tracked per train as a five-minute band, and only an *increase*
+  # counts. Comparing bands for equality would announce a train recovering from
+  # 12 minutes late to 6 -- news, but not bad news, and not what an alert is
+  # for. A band that was never seen reads as -1, so a genuinely new problem
+  # always fires.
+  fresh_reasons: >-
+    {%- set ns = namespace(trains=[], bands=[], plain=[], out=[]) -%}
+    {%- for r in previous -%}
+    {%- set m = r | regex_findall('(\d+) minutes late') -%}
+    {%- if m -%}
+    {%- set ns.trains = ns.trains + [r | regex_replace(' is \d+ minutes late', '')] -%}
+    {%- set ns.bands = ns.bands + [m[0] | int // 5] -%}
+    {%- else -%}
+    {%- set ns.plain = ns.plain + [r] -%}
+    {%- endif -%}
+    {%- endfor -%}
+    {%- for r in current -%}
+    {%- set m = r | regex_findall('(\d+) minutes late') -%}
+    {%- if m -%}
+    {%- set who = r | regex_replace(' is \d+ minutes late', '') -%}
+    {%- set was = ns.bands[ns.trains.index(who)] if who in ns.trains else -1 -%}
+    {%- if (m[0] | int // 5) > was -%}
+    {%- set ns.out = ns.out + [r] -%}
+    {%- endif -%}
+    {%- elif r not in ns.plain -%}
+    {%- set ns.out = ns.out + [r] -%}
+    {%- endif -%}
+    {%- endfor -%}
+    {{ ns.out }}
 
 conditions:
   # from_state is None on a restart and on a manual run, where "new" has no
