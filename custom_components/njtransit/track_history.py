@@ -87,6 +87,9 @@ class TrackHistory:
         # (day key, train) -> the record in ``_days``, so an update is a
         # dictionary lookup rather than a scan of the day.
         self._index: dict[tuple[str, str], dict[str, Any]] = {}
+        # When the next write is owed. Held here rather than left to
+        # `async_delay_save`, whose timer restarts on every call.
+        self._save_due: datetime | None = None
 
     async def async_load(self) -> None:
         """Read stored history, dropping anything past the window."""
@@ -249,6 +252,7 @@ class TrackHistory:
         pending delayed save at shutdown, and an integration being removed and
         re-added inside that window would otherwise lose the days between.
         """
+        self._save_due = None
         await self._store.async_save(self.as_dict())
 
     def _prune(self) -> None:
@@ -282,7 +286,26 @@ class TrackHistory:
         and this file is the largest thing the integration owns. Home Assistant
         flushes a delayed save on shutdown, so nothing is lost by waiting.
         """
-        self._store.async_delay_save(self.as_dict, TRACK_HISTORY_SAVE_DELAY)
+        # `async_delay_save` restarts its timer on every call, so calling it
+        # from a handler that fires more often than the delay means it never
+        # fires at all -- the write only happens at shutdown, and a crash loses
+        # everything since boot. That is exactly what happened here once
+        # `final_delay` began updating on almost every poll: 22 minutes of
+        # recording with a 10-minute delay left the file untouched.
+        #
+        # So the deadline is held here and only the *remaining* time is handed
+        # over. Each call reschedules toward the same fixed instant rather than
+        # pushing it further away.
+        now = now_local()
+        if self._save_due is None:
+            self._save_due = now + timedelta(seconds=TRACK_HISTORY_SAVE_DELAY)
+
+        remaining = (self._save_due - now).total_seconds()
+        if remaining <= 0:
+            self._save_due = None
+            remaining = 0
+
+        self._store.async_delay_save(self.as_dict, remaining)
 
 
 def _within(key: str, cutoff: date) -> bool:

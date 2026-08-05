@@ -10,7 +10,9 @@ reading the board.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime, timedelta
+from typing import Any
 
 import pytest
 from freezegun.api import FrozenDateTimeFactory
@@ -22,7 +24,10 @@ from custom_components.njtransit.api.models import (
     TrainStatus,
 )
 from custom_components.njtransit.api.parsing import TZ
-from custom_components.njtransit.const import TRACK_HISTORY_DAYS
+from custom_components.njtransit.const import (
+    TRACK_HISTORY_DAYS,
+    TRACK_HISTORY_SAVE_DELAY,
+)
 from custom_components.njtransit.track_history import TrackHistory
 
 STATION = "New York Penn Station"
@@ -398,3 +403,42 @@ def test_summary_of_an_unwatched_station_is_empty(history: TrackHistory) -> None
         "never_assigned": 0,
         "cancelled": 0,
     }
+
+
+def test_a_constant_stream_of_changes_still_reaches_disk(
+    history: TrackHistory,
+    freezer_at: FrozenDateTimeFactory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The save deadline must not be pushed back by every poll.
+
+    `Store.async_delay_save` restarts its timer on each call, so a recorder
+    that marks itself dirty more often than the delay never writes at all --
+    the data only lands at shutdown, and a crash loses everything since boot.
+    Observed live: 22 minutes of recording against a 10-minute delay left the
+    file untouched.
+
+    The delay handed to the store must therefore shrink toward a fixed
+    deadline rather than resetting to the full value.
+    """
+    when = datetime(2026, 8, 4, 18, 30, tzinfo=TZ)
+    delays: list[float] = []
+
+    def capture(_data: Callable[[], dict[str, Any]], delay: float) -> None:
+        delays.append(delay)
+
+    monkeypatch.setattr(history._store, "async_delay_save", capture)
+
+    # A board that changes every minute, as a real one does.
+    for minute in range(12):
+        freezer_at.move_to(datetime(2026, 8, 4, 18, minute, tzinfo=TZ))
+        history.record(board(departure("6643", at=when, track="4", delay=minute)))
+
+    assert 0 in delays, f"the deadline was never reached, got {delays}"
+
+    # Everything up to that first write counts down toward the fixed deadline
+    # instead of resetting. After it, a fresh deadline starts -- which is why
+    # this checks the first cycle rather than the whole sequence.
+    countdown = delays[: delays.index(0) + 1]
+    assert countdown == sorted(countdown, reverse=True), countdown
+    assert countdown[0] == TRACK_HISTORY_SAVE_DELAY
