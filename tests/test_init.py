@@ -13,13 +13,17 @@ import asyncio
 from typing import Any
 
 import pytest
-from homeassistant.config_entries import ConfigEntryState
+from homeassistant.config_entries import ConfigEntryState, current_entry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from pytest_homeassistant_custom_component.test_util.aiohttp import (
     AiohttpClientMocker,
 )
 
+from custom_components.njtransit import (
+    async_setup_entry as njtransit_setup_entry,
+)
 from custom_components.njtransit.const import (
     CONF_DEPARTURE_COUNT,
     CONF_DEPARTURE_INTERVAL,
@@ -205,18 +209,53 @@ class TestCoordinatorSharing:
             destination=SHORT_HILLS,
             destination_id="RT",
         )
+        # The module's own setup is called directly, rather than driven
+        # through `hass.config_entries.async_setup`. Two concurrent calls into
+        # that race Home Assistant's entry state machine and raise
+        # OperationNotAllowed depending on scheduling -- a flake that says
+        # nothing about the code under test. Platform forwarding is stubbed for
+        # the same reason: the store is what this is about.
         outbound.add_to_hass(hass)
         inbound.add_to_hass(hass)
 
-        await asyncio.gather(
-            hass.config_entries.async_setup(outbound.entry_id),
-            hass.config_entries.async_setup(inbound.entry_id),
+        async def no_platforms(*args: Any, **kwargs: Any) -> None:
+            return None
+
+        monkeypatch.setattr(
+            hass.config_entries, "async_forward_entry_setups", no_platforms
         )
-        await hass.async_block_till_done()
+
+        # `async_config_entry_first_refresh` reads the entry from a
+        # ContextVar that `hass.config_entries.async_setup` would normally
+        # set. Each gathered coroutine runs as its own task with its own copy
+        # of the context, so setting it here is per-entry, not shared.
+        async def setup(entry: MockConfigEntry) -> bool:
+            current_entry.set(entry)
+            # `async_config_entry_first_refresh` refuses to run outside this
+            # state, which `hass.config_entries.async_setup` would normally
+            # have set on the way in.
+            entry.mock_state(hass, ConfigEntryState.SETUP_IN_PROGRESS)
+            return await njtransit_setup_entry(hass, entry)
+
+        await asyncio.gather(setup(outbound), setup(inbound))
 
         assert outbound.runtime_data.history is inbound.runtime_data.history
         assert outbound.runtime_data.status is inbound.runtime_data.status
         assert outbound.runtime_data.static is inbound.runtime_data.static
+
+        # Nothing unloaded these, so their refresh timers outlive the test.
+        store = store_for(hass)
+        assert store is not None
+        shared: list[DataUpdateCoordinator[Any]] = [
+            store.static,
+            store.status,
+            *store.boards.values(),
+        ]
+        for coordinator in shared:
+            await coordinator.async_shutdown()
+        for entry in (outbound, inbound):
+            await entry.runtime_data.route.async_shutdown()
+            await entry.runtime_data.progress.async_shutdown()
 
     async def test_different_origins_get_their_own_boards(
         self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
