@@ -19,6 +19,7 @@ from homeassistant.core import HomeAssistant
 from .api.parsing import alert_line_codes, now_local
 from .coordinator import NJTransitConfigEntry
 from .entity import usable_departures
+from .track_history import TrackHistory
 
 
 async def async_get_config_entry_diagnostics(
@@ -68,11 +69,25 @@ async def async_get_config_entry_diagnostics(
             ),
             "alert_codes_seen": sorted({alert.line_abbreviation for alert in alerts}),
         },
+        # The whole collected history, not a summary of it. This is the export
+        # path for `scripts/analyze_tracks.py`, and a model can only be scored
+        # against observations it can see. One station's worth per entry, so
+        # downloading both commutes' diagnostics gives both boards.
+        "track_history": _track_history(runtime.history, runtime.origin),
         "board": _board(board),
         "alerts": [
             asdict(alert) | {"train_ids": sorted(alert.train_ids)} for alert in alerts
         ],
         "generated_at": now_local().isoformat(),
+    }
+
+
+def _track_history(history: TrackHistory, station: str) -> dict[str, Any]:
+    """Return recorded track assignments for a station, with a summary."""
+    return {
+        "station": station,
+        "summary": history.summary(station),
+        "days": history.days_for(station),
     }
 
 

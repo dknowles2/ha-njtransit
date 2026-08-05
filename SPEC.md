@@ -137,6 +137,10 @@ detail costs one request per train and cannot be batched from the board. Stop tr
 therefore shipped scoped to a single train — the favourite (`ProgressSensor`, §5.3) — and
 widening it to every departure would multiply request count by the board size.
 
+Note the selection set: `departed dropOff name status time`. There is **no track field per
+stop.** The board is the only source of track, and it reports track only for departures
+from the station being queried — see §3.8.
+
 ### 2.3 `capacity` is real and free
 
 Per-car crowding, already in the board payload at no extra request cost:
@@ -438,6 +442,40 @@ is assumed incomplete. **Consequence:** normalize case-insensitively into an enu
 the raw string on the entity, and degrade unknown values to `TrainStatus.UNKNOWN` with the
 raw value preserved. Never raise.
 
+### 3.8 There is no arrivals data, and track is published late
+
+DepartureVision is departures-only, and so is this API. No extracted operation returns
+arrivals; the extractor's root-field pass matches `Arrival` explicitly (`DOMAIN_RE` in
+`scripts/extract_ops.py`) and finds nothing, so this is an absence in the upstream product
+rather than a gap in the extraction. Subject to the `PAGES` bound noted in §2.
+
+Arrival *times* can still be approximated: `getTrainStopList` gives a train's full stop
+list, and the boards at Newark Penn (NEC / NJCL) plus Newark Broad Street (M&E /
+Montclair-Boonton) between them enumerate essentially every NJT train inbound to New York
+Penn for two requests. What cannot be obtained at any cost is the arrival **track** —
+`getTrainStopList` has no track field (§2.2), and a station's board reports track only for
+departures. **Consequence:** any model that wants "which track is occupied, and until
+when" cannot be built on this API. Turnaround-based track inference is not available.
+
+Track publication is also late, and station-dependent. Measured 2026-08-04 by polling one
+board at 60s intervals:
+
+```
+09:11:42 PM  3289@+11m trk=-  st=-
+09:12:37 PM  3289@+10m trk=1  st=All Aboard
+```
+
+At New York Penn — a terminal — `track` is empty and `status` is absent for every row
+until roughly **T-10 minutes**, when both appear together. A same-evening cross-station
+sample had New York Penn at 0/19 rows carrying a track while Short Hills was 16/16 and
+Newark Penn 19/19. **Consequence:** an absent track at a terminal is normal and must not
+be read as an error or as a data gap; and the useful window for predicting one is the
+20-30 minutes before the board itself will say.
+
+Amtrak rows are present on the shared board (`A177`, `A196`, `A639`, `lineAbbreviation`
+`AMTK`) and carry tracks where the station publishes them. No LIRR rows were observed, but
+the sample was late-evening and this should be treated as unproven rather than settled.
+
 ## 4. Repository layout
 
 ```
@@ -452,6 +490,7 @@ custom_components/njtransit/
 ├── binary_sensor.py
 ├── calendar.py
 ├── event.py              # discrete changes to a train (§9)
+├── track_history.py      # records track assignments (§7.2)
 ├── diagnostics.py
 ├── strings.json
 ├── brand/                # generated icons, original artwork only
@@ -467,7 +506,8 @@ tests/
 ├── fixtures/             # recorded payloads, incl. 2026-08-03 disruption capture
 scripts/
 ├── extract_ops.py        # re-extract operations from site bundles (§2)
-└── generate_brand.py     # regenerate brand/
+├── generate_brand.py     # regenerate brand/
+└── analyze_tracks.py     # score track predictions offline (§7.2)
 hacs.json
 ```
 
@@ -750,6 +790,46 @@ Enforce it as a hard minimum in the options flow.
 
 Separate departure coordinators mean a user tracking both origin and destination boards
 does not have one station's outage mark the other unavailable.
+
+### 7.2 Track history is recorded but not predicted from
+
+`track_history.py` listens to each board coordinator and persists every track assignment it
+watches being made. It attaches to the *shared* board rather than to a config entry, so two
+commutes out of one station record one copy, and it is detached when the board itself is
+released.
+
+**It records; it does not predict, and that ordering is the design.** Two days of the
+integration's own recorder history at New York Penn showed 8 of 10 trains departing from a
+different track than the same train used the previous weekday, with no disruption on either
+evening — against roughly 10% for a uniform guess over the ten tracks NJ Transit uses
+there. `scripts/analyze_tracks.py` reproduces this from a diagnostics download:
+
+```
+model                    top-1   top-3  answered
+m0 global mode              7%     28%      100%
+m1 by train                 9%      9%       52%
+m4 m1 - conflicts          11%     26%      100%
+```
+
+The structural reason is §3.8: departure track at a terminal follows from which equipment
+turned into the train and where it berthed, and arrival track is unavailable at any price.
+Every reachable signal is a proxy for a hidden variable.
+
+So a bar was set before the data existed — **60% top-1 accuracy** — on the grounds that
+below it a prediction does not change what anyone does on a platform. If nothing clears it,
+the honest outcome is exclusion hints or nothing.
+
+Two details in the recorder exist to keep that judgement honest:
+
+- `assigned_at` is `null` unless the train was seen on the board *without* a track first.
+  Home Assistant starting mid-window would otherwise manufacture a plausible, wrong lead
+  time — and lead time is the number that decides whether predicting beats waiting.
+- `first_track` is set only on reassignment, so its absence means "assigned once" rather
+  than "unknown".
+
+Retention is 30 days (`TRACK_HISTORY_DAYS`), matching what choochootracker.com states it
+analyses. Writes are coalesced via `Store.async_delay_save`; Home Assistant flushes pending
+saves at shutdown, and `async_flush` covers the last entry being removed.
 
 ## 8. Config flow
 
