@@ -801,8 +801,7 @@ released.
 **It records; it does not predict, and that ordering is the design.** Two days of the
 integration's own recorder history at New York Penn showed 8 of 10 trains departing from a
 different track than the same train used the previous weekday, with no disruption on either
-evening — against roughly 10% for a uniform guess over the ten tracks NJ Transit uses
-there. `scripts/analyze_tracks.py` reproduces this from a diagnostics download:
+evening. `scripts/analyze_tracks.py` reproduces this from a diagnostics download:
 
 ```
 model                    top-1   top-3  answered
@@ -810,6 +809,21 @@ m0 global mode              7%     28%      100%
 m1 by train                 9%      9%       52%
 m4 m1 - conflicts          11%     26%      100%
 ```
+
+That sample came from three rotating departure sensors, and it understated the problem.
+The first full day of whole-board recording found New York Penn using **16** tracks, not
+the ten those three slots ever saw — so a uniform guess is nearer 6% than 10%, and there
+are half again as many candidates to choose between.
+
+The same day measured what the feature would actually be worth, over 164 timed
+assignments: the board publishes a track a **median of 9.0 minutes** before departure.
+That is the number a prediction has to beat, and it holds the single 60-second-poll
+observation in §3.8 at a sample size worth trusting.
+
+One further observation, from 164 assignments: exactly **one** was later changed. Track
+reassignment at Penn is rare, so a prediction made at T-30 would not be undermined by
+churn after the board posts — the difficulty is entirely in making it, not in it going
+stale.
 
 The structural reason is §3.8: departure track at a terminal follows from which equipment
 turned into the train and where it berthed, and arrival track is unavailable at any price.
