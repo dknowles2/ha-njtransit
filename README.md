@@ -207,6 +207,7 @@ Discrete things that happen to a train, as opposed to the binary sensor's
 | `track_changed` | A train is moved **after** a track was published |
 | `alerted` | A train is newly named in a live alert |
 | `line_cancellation` | A train on your line that you **cannot** use, running shortly ahead of one you can, is cancelled |
+| `track_overdue` | Eight minutes to departure and still no track |
 
 Only transitions fire. An ongoing problem does not re-fire every poll, and
 nothing fires for the state that existed at startup — otherwise every restart
@@ -215,6 +216,23 @@ would replay the morning's problems.
 A first track assignment is deliberately not a `track_changed`; the board
 simply had no track yet. Being *moved* is the actionable case, and the event
 carries `previous_track` alongside the new one.
+
+`track_overdue` comes from something regular riders already do. At New York
+Penn, NJ Transit publishes a track a median of **9.0 minutes** before
+departure, and the middle half of departures fall between 8.9 and 9.1 — a
+scheduled process rather than a tendency, which is exactly why a deviation from
+it is felt. A train still without a track inside eight minutes is in the
+slowest tenth, and nothing else on the board says so yet.
+
+Two things it will not do. It stays quiet for cancelled trains, which were
+never getting a track. And it stays quiet unless the station is publishing
+tracks at all — the signal is "late while others are getting theirs", which
+means nothing at a station where nobody is.
+
+Whether a late track *predicts* a bad commute or merely restates one already
+visible is still being measured — a train already running late has its track
+posted late by definition. The event is useful either way; the correlation is
+a separate question the integration is collecting data to answer.
 
 `line_cancellation` is the one that needs explaining. A cancelled service you
 could have taken is already reported; one you could *not* is the service whose
