@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import timedelta
 from typing import Final
 
@@ -37,6 +38,9 @@ from .coordinator import (
 from .entity import normalize_train_ids, usable_departures
 from .track_history import TrackHistory
 
+# Guards construction of the shared store against concurrent entry setup.
+_SETUP_LOCK: Final = f"{DOMAIN}_setup_lock"
+
 PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,
     Platform.CALENDAR,
@@ -59,23 +63,33 @@ async def async_setup_entry(hass: HomeAssistant, entry: NJTransitConfigEntry) ->
     origin: str = entry.data[CONF_ORIGIN]
     destination: str | None = entry.data.get(CONF_DESTINATION)
 
-    store = store_for(hass)
-    if store is None:
-        static = StaticCoordinator(hass, client)
-        status = SystemStatusCoordinator(
-            hass,
-            client,
-            "system status",
-            _interval(entry, CONF_STATUS_INTERVAL, DEFAULT_STATUS_INTERVAL),
-        )
-        await static.async_config_entry_first_refresh()
-        await status.async_config_entry_first_refresh()
-        history = TrackHistory(hass)
-        await history.async_load()
-        store = CoordinatorStore(static=static, status=status, history=history)
-        hass.data[DOMAIN] = store
+    # Entries for one domain are set up concurrently, and building the shared
+    # store awaits several times. Without a lock, two commutes racing through
+    # here both see no store, both build one, and the second assignment wins --
+    # leaving the loser's entry holding an orphaned store. That means duplicate
+    # status and reference-data polling, no board sharing between commutes out
+    # of the same station, and two TrackHistory objects writing to one storage
+    # key, where the last save silently discards the other station's history.
+    #
+    # `setdefault` never awaits, so every entry gets the same lock object.
+    async with hass.data.setdefault(_SETUP_LOCK, asyncio.Lock()):
+        store = store_for(hass)
+        if store is None:
+            static = StaticCoordinator(hass, client)
+            status = SystemStatusCoordinator(
+                hass,
+                client,
+                "system status",
+                _interval(entry, CONF_STATUS_INTERVAL, DEFAULT_STATUS_INTERVAL),
+            )
+            await static.async_config_entry_first_refresh()
+            await status.async_config_entry_first_refresh()
+            history = TrackHistory(hass)
+            await history.async_load()
+            store = CoordinatorStore(static=static, status=status, history=history)
+            hass.data[DOMAIN] = store
 
-    store.claim(entry.entry_id)
+        store.claim(entry.entry_id)
 
     board = await store.board_for(
         hass,
