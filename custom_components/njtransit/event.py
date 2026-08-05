@@ -36,6 +36,12 @@ EVENT_CANCELLED = "cancelled"
 EVENT_DELAYED = "delayed"
 EVENT_TRACK_CHANGED = "track_changed"
 EVENT_ALERTED = "alerted"
+EVENT_LINE_CANCELLATION = "line_cancellation"
+
+# How far ahead of one of your trains a cancellation counts as likely to
+# affect it. Long enough to catch the service immediately before yours,
+# short enough that an unrelated cancellation an hour earlier does not.
+KNOCK_ON_LEAD = timedelta(minutes=30)
 
 
 async def async_setup_entry(
@@ -79,6 +85,7 @@ class TrainEvent(NJTransitEntity, EventEntity):
             EVENT_DELAYED,
             EVENT_TRACK_CHANGED,
             EVENT_ALERTED,
+            EVENT_LINE_CANCELLATION,
         ]
         self._threshold = int(
             entry.options.get(CONF_DELAY_THRESHOLD, DEFAULT_DELAY_THRESHOLD)
@@ -103,7 +110,7 @@ class TrainEvent(NJTransitEntity, EventEntity):
         alerted = self._alerted_trains()
         self._seen = {
             departure.train_id: self._snapshot(departure, alerted)
-            for departure in self._upcoming()
+            for departure, _ in self._watched()
         }
 
     def _upcoming(self) -> list[Departure]:
@@ -112,6 +119,48 @@ class TrainEvent(NJTransitEntity, EventEntity):
         return [
             departure for departure in self.departures if departure.scheduled <= horizon
         ]
+
+    def _watched(self) -> list[tuple[Departure, str | None]]:
+        """Return the departures to track, and why.
+
+        Yours, plus trains on the same line from the same station that you
+        *cannot* use. That second group is the point: a service you could
+        have taken is already reported when it fails, but one you could not
+        is exactly the one whose stops and passengers land on your train when
+        it is cancelled.
+
+        The board is fetched per station rather than per commute, so these
+        rows are already in hand -- the destination filter simply discards
+        them. No extra request, and no second commute to configure.
+        """
+        ours = self._upcoming()
+        watched: list[tuple[Departure, str | None]] = [(d, None) for d in ours]
+
+        board = self.coordinator.data
+        if board is None or not ours:
+            return watched
+
+        our_ids = {departure.train_id for departure in ours}
+        our_lines = {departure.line for departure in ours if departure.line}
+
+        for departure in board.departures:
+            if departure.train_id in our_ids or departure.line not in our_lines:
+                continue
+            # Only a train running ahead of yours can hand its stops over; one
+            # behind cannot affect a train that has already gone.
+            affected = next(
+                (
+                    mine.train_id
+                    for mine in ours
+                    if timedelta()
+                    <= mine.scheduled - departure.scheduled
+                    <= KNOCK_ON_LEAD
+                ),
+                None,
+            )
+            if affected is not None:
+                watched.append((departure, affected))
+        return watched
 
     def _alerted_trains(self) -> frozenset[str]:
         """Return trains named in a live incident, ignoring advisories."""
@@ -138,22 +187,33 @@ class TrainEvent(NJTransitEntity, EventEntity):
         """Compare this poll against the last and fire what changed."""
         alerted = self._alerted_trains()
         current = {
-            departure.train_id: (departure, self._snapshot(departure, alerted))
-            for departure in self._upcoming()
+            departure.train_id: (
+                departure,
+                self._snapshot(departure, alerted),
+                affects,
+            )
+            for departure, affects in self._watched()
         }
         previous = self._seen
         # Remember first, so an exception mid-loop cannot make the next poll
         # replay everything it already fired.
-        self._seen = {train_id: seen for train_id, (_, seen) in current.items()}
+        self._seen = {train_id: seen for train_id, (_, seen, _) in current.items()}
 
         if previous is not None:
-            for train_id, (departure, seen) in current.items():
+            for train_id, (departure, seen, affects) in current.items():
                 was = previous.get(train_id)
                 if was is None:
                     # A train entering the lookahead window is not news; it is
                     # the clock moving. Only its later changes are.
                     continue
-                self._fire_changes(departure, was, seen)
+                if affects is None:
+                    self._fire_changes(departure, was, seen)
+                elif seen.cancelled and not was.cancelled:
+                    # Everything else about someone else's train is noise --
+                    # only losing it entirely reaches you.
+                    self._fire(
+                        EVENT_LINE_CANCELLATION, departure, affects_train=affects
+                    )
 
         super()._handle_coordinator_update()
 
