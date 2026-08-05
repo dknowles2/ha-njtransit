@@ -236,6 +236,14 @@ uv run mypy .
 CI runs both in the same step, so skipping it fails the pull request on a
 line-length reflow with everything else green.
 
+`./scripts/mutation_check.sh` breaks one real behaviour at a time and checks
+the suite notices. It is not part of CI and is not a routine step -- run it
+after changing behaviour in `event.py`, `coordinator.py`, `binary_sensor.py`
+or `track_history.py`. Every gap it has found so far was a fully covered line
+sitting under a test that could not fail: `pick_favorite` never once matched a
+favourite, and the direct-only trip filter was asserted only as "some trains
+resolved". A SKIP means a pattern went stale and the entry needs rewriting.
+
 `uv run pytest` alone is fine for quick iteration, but run the coverage
 variant before finishing — CI enforces the gate, and new code without tests
 fails there rather than here.

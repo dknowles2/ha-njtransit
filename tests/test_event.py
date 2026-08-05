@@ -20,6 +20,7 @@ from pytest_homeassistant_custom_component.test_util.aiohttp import (
 
 from custom_components.njtransit.api.models import TrainStatus
 from custom_components.njtransit.api.parsing import TZ, now_local
+from custom_components.njtransit.const import CONF_LOOKAHEAD
 from custom_components.njtransit.event import (
     EVENT_ALERTED,
     EVENT_CANCELLED,
@@ -349,6 +350,35 @@ async def test_a_train_behind_yours_is_not_watched(
     # 6317 (10:02) trails the usable 6328 (09:55) and leads nothing within
     # the window, so it is none of our business.
     assert "6317" not in watched
+
+
+async def test_a_cancellation_too_far_ahead_is_not_yours(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """The knock-on window has a size, and the size is the point.
+
+    A train handing its stops over has to be running *shortly* before yours.
+    Widen the window and every earlier service on the line starts reporting as
+    your problem; nothing in the default capture is far enough ahead to tell
+    the difference, so this stretches the lookahead until two trains sit in
+    the gap either side of it.
+
+    6617 (9:19) leads 6328 (9:55) by 36 minutes and 851 (9:58) leads 6332
+    (10:32) by 34 -- both just outside the thirty-minute window, and both
+    swept in by any careless widening of it.
+    """
+    install_api_mock(aioclient_mock)
+    await setup_entry(hass, make_entry(options={CONF_LOOKAHEAD: 180}))
+
+    target = entity(hass)
+    upcoming = {d.train_id for d in target._upcoming()}
+    assert {"6328", "6332"} <= upcoming, "lookahead did not reach the far trains"
+
+    watched = {train.train_id for train, affects in target._watched() if affects}
+    assert "6617" not in watched
+    assert "851" not in watched
+    # And the window is not simply empty -- a nearby one still counts.
+    assert watched, "no knock-on candidates at all, so this proves nothing"
 
 
 async def test_other_lines_are_ignored(

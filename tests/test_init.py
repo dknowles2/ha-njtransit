@@ -41,7 +41,7 @@ from custom_components.njtransit.const import (
 from custom_components.njtransit.coordinator import store_for
 from custom_components.njtransit.track_history import TrackHistory
 
-from .conftest import install_api_mock
+from .conftest import install_api_mock, load_fixture
 
 SHORT_HILLS = "Short Hills Station"
 NY_PENN = "New York Penn Station"
@@ -102,7 +102,16 @@ class TestSetup:
 
         route = entry.runtime_data.route.data
         assert route is not None
-        assert route.train_ids
+        # The specific set, not merely a non-empty one. "Some trains resolved"
+        # passes against a filter that resolved the wrong trains, which is the
+        # failure this exists to catch.
+        # The exact set, not merely a non-empty one. The capture offers three
+        # itineraries and only one is a one-seat ride: 411 changes to 6628 at
+        # Summit, and 480 continues by bus. `assert route.train_ids` passed
+        # whether the direct-only filter (SPEC 2.7) kept one train or all
+        # four, so it could not tell the feature was working.
+        assert route.train_ids == frozenset({"6328"})
+        assert route.complete
 
     async def test_entry_without_a_destination_skips_route_resolution(
         self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
@@ -465,7 +474,12 @@ async def test_the_progress_coordinator_follows_a_favorite(
     entry = make_entry(options={CONF_FAVORITE_TRAINS: ["6624"]})
     await setup_entry(hass, entry)
 
-    assert entry.runtime_data.progress.data is not None
+    run = entry.runtime_data.progress.data
+    assert run is not None
+    # Which train it followed, not merely that it followed one. The board's
+    # soonest departure is not 6624, so "something was followed" would pass
+    # against a picker that ignored favourites entirely.
+    assert run.train_id == "6624"
 
 
 async def test_no_favorite_in_the_window_follows_nothing(
@@ -480,3 +494,29 @@ async def test_no_favorite_in_the_window_follows_nothing(
     await setup_entry(hass, entry)
 
     assert entry.runtime_data.progress.data is None
+
+
+async def test_a_favourite_matches_whatever_case_the_board_uses(
+    hass: HomeAssistant,
+    aioclient_mock: AiohttpClientMocker,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Train IDs are strings, and not all of them are digits.
+
+    Numeric IDs make the casing in `pick_favorite` unobservable, so dropping
+    it breaks nothing the rest of the suite can see. Trenton's board carries
+    Amtrak services like `A79`, which is where it would bite -- a favourite
+    stored uppercase silently never matching.
+    """
+    freezer.move_to(datetime(2026, 8, 3, 8, 20, tzinfo=TZ))
+    payload = load_fixture("departures_short_hills_disruption")
+    for item in payload["data"]["getTrainDepartureScreens"]["items"]:
+        if item["trainID"] == "6624":
+            item["trainID"] = "a624"
+
+    install_api_mock(aioclient_mock, {"TrainDepartureScreens": payload})
+    entry = make_entry(options={CONF_FAVORITE_TRAINS: ["A624"]})
+    await setup_entry(hass, entry)
+
+    run = entry.runtime_data.progress.data
+    assert run is not None, "an uppercase favourite did not match a lowercase board"

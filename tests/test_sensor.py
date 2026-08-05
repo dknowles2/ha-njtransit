@@ -303,10 +303,19 @@ class TestAlertSensors:
         assert state is not None
         assert "6311" in state.attributes["affects_my_trains"]
 
-    async def test_alert_feed_failure_leaves_departures_working(
+    async def test_alert_feed_failure_retries_setup(
         self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
     ) -> None:
-        """The board and the alert feed are separate coordinators."""
+        """The alert feed is required for setup, so losing it retries.
+
+        Named for what it asserts. It previously read
+        `test_alert_feed_failure_leaves_departures_working`, which promised
+        the opposite of the behaviour underneath -- anyone scanning the suite
+        would have come away believing departures survive an alert-feed
+        outage. They do not, and that is deliberate: correlating the two feeds
+        is the reason this integration exists, so a board without alerts is
+        not a degraded mode worth keeping.
+        """
         install_api_mock(aioclient_mock, {"SystemStatus": {"data": {}}})
         entry = make_entry()
         entry.add_to_hass(hass)
