@@ -50,13 +50,15 @@ Endpoint: `POST https://www.njtransit.com/api/graphql/graphql`
 No authentication. Undocumented and unofficial.
 
 Operation definitions below were extracted from the site's own Nuxt bundles
-(`/_nuxt/*.js`), not guessed — they are the exact queries njtransit.com issues. Recovered
-operations: `TrainDepartureScreens`, `TrainStopList`, `SystemStatus`, `SystemStatusGlobal`,
-`Index`, `TripPlannerSchedule`, `LightRailSchedule`, `LightRailDV`, `DVCloseStation`,
-`GetTripStops`, `BusDirections`, `BusStops`, `BreakingNews`, `PDFSchedules`, `Actions`,
+(`/_nuxt/*.js`), not guessed — they are the exact queries njtransit.com issues. As of
+2026-08-04, 41 bundles across `/`, `/dv-to`, and `/schedules-and-fares` yield 22 named
+operations: `Actions`, `BreakingNews`, `BusDirections`, `BusStops`, `DVCloseStation`,
+`GetTripStops`, `Index`, `LightRailDV`, `LightRailSchedule`, `Page`, `PDFSchedules`,
+`SystemStatus`, `SystemStatusGlobal`, `TrainDepartureScreens`,
+`TrainScheduleStationsLightRailForDV5`,
+`TrainScheduleStationsLightRailForSchedulesLine`, `TrainStopList`,
 `TripPlannerAlternates`, `TripPlannerGoogleAddress`, `TripPlannerReverseGoogleAddress`,
-`WalkingDirections`, `TrainScheduleStationsLightRailForDV5`,
-`TrainScheduleStationsLightRailForSchedulesLine`.
+`TripPlannerSchedule`, `WalkingDirections`.
 
 Re-run the extraction against fresh bundles whenever upstream drift is suspected; it is
 the cheapest available substitute for introspection. `scripts/extract_ops.py --diff`
@@ -64,10 +66,16 @@ turns drift into a non-zero exit code.
 
 The extractor also reports root fields the bundles reference but that appear in no parsed
 operation — queries assigned to minified constants without a `query Name` header, which
-the regex cannot see. That pass surfaced `getBusAlertsAdvisories`, `getBusRoutes`,
-`getNewSchedules`, `getRecentDVStations`, `getTrainScheduleStationsRailForSchedules`, and
-`getTrainSchedulesCurrentLightRail`. All are deferred-tier (bus / light rail / PDF
-timetables) and none are needed for v1, but they are reachable with hand-written queries.
+the regex cannot see. That pass currently surfaces `getBusAlertsAdvisories`,
+`getBusRoutes`, `getNavMenus`, `getNewSchedules`, `getRecentDVStations`,
+`getTrainScheduleStationsRailForSchedules`, `getTransitionRawChildren`,
+`getTripPlannerLocations`, and `getTripPlannerLocationsHome`. All are deferred-tier (bus /
+light rail / PDF timetables / site chrome) and none are needed for v1, but they are
+reachable with hand-written queries.
+
+Coverage is bounded by `PAGES` in the extractor. An operation used only by a route not in
+that list is invisible to this process; widen `PAGES` before concluding something does not
+exist.
 
 ### 2.1 Operations used by v1
 
@@ -125,8 +133,9 @@ query TrainStopList($train: String!) {
 ```
 
 That call does return data (18 stops for train 6607). **Consequence:** per-train stop
-detail costs one request per train and cannot be batched from the board. This is why stop
-tracking is deferred rather than free.
+detail costs one request per train and cannot be batched from the board. Stop tracking
+therefore shipped scoped to a single train — the favourite (`ProgressSensor`, §5.3) — and
+widening it to every departure would multiply request count by the board size.
 
 ### 2.3 `capacity` is real and free
 
@@ -438,21 +447,27 @@ custom_components/njtransit/
 ├── config_flow.py
 ├── const.py
 ├── coordinator.py
+├── entity.py             # shared base, destination filtering
 ├── sensor.py
 ├── binary_sensor.py
+├── calendar.py
+├── event.py              # discrete changes to a train (§9)
 ├── diagnostics.py
 ├── strings.json
+├── brand/                # generated icons, original artwork only
 ├── translations/en.json
 └── api/                  # NO Home Assistant imports — see §4.1
     ├── __init__.py
     ├── client.py         # transport, error handling
+    ├── exceptions.py
     ├── queries.py        # operations verbatim from §2
     ├── models.py         # frozen dataclasses
     └── parsing.py        # time, status, crowding, train-number extraction
 tests/
 ├── fixtures/             # recorded payloads, incl. 2026-08-03 disruption capture
 scripts/
-└── extract_ops.py        # re-extract operations from site bundles (§2)
+├── extract_ops.py        # re-extract operations from site bundles (§2)
+└── generate_brand.py     # regenerate brand/
 hacs.json
 ```
 
@@ -495,11 +510,12 @@ Collections are returned as tuples: everything downstream treats them as immutab
 snapshots of one poll, and a coordinator handing out a mutable list invites an entity to
 edit shared state.
 
-An earlier draft of this sketch also listed `stop_list` and `nearest_stations`. Neither
-exists, correctly — both belong to deferred features (§1), and adding client methods for
-work that is not being done just creates untested surface. The `STOP_LIST` operation does
-exist in `queries.py`, verified against the live endpoint but unused, so per-train tracking
-starts from a known-good query rather than a guess.
+An earlier draft of this sketch also listed `stop_list` and `nearest_stations`. The latter
+still does not exist, correctly — it belongs to a deferred feature (§1), and adding client
+methods for work that is not being done just creates untested surface. `STOP_LIST` was in
+the same position until per-train progress shipped; it is now reached by
+`train_run(train) -> TrainRun`, which raises `NJTransitNotFoundError` when the train is not
+in service.
 
 A shared `_execute(operation, query, variables)` handles:
 
