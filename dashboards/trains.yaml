@@ -1,0 +1,272 @@
+# A phone-shaped dashboard for the Live Activity to open.
+#
+# This is an *example*, not something the integration installs. Tapping a Live
+# Activity can only open a dashboard that already exists, so the blueprint's
+# "Open when tapped" input is empty by default and this file is what fills the
+# gap -- copy it, change the entity ids, and point the input at it.
+#
+# To install: Settings -> Dashboards -> Add dashboard -> New dashboard from
+# scratch, give it the URL `nj-trains`, then open its raw configuration editor
+# (three dots -> Raw configuration editor) and paste everything below.
+#
+# Then set the blueprint's "Open when tapped" to `/nj-trains/morning` on the
+# outbound automation and `/nj-trains/evening` on the return one. The view
+# paths are what those URLs refer to, so renaming a view breaks the link.
+#
+# The entity ids below are for a Short Hills <-> New York Penn commute.
+# Yours will differ: every one of them is `sensor.<origin>_to_<destination>_*`,
+# slugified from the station titles.
+#
+# Requires card-mod (available in HACS) for the type sizing. Without it the
+# cards still render, just at uniform size -- the countdown stops being
+# readable at arm's length, which is most of the point.
+
+views:
+- title: Morning
+  path: morning
+  icon: mdi:weather-sunset-up
+  type: sections
+  max_columns: 1
+  sections:
+  - type: grid
+    cards:
+    - type: markdown
+      content: |-
+        {%- set s = 'sensor.short_hills_station_to_new_york_penn_station_next_favorite' -%}
+        {%- set p = 'sensor.short_hills_station_to_new_york_penn_station_stops_away' -%}
+        {%- set t = states(s) -%}
+        {%- if t in ['unknown', 'unavailable', 'none', ''] -%}
+        {%- set favs = state_attr(s, 'favorites') or [] -%}
+        {%- if not favs -%}
+        ### No favourite set
+
+        Pick **Favorite trains** in this commute's options.
+        {%- else -%}
+        ### Not on the board yet
+
+        Waiting for {{ favs | join(', ') }}. The board only reaches a couple of
+        hours ahead, so an evening train will not appear in the morning.
+        {%- endif -%}
+        {%- else -%}
+        {%- set mins = ((as_timestamp(t) - as_timestamp(now())) / 60) | round(0) | int -%}
+        {%- set track = state_attr(s, 'track') -%}
+        {%- set status = state_attr(s, 'status_text') -%}
+        {%- set busy = {'moderate': 'Filling up', 'heavy': 'Busy'}.get(state_attr(s, 'crowding'), '') -%}
+        # {{ 'Departed' if mins < 0 else (mins ~ ' min') }}
+
+        ## {{ as_timestamp(t) | timestamp_custom('%-I:%M %p') }} · Train {{ state_attr(s, 'train_id') }}
+
+        {% if track %}**Track {{ track }}**{% else %}*Track not posted yet*{% endif %}
+        {%- if status %} · {{ status }}{% endif %}
+        {%- if busy %} · {{ busy }}{% endif %}
+
+        {%- set away = states(p) -%}
+        {%- if away not in ['unknown', 'unavailable', 'none', ''] %}
+
+        ---
+
+        {% if away | int == 0 %}Arriving now{% else %}**{{ away }}** stops away{% endif %}
+        {%- if state_attr(p, 'next_stop') %} · next {{ state_attr(p, 'next_stop') }}{% endif %}
+        {%- endif -%}
+        {%- endif -%}
+      card_mod:
+        style: |2
+
+                        ha-markdown {
+                          padding: 4px 2px !important;
+                        }
+                        ha-markdown h1 {
+                          font-size: 3.2em;
+                          font-weight: 700;
+                          line-height: 1;
+                          margin: 0 0 4px 0;
+                          letter-spacing: -0.02em;
+                        }
+                        ha-markdown h2 {
+                          font-size: 1.05em;
+                          font-weight: 500;
+                          color: var(--secondary-text-color);
+                          margin: 0 0 10px 0;
+                        }
+                        ha-markdown hr {
+                          border: none;
+                          border-top: 1px solid var(--divider-color);
+                          margin: 12px 0 10px 0;
+                        }
+                        ha-markdown p { margin: 0; line-height: 1.5; }
+    - type: conditional
+      conditions:
+      - condition: or
+        conditions:
+        - condition: numeric_state
+          entity: sensor.short_hills_station_to_new_york_penn_station_service_alerts
+          above: 0
+        - condition: numeric_state
+          entity: sensor.short_hills_station_to_new_york_penn_station_planned_advisories
+          above: 0
+      card:
+        type: markdown
+        title: Service notices
+        content: |-
+          {%- set live = 'sensor.short_hills_station_to_new_york_penn_station_service_alerts' -%}
+          {%- set adv = 'sensor.short_hills_station_to_new_york_penn_station_planned_advisories' -%}
+          {%- for m in state_attr(live, 'messages') or [] %}
+          🚨 {{ m }}
+          {% endfor -%}
+          {%- for m in state_attr(adv, 'messages') or [] %}
+          ℹ️ {{ m }}
+          {% endfor -%}
+        card_mod:
+          style: |2
+
+                              ha-markdown p { margin: 0 0 10px 0; line-height: 1.5; }
+    - type: markdown
+      title: Next departures
+      content: |-
+        {%- set rows = ["sensor.short_hills_station_to_new_york_penn_station_next_departure", "sensor.short_hills_station_to_new_york_penn_station_departure_2", "sensor.short_hills_station_to_new_york_penn_station_departure_3"] -%}
+        {%- set ns = namespace(out=[]) -%}
+        {%- for r in rows -%}
+        {%- set t = states(r) -%}
+        {%- if t not in ['unknown', 'unavailable', 'none', ''] -%}
+        {%- set mins = ((as_timestamp(t) - as_timestamp(now())) / 60) | round(0) | int -%}
+        {%- set bits = ['**' ~ (as_timestamp(t) | timestamp_custom('%-I:%M')) ~ '**',
+                         mins ~ ' min', state_attr(r, 'train_id')] -%}
+        {%- if state_attr(r, 'track') -%}
+        {%- set bits = bits + ['Trk ' ~ state_attr(r, 'track')] -%}
+        {%- endif -%}
+        {%- if state_attr(r, 'status_text') -%}
+        {%- set bits = bits + [state_attr(r, 'status_text')] -%}
+        {%- endif -%}
+        {%- set ns.out = ns.out + [bits | join('  ·  ')
+            ~ ('  ⭐' if state_attr(r, 'favorite') else '')] -%}
+        {%- endif -%}
+        {%- endfor -%}
+        {{ ns.out | join('\n\n') }}
+      card_mod:
+        style: |2
+
+                        ha-markdown p { margin: 0 0 6px 0; line-height: 1.6; }
+- title: Evening
+  path: evening
+  icon: mdi:weather-night
+  type: sections
+  max_columns: 1
+  sections:
+  - type: grid
+    cards:
+    - type: markdown
+      content: |-
+        {%- set s = 'sensor.new_york_penn_station_to_short_hills_station_next_favorite' -%}
+        {%- set p = 'sensor.new_york_penn_station_to_short_hills_station_stops_away' -%}
+        {%- set t = states(s) -%}
+        {%- if t in ['unknown', 'unavailable', 'none', ''] -%}
+        {%- set favs = state_attr(s, 'favorites') or [] -%}
+        {%- if not favs -%}
+        ### No favourite set
+
+        Pick **Favorite trains** in this commute's options.
+        {%- else -%}
+        ### Not on the board yet
+
+        Waiting for {{ favs | join(', ') }}. The board only reaches a couple of
+        hours ahead, so an evening train will not appear in the morning.
+        {%- endif -%}
+        {%- else -%}
+        {%- set mins = ((as_timestamp(t) - as_timestamp(now())) / 60) | round(0) | int -%}
+        {%- set track = state_attr(s, 'track') -%}
+        {%- set status = state_attr(s, 'status_text') -%}
+        {%- set busy = {'moderate': 'Filling up', 'heavy': 'Busy'}.get(state_attr(s, 'crowding'), '') -%}
+        # {{ 'Departed' if mins < 0 else (mins ~ ' min') }}
+
+        ## {{ as_timestamp(t) | timestamp_custom('%-I:%M %p') }} · Train {{ state_attr(s, 'train_id') }}
+
+        {% if track %}**Track {{ track }}**{% else %}*Track not posted yet*{% endif %}
+        {%- if status %} · {{ status }}{% endif %}
+        {%- if busy %} · {{ busy }}{% endif %}
+
+        {%- set away = states(p) -%}
+        {%- if away not in ['unknown', 'unavailable', 'none', ''] %}
+
+        ---
+
+        {% if away | int == 0 %}Arriving now{% else %}**{{ away }}** stops away{% endif %}
+        {%- if state_attr(p, 'next_stop') %} · next {{ state_attr(p, 'next_stop') }}{% endif %}
+        {%- endif -%}
+        {%- endif -%}
+      card_mod:
+        style: |2
+
+                        ha-markdown {
+                          padding: 4px 2px !important;
+                        }
+                        ha-markdown h1 {
+                          font-size: 3.2em;
+                          font-weight: 700;
+                          line-height: 1;
+                          margin: 0 0 4px 0;
+                          letter-spacing: -0.02em;
+                        }
+                        ha-markdown h2 {
+                          font-size: 1.05em;
+                          font-weight: 500;
+                          color: var(--secondary-text-color);
+                          margin: 0 0 10px 0;
+                        }
+                        ha-markdown hr {
+                          border: none;
+                          border-top: 1px solid var(--divider-color);
+                          margin: 12px 0 10px 0;
+                        }
+                        ha-markdown p { margin: 0; line-height: 1.5; }
+    - type: conditional
+      conditions:
+      - condition: or
+        conditions:
+        - condition: numeric_state
+          entity: sensor.new_york_penn_station_to_short_hills_station_service_alerts
+          above: 0
+        - condition: numeric_state
+          entity: sensor.new_york_penn_station_to_short_hills_station_planned_advisories
+          above: 0
+      card:
+        type: markdown
+        title: Service notices
+        content: |-
+          {%- set live = 'sensor.new_york_penn_station_to_short_hills_station_service_alerts' -%}
+          {%- set adv = 'sensor.new_york_penn_station_to_short_hills_station_planned_advisories' -%}
+          {%- for m in state_attr(live, 'messages') or [] %}
+          🚨 {{ m }}
+          {% endfor -%}
+          {%- for m in state_attr(adv, 'messages') or [] %}
+          ℹ️ {{ m }}
+          {% endfor -%}
+        card_mod:
+          style: |2
+
+                              ha-markdown p { margin: 0 0 10px 0; line-height: 1.5; }
+    - type: markdown
+      title: Next departures
+      content: |-
+        {%- set rows = ["sensor.new_york_penn_station_to_short_hills_station_next_departure", "sensor.new_york_penn_station_to_short_hills_station_departure_2", "sensor.new_york_penn_station_to_short_hills_station_departure_3"] -%}
+        {%- set ns = namespace(out=[]) -%}
+        {%- for r in rows -%}
+        {%- set t = states(r) -%}
+        {%- if t not in ['unknown', 'unavailable', 'none', ''] -%}
+        {%- set mins = ((as_timestamp(t) - as_timestamp(now())) / 60) | round(0) | int -%}
+        {%- set bits = ['**' ~ (as_timestamp(t) | timestamp_custom('%-I:%M')) ~ '**',
+                         mins ~ ' min', state_attr(r, 'train_id')] -%}
+        {%- if state_attr(r, 'track') -%}
+        {%- set bits = bits + ['Trk ' ~ state_attr(r, 'track')] -%}
+        {%- endif -%}
+        {%- if state_attr(r, 'status_text') -%}
+        {%- set bits = bits + [state_attr(r, 'status_text')] -%}
+        {%- endif -%}
+        {%- set ns.out = ns.out + [bits | join('  ·  ')
+            ~ ('  ⭐' if state_attr(r, 'favorite') else '')] -%}
+        {%- endif -%}
+        {%- endfor -%}
+        {{ ns.out | join('\n\n') }}
+      card_mod:
+        style: |2
+
+                        ha-markdown p { margin: 0 0 6px 0; line-height: 1.6; }

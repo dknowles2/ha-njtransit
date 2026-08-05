@@ -87,6 +87,22 @@ blueprint:
       default: mdi:train
       selector:
         icon: {}
+    dashboard_url:
+      name: Open when tapped
+      description: >
+        Optional. Where tapping the activity takes you, e.g.
+        `/nj-trains/morning`.
+
+
+        **This is the one input that does not stand alone.** The blueprint
+        cannot ship a dashboard, so pointing at one means whoever installs
+        this has to build that dashboard themselves, with matching view paths,
+        or the tap lands on a 404. Left empty — the default — tapping just
+        opens Home Assistant wherever it was, and everything else works
+        unchanged. Set it only once the dashboard exists.
+      default: ""
+      selector:
+        text: {}
     lead_time:
       name: Start this many minutes before departure
       default: 30
@@ -131,6 +147,13 @@ variables:
   sensor: !input favorite_sensor
   boarded: !input boarded_helper
   lead: !input lead_time
+  icon: !input icon
+  # Empty unless a dashboard was named. The notification payloads below are
+  # built as templates rather than plain YAML so this key can be *absent*
+  # rather than present-and-empty -- a blank `url` is not obviously harmless,
+  # and this blueprint has to keep working for anyone who never builds the
+  # dashboard.
+  dashboard: !input dashboard_url
   # Namespaced per commute, so two directions do not dismiss each other.
   action_id: >-
     {{ 'NJT_ONBOARD_' ~ (sensor | replace('sensor.', '') | upper) }}
@@ -233,18 +256,20 @@ actions:
               message: >-
                 {{ ('to ' ~ destination) if destination else status }}
                 {{- ' · ' ~ busy if busy else '' }}
-              data:
-                tag: njtransit_favorite
-                live_update: true
-                chronometer: true
-                # An absolute Unix timestamp. `when_relative: true` would mean
-                # "seconds from now" -- passing an epoch with it set makes the
-                # phone count down from about 1.75 billion. Absolute is also
-                # steadier: it cannot drift between this firing and the push
-                # landing.
-                when: "{{ as_timestamp(scheduled) | int }}"
-                notification_icon: !input icon
-                group: njtransit
+              # `when` is an absolute Unix timestamp. `when_relative: true`
+              # would mean "seconds from now" -- passing an epoch with it set
+              # makes the phone count down from about 1.75 billion. Absolute is
+              # also steadier: it cannot drift between this firing and the push
+              # landing.
+              data: >-
+                {{ {
+                     'tag': 'njtransit_favorite',
+                     'live_update': true,
+                     'chronometer': true,
+                     'when': as_timestamp(scheduled) | int,
+                     'notification_icon': icon,
+                     'group': 'njtransit',
+                   } | combine({'url': dashboard} if dashboard else {}) }}
           # The button has to ride on a separate, ordinary notification:
           # Live Activities cannot carry actions.
           #
@@ -262,15 +287,14 @@ actions:
                 data:
                   title: "{{ headline }}"
                   message: Tap to dismiss until the next commute
-                  data:
-                    tag: njtransit_favorite_board
-                    group: njtransit
-                    notification_icon: !input icon
-                    push:
-                      interruption-level: passive
-                    actions:
-                      - action: "{{ action_id }}"
-                        title: Dismiss
+                  data: >-
+                    {{ {
+                         'tag': 'njtransit_favorite_board',
+                         'group': 'njtransit',
+                         'notification_icon': icon,
+                         'push': {'interruption-level': 'passive'},
+                         'actions': [{'action': action_id, 'title': 'Dismiss'}],
+                       } | combine({'url': dashboard} if dashboard else {}) }}
 
       # A refresh outside the window, or after boarding, ends the activity.
       # Clearing a tag that is not showing is a no-op, so this needs no memory

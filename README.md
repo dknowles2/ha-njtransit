@@ -386,21 +386,61 @@ The activity appears once the train is inside the lead time, refreshes when its
 status or track changes, and clears after departure. Updates reuse the same
 `tag`, so they are silent.
 
+It shows the train, its track, its status and how full it is:
+
+```
+Train 6643 · Track 4 · 12 min late · Filling up
+```
+
+Busyness comes from the per-car crowding the board already carries, so it costs
+nothing extra — but the board only publishes consist data for imminent
+departures, so expect it part way through the countdown rather than at the
+start. A quiet train says nothing: only *Filling up* and *Busy* appear, because
+a field that is always populated stops being read.
+
 The countdown is a `chronometer`, which ticks on the phone. That is why the
 automation does not push once a minute — only a real change needs sending, and
 iOS rate-limits Live Activity updates.
 
 **Dismissing it.** Live Activities cannot carry buttons, and iOS does not
-report when you swipe one away, so a plain notification with an **On board**
-button is sent alongside the first one. Tapping it ends the activity and stays
-quiet for the rest of the window — without it, a second favourite departing
-soon after the one you actually caught starts counting down at you on the
-train.
+report when you swipe one away, so a plain notification with a **Dismiss**
+button is sent alongside. Tapping it ends the activity and stays quiet for the
+rest of the window — without it, a second favourite departing soon after the
+one you actually caught starts counting down at you on the train.
 
-That needs somewhere to remember you boarded, so the blueprint takes an
+That needs somewhere to remember you dismissed it, so the blueprint takes an
 `input_boolean` helper. It is reset when the commute schedule ends, or at 3am
 if you are not using one. Leave the input empty to skip the button; the
 activity still appears and still clears after departure.
+
+**Opening something when tapped.** The **Open when tapped** input takes a
+dashboard path, e.g. `/nj-trains/morning`. It is empty by default, and that
+default is deliberate: a blueprint cannot install a dashboard, so setting this
+couples your automation to one you have to build yourself. Left empty, tapping
+just opens Home Assistant wherever it was and everything else works unchanged.
+
+[`dashboards/trains.yaml`](dashboards/trains.yaml) is a ready-made one to copy
+if you want the tap to land somewhere useful — see below.
+
+### The Trains dashboard
+
+An example phone-shaped dashboard, built to be read one-handed on a platform
+rather than to be comprehensive:
+
+- how many minutes until your favourite train, in the largest type on the page
+- its track, status and busyness underneath
+- how far away it currently is, and its next stop
+- service notices, only when there are any
+- the next three departures, as the fallback when your train is not the answer
+
+It is an example rather than something the integration installs, because
+dashboards are personal and because the entity ids are specific to your
+commute. Copy it into a new dashboard's raw configuration editor, change the
+station names in the entity ids, and point the blueprint's **Open when tapped**
+at it. Instructions are in the file's header.
+
+Uses [card-mod][card-mod] for the type sizing. Without it the cards still
+render, just at uniform size.
 
 ### Or write it yourself
 
@@ -467,6 +507,10 @@ generated from it.
 ```
 
 ## Dashboard notes
+
+For a ready-made phone dashboard, see
+[The Trains dashboard](#the-trains-dashboard) — the rest of this section is for
+building your own.
 
 The departure sensors are timestamps, so Home Assistant's native entity rows
 render them as live relative time ("in 6 minutes") that ticks on its own clock.
@@ -539,3 +583,4 @@ is original and is not their logo or wordmark.
 [import-live]: https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fdknowles2%2Fha-njtransit%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fnjtransit%2Ffavorite_live_activity.yaml
 [import-live-shield]: https://my.home-assistant.io/badges/blueprint_import.svg
 [live-activities]: https://companion.home-assistant.io/docs/notifications/live-activities/
+[card-mod]: https://github.com/thomasloven/lovelace-card-mod
