@@ -802,7 +802,7 @@ resolved schedule it degrades to free text; an unconfigurable option is worse th
 unvalidated one.
 
 | `<commute>_stops_away` | how far the favourite train is, from `getTrainStopList` | `train_id`, `last_departed`, `next_stop`, `due_at_origin`, `due_at_destination`, `stops_total`, `stops_remaining` |
-| `<commute>_train_event` | discrete changes: cancelled, delayed, track_changed, alerted | `train_id`, `scheduled`, `destination`, `track`, `status_text`, `delay_minutes`, `previous_track` |
+| `<commute>_train_event` | discrete changes: cancelled, delayed, track_changed, alerted, line_cancellation | `train_id`, `scheduled`, `destination`, `track`, `status_text`, `delay_minutes`, `previous_track` |
 | `<commute>_next_favorite` | next departure whose train is in `favorite_trains` (`device_class: timestamp`) | same as the departure sensors, plus `favorites` |
 | `<commute>_next_departure` | next matching departure (`device_class: timestamp`) | `train_id`, `track`, `destination`, `line`, `status`, `status_raw`, `status_text`, `favorite`, `delay_minutes`, `inline_message`, `crowding`, `cars`, `alerts` |
 | `<commute>_departure_2` … `_N` | 2nd..Nth matching departure | same |

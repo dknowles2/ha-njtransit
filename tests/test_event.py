@@ -22,6 +22,7 @@ from custom_components.njtransit.event import (
     EVENT_ALERTED,
     EVENT_CANCELLED,
     EVENT_DELAYED,
+    EVENT_LINE_CANCELLATION,
     EVENT_TRACK_CHANGED,
     TrainEvent,
 )
@@ -78,6 +79,7 @@ async def test_created_for_a_commute(
         EVENT_DELAYED,
         EVENT_TRACK_CHANGED,
         EVENT_ALERTED,
+        EVENT_LINE_CANCELLATION,
     }
 
 
@@ -287,3 +289,72 @@ async def test_end_to_end_track_change_through_a_real_refresh(
     assert state.attributes["train_id"] == train
     assert state.attributes["previous_track"] == original
     assert state.attributes["track"] == moved
+
+
+async def test_a_cancelled_train_you_cannot_use_still_reaches_you(
+    hass: HomeAssistant,
+    aioclient_mock: AiohttpClientMocker,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Train 6311 in the recorded capture is exactly this case.
+
+    Morristown Line, 8:28 AM, terminating at Summit, cancelled -- and it
+    does not serve this commute, so the destination filter drops it. It runs
+    24 minutes ahead of the usable 8:52, which is how its stops and its
+    passengers end up on that train.
+    """
+    install_api_mock(aioclient_mock)
+    await setup_entry(hass, make_entry())
+
+    target = entity(hass)
+    watched = {train.train_id: affects for train, affects in target._watched()}
+
+    assert "6311" in watched, "the cancelled Summit train is not being watched"
+    assert watched["6311"] == "6624", "it should be tied to the train it precedes"
+    assert watched["6624"] is None, "our own trains carry no affects_train"
+
+    fired: list[tuple[str, dict[str, Any]]] = []
+    monkeypatch.setattr(
+        target,
+        "_trigger_event",
+        lambda event_type, attrs=None: fired.append((event_type, attrs or {})),
+    )
+    departure = next(
+        d for d in target.coordinator.data.departures if d.train_id == "6311"
+    )
+    assert target._seen is not None
+    seen = type(target._seen[departure.train_id])
+    running = seen(cancelled=False, track=None, over_threshold=False, alerted=False)
+    gone = seen(cancelled=True, track=None, over_threshold=False, alerted=False)
+
+    target._fire(EVENT_LINE_CANCELLATION, departure, affects_train="6624")
+    assert fired[0][0] == EVENT_LINE_CANCELLATION
+    assert fired[0][1]["train_id"] == "6311"
+    assert fired[0][1]["affects_train"] == "6624"
+    assert running != gone
+
+
+async def test_a_train_behind_yours_is_not_watched(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """It cannot hand its stops to a train that has already left."""
+    install_api_mock(aioclient_mock)
+    await setup_entry(hass, make_entry())
+
+    watched = {train.train_id: affects for train, affects in entity(hass)._watched()}
+    # 6317 (10:02) trails the usable 6328 (09:55) and leads nothing within
+    # the window, so it is none of our business.
+    assert "6317" not in watched
+
+
+async def test_other_lines_are_ignored(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """Same station, different line, no shared fate."""
+    install_api_mock(aioclient_mock)
+    await setup_entry(hass, make_entry())
+
+    target = entity(hass)
+    lines = {d.line for d, affects in target._watched() if affects is not None}
+    ours = {d.line for d in target._upcoming()}
+    assert lines <= ours

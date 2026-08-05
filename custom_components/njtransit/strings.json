@@ -98,7 +98,8 @@
               "cancelled": "Cancelled",
               "delayed": "Delayed",
               "track_changed": "Track changed",
-              "alerted": "Named in an alert"
+              "alerted": "Named in an alert",
+              "line_cancellation": "Cancellation on your line"
             }
           }
         }

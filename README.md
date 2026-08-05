@@ -206,6 +206,7 @@ Discrete things that happen to a train, as opposed to the binary sensor's
 | `delayed` | A train crosses the delay threshold |
 | `track_changed` | A train is moved **after** a track was published |
 | `alerted` | A train is newly named in a live alert |
+| `line_cancellation` | A train on your line that you **cannot** use, running shortly ahead of one you can, is cancelled |
 
 Only transitions fire. An ongoing problem does not re-fire every poll, and
 nothing fires for the state that existed at startup — otherwise every restart
@@ -214,6 +215,21 @@ would replay the morning's problems.
 A first track assignment is deliberately not a `track_changed`; the board
 simply had no track yet. Being *moved* is the actionable case, and the event
 carries `previous_track` alongside the new one.
+
+`line_cancellation` is the one that needs explaining. A cancelled service you
+could have taken is already reported; one you could *not* is the service whose
+stops and passengers land on your train instead — your train ends up making
+the cancelled train's calls, and NJ Transit often issues no alert about it.
+
+It costs nothing extra: the departure board is fetched per **station**, not per
+commute, so those rows are already in hand and the destination filter simply
+discards them. No second commute to configure. Events carry `affects_train`,
+naming the train of yours that runs behind it.
+
+It is an inference, not a fact about your journey — it says the conditions
+existed, not that your train was slowed. That is why it is a separate event
+type rather than part of `commute_disrupted`, which drives alerts and would
+get mushier for it.
 
 Each event carries `train_id`, `scheduled`, `destination`, `track`,
 `status_text` and `delay_minutes`, so an automation can act without a second
