@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import asyncio
 from datetime import timedelta
-from typing import Final
+from typing import Any, Final
 
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api.client import NJTransitClient
+from .api.models import TrainRun
 from .api.parsing import now_local
 from .const import (
     CONF_DEPARTURE_INTERVAL,
@@ -40,6 +41,16 @@ from .track_history import TrackHistory
 
 # Guards construction of the shared store against concurrent entry setup.
 _SETUP_LOCK: Final = f"{DOMAIN}_setup_lock"
+
+# How long a train can stay latched, measured from when following began.
+#
+# Only a backstop against a stalled feed: a journey running normally stops
+# being followed the moment the destination falls behind it, which for any
+# real commute leg is well inside this. It is deliberately *not* measured
+# against scheduled arrival, because stop-list times are bare wall-clock
+# strings that roll into tomorrow once they pass (SPEC 3.6) -- a stale run's
+# arrival time keeps receding, so a bound built on it never fires at all.
+FOLLOW_LIMIT: Final = timedelta(hours=2)
 
 PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,
@@ -106,7 +117,36 @@ async def async_setup_entry(hass: HomeAssistant, entry: NJTransitConfigEntry) ->
         # async_config_entry_first_refresh.
         await route.async_refresh()
 
-    def pick_favorite() -> str | None:
+    # When the current latch began. Held so the backstop below can bound how
+    # long one train is followed without depending on times the feed reports.
+    latched: dict[str, Any] = {"train": None, "since": None}
+
+    def keep_following(run: TrainRun) -> bool:
+        """Return whether to stay with the train already being followed.
+
+        True only once the origin is behind it and the destination is still
+        ahead, which is precisely the window where the board can no longer
+        help: a departed train is dropped from it entirely.
+
+        This does latch onto a train you watched leave without boarding, and
+        there is no way to tell the difference from here -- Home Assistant
+        cannot see which platform you are standing on. The Live Activity's
+        Dismiss button is the answer to that, and it already existed.
+        """
+        if destination is None:
+            return False
+        if run.stops_until(origin) is not None:
+            return False
+        if run.stops_until(destination) is None:
+            return False
+
+        now = now_local()
+        if latched["train"] != run.train_id:
+            latched["train"] = run.train_id
+            latched["since"] = now
+        return now - latched["since"] <= FOLLOW_LIMIT
+
+    def pick_favorite(following: TrainRun | None) -> str | None:
         """Return the favourite worth following right now, if any.
 
         Gated on the lookahead window so this is not a request a minute, all
@@ -114,6 +154,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: NJTransitConfigEntry) ->
         the coordinator because choosing needs the destination filter, which
         lives in the entity layer.
         """
+        if following is not None and keep_following(following):
+            return following.train_id
+
         favorites = normalize_train_ids(entry.options.get(CONF_FAVORITE_TRAINS))
         if not favorites:
             return None

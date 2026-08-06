@@ -351,14 +351,18 @@ class ProgressCoordinator(NJTransitCoordinator[TrainRun | None]):
 
     Which train to follow is injected rather than computed here: choosing it
     needs the destination filter, which lives in the entity layer, and
-    importing that from a coordinator would be circular.
+    importing that from a coordinator would be circular. The chooser is handed
+    the run currently being followed so it can decide to stay with it -- which
+    matters once the train has left, because the board drops a departed train
+    and re-picking from scratch would hand the tracker to the *next* favourite
+    while you are sitting on the previous one.
     """
 
     def __init__(
         self,
         hass: HomeAssistant,
         client: NJTransitClient,
-        pick: Callable[[], str | None],
+        pick: Callable[[TrainRun | None], str | None],
         interval: timedelta,
     ) -> None:
         """Initialize the coordinator."""
@@ -366,7 +370,9 @@ class ProgressCoordinator(NJTransitCoordinator[TrainRun | None]):
         self._pick = pick
 
     async def _async_update_data(self) -> TrainRun | None:
-        train_id = self._pick()
+        # `self.data` is still the previous run here -- the coordinator only
+        # replaces it once this returns.
+        train_id = self._pick(self.data)
         if train_id is None:
             # No favourite worth following right now. Returning early is the
             # point: it is what keeps this from being a request per minute all

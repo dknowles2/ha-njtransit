@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import StrEnum
 
 
@@ -322,6 +322,45 @@ class TrainRun:
             if _same_station(stop.name, station):
                 return stop.scheduled
         return None
+
+    def minutes_late(self, now: datetime) -> int | None:
+        """Estimate how far behind schedule this train is running.
+
+        Derived from the stop list alone, because nothing else is available
+        once the train has left: the departure board drops a train the moment
+        it goes, and a terminal never published a delay in the first place
+        (SPEC 3.8). What the stop list still says is which stop is next and
+        when it was due, so a stop that is overdue puts a floor under how late
+        the train is.
+
+        A lower bound, deliberately. A train two minutes out from a stop due
+        in five minutes reads as zero rather than as early -- claiming to know
+        it will make up time is a guess, and the number this feeds is an
+        arrival estimate someone is standing on a platform reading.
+        """
+        upcoming = self.next_stop
+        if upcoming is None or upcoming.scheduled is None:
+            return None
+        return max(0, int((now - upcoming.scheduled).total_seconds() // 60))
+
+    def eta_at(self, station: str, now: datetime) -> datetime | None:
+        """Return when this train should reach ``station``.
+
+        Scheduled arrival pushed out by however late it is running now. The
+        schedule alone is wrong the moment anything goes wrong, which is
+        exactly when someone looks.
+        """
+        due = self.due_at(station)
+        late = self.minutes_late(now)
+        if due is None or late is None:
+            # No next stop means the run is over, and an arrived train has no
+            # arrival to estimate. Falling back to the timetable here would
+            # put a stale countdown on the screen of someone already standing
+            # on the platform -- and would quietly read "lateness unknown" as
+            # "running to time", which is the one substitution this module
+            # exists to refuse.
+            return None
+        return due + timedelta(minutes=late)
 
 
 def _same_station(stop_name: str, station: str) -> bool:

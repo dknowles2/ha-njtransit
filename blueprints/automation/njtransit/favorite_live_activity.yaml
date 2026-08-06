@@ -11,8 +11,16 @@ blueprint:
 
 
     The activity appears once the train is inside the lead time, refreshes when
-    its status or track changes, and clears after it departs. Updates reuse the
-    same `tag`, so they are silent — no banner, no sound.
+    its status or track changes, and — if you are still following it when it
+    leaves — switches to counting down to your arrival instead, showing how
+    many stops are left and the next station. It clears when you get there.
+    Updates reuse the same `tag`, so they are silent — no banner, no sound.
+
+
+    The arrival half needs the commute's **Stops away** sensor, which is
+    derived from the favourite sensor unless you say otherwise. Note it cannot
+    tell whether you actually boarded: it follows the train you were waiting
+    for, so if you watched it go, use **Dismiss**.
 
 
     It also shows how full the train is, once the board publishes consist data
@@ -50,6 +58,22 @@ blueprint:
             - integration: njtransit
               domain: sensor
               device_class: timestamp
+    progress_sensor:
+      name: Progress sensor
+      description: >
+        Optional. The `Stops away` sensor for the same commute, which is what
+        lets the activity carry on once you are aboard: it switches from
+        counting down to the departure to counting down to the arrival.
+
+
+        Left empty it is derived from the favourite sensor, which is right
+        unless you have renamed one of them. Set it explicitly if you have.
+      default: ""
+      selector:
+        entity:
+          filter:
+            - integration: njtransit
+              domain: sensor
     notify_target:
       name: Phone
       description: >
@@ -190,6 +214,7 @@ variables:
   # and this blueprint has to keep working for anyone who never builds the
   # dashboard.
   dashboard: !input dashboard_url
+  progress: !input progress_sensor
   # Namespaced per commute, so two directions do not dismiss each other.
   action_id: >-
     {{ 'NJT_ONBOARD_' ~ (sensor | replace('sensor.', '') | upper) }}
@@ -213,9 +238,30 @@ variables:
   # train you are running for slips off the board. An unset helper is "", and
   # is_state on "" is simply false, so leaving it empty behaves exactly as this
   # blueprint did before the input existed.
-  showing: >-
+  waiting: >-
     {{ known and minutes_out <= (lead | int) and minutes_out > -2
        and not is_state(boarded, 'on') }}
+  # Where the train is, once the departure board can no longer say. It drops a
+  # train the moment it leaves, so from that point the stop list is the only
+  # account of the journey -- and `sensor` has already moved on to whatever
+  # favourite comes next, which is not the train you are sitting on.
+  progress_entity: >-
+    {{ progress if progress else (sensor | replace('_next_favorite',
+                                                   '_stops_away')) }}
+  eta: "{{ state_attr(progress_entity, 'eta_at_destination') }}"
+  # `on_board` is the integration's own reading: origin behind the train,
+  # destination still ahead. There is no way to know you actually boarded --
+  # Home Assistant cannot see which platform you are on -- so this follows the
+  # train you were waiting for and Dismiss remains the answer if you let it go.
+  riding: >-
+    {{ state_attr(progress_entity, 'on_board') | default(false, true)
+       and eta not in [none, 'unknown', 'unavailable', '']
+       and not is_state(boarded, 'on') }}
+  showing: "{{ waiting or riding }}"
+  ride_train: "{{ state_attr(progress_entity, 'train_id') or '' }}"
+  ride_stops: "{{ state_attr(progress_entity, 'stops_to_destination') }}"
+  ride_next: "{{ state_attr(progress_entity, 'next_stop') or '' }}"
+  ride_late: "{{ state_attr(progress_entity, 'minutes_late') | int(0) }}"
   train: "{{ state_attr(sensor, 'train_id') or '' }}"
   track: "{{ state_attr(sensor, 'track') }}"
   status: "{{ state_attr(sensor, 'status_text') or 'Scheduled' }}"
@@ -247,6 +293,30 @@ variables:
     Train {{ train }}{% if track %} · Track {{ track }}{% endif %}
     {{- ' · ' ~ status if status else '' }}
     {{- ' · ' ~ busy if busy else '' }}
+  # Aboard, the three things worth a glance are which train, how much of the
+  # journey is left, and whether it is running late. Track and crowding stop
+  # mattering the moment the doors close.
+  #
+  # Zero stops means the destination is the next call, so it reads "Arriving"
+  # rather than "0 stops" -- the number is only useful while there is one.
+  ride_headline: >-
+    Train {{ ride_train }}
+    {{- ' · ' ~ ('Arriving' if ride_stops | int == 0 else
+                 ride_stops ~ (' stop' if ride_stops | int == 1 else ' stops'))
+        if ride_stops is not none else '' }}
+    {{- ' · ' ~ ride_late ~ ' min late' if ride_late > 0 else '' }}
+  activity_title: "{{ ride_headline if riding else headline }}"
+  # The countdown target. Departure while waiting, arrival once aboard -- the
+  # switch is the whole point, and it is one field.
+  activity_when: >-
+    {{ (as_timestamp(eta) if riding else as_timestamp(scheduled)) | int }}
+  activity_message: >-
+    {%- if riding -%}
+    {{ ('next ' ~ ride_next) if ride_next else 'Arriving' }}
+    {%- else -%}
+    {{ ('to ' ~ destination) if destination else status }}
+    {{- ' · ' ~ busy if busy else '' }}
+    {%- endif -%}
 
 actions:
   - choose:
@@ -294,14 +364,12 @@ actions:
         sequence:
           - action: "{{ notify_action }}"
             data:
-              title: "{{ headline }}"
+              title: "{{ activity_title }}"
               # Dropped on the phone, where `chronometer` takes this line, but
               # an Apple Watch renders the push as an ordinary notification and
               # shows it -- so it is worth carrying the busyness here too
               # rather than leaving the watch with only a truncated title.
-              message: >-
-                {{ ('to ' ~ destination) if destination else status }}
-                {{- ' · ' ~ busy if busy else '' }}
+              message: "{{ activity_message }}"
               data:
                 tag: "{{ tag }}"
                 live_update: true
@@ -311,7 +379,7 @@ actions:
                 # phone count down from about 1.75 billion. Absolute is also
                 # steadier: it cannot drift between this firing and the push
                 # landing.
-                when: "{{ as_timestamp(scheduled) | int }}"
+                when: "{{ activity_when }}"
                 notification_icon: !input icon
                 group: njtransit
                 # Deliberately no `url` here. Adding one stopped the activity
@@ -338,7 +406,7 @@ actions:
             then:
               - action: "{{ notify_action }}"
                 data:
-                  title: "{{ headline }}"
+                  title: "{{ activity_title }}"
                   message: Tap to dismiss until the next commute
                   data: >-
                     {{ {

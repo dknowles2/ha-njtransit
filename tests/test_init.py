@@ -26,7 +26,8 @@ from pytest_homeassistant_custom_component.test_util.aiohttp import (
 from custom_components.njtransit import (
     async_setup_entry as njtransit_setup_entry,
 )
-from custom_components.njtransit.api.parsing import TZ
+from custom_components.njtransit.api.models import TrainRun
+from custom_components.njtransit.api.parsing import TZ, parse_stops
 from custom_components.njtransit.const import (
     CONF_DEPARTURE_COUNT,
     CONF_DEPARTURE_INTERVAL,
@@ -480,6 +481,80 @@ async def test_the_progress_coordinator_follows_a_favorite(
     # soonest departure is not 6624, so "something was followed" would pass
     # against a picker that ignored favourites entirely.
     assert run.train_id == "6624"
+
+
+async def test_the_train_you_boarded_is_not_swapped_for_the_next_one(
+    hass: HomeAssistant,
+    aioclient_mock: AiohttpClientMocker,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Once it has left, the board can no longer vouch for it.
+
+    A departed train is dropped from the departure board entirely, so a
+    chooser that re-reads the board every poll finds nothing to follow -- and
+    the journey it stops describing is the one actually being taken. The
+    recorded run has Short Hills behind the train and New York Penn ahead,
+    which is exactly the window this has to cover.
+    """
+    freezer.move_to(datetime(2026, 8, 3, 8, 20, tzinfo=TZ))
+    install_api_mock(aioclient_mock)
+    entry = make_entry(options={CONF_FAVORITE_TRAINS: ["6624"]})
+    await setup_entry(hass, entry)
+    assert entry.runtime_data.progress.data is not None
+
+    # Past the lookahead window, so nothing on the board would be picked now.
+    freezer.move_to(datetime(2026, 8, 3, 9, 0, tzinfo=TZ))
+    await entry.runtime_data.progress.async_refresh()
+
+    run = entry.runtime_data.progress.data
+    assert run is not None, "the tracker let go of the train mid-journey"
+    assert run.train_id == "6624"
+
+
+async def test_following_stops_well_after_the_train_should_have_arrived(
+    hass: HomeAssistant,
+    aioclient_mock: AiohttpClientMocker,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """A feed that stops advancing must not pin the tracker forever.
+
+    Nothing else ends the follow: the destination only falls behind the train
+    when the stop list says so, and a stalled list never says so. Without a
+    bound that is a request a minute for a journey that ended hours ago.
+
+    The bound is measured from when following began rather than against the
+    train's scheduled arrival, and that is not a stylistic choice -- stop-list
+    times are bare wall-clock strings that roll into tomorrow once they pass
+    (SPEC 3.6), so an arrival-based bound recedes as fast as the clock chases
+    it and never fires at all. An earlier version of this test proved exactly
+    that by failing.
+
+    The favourite here is not on the board, so nothing but the latch can keep
+    the tracker alive.
+    """
+    freezer.move_to(datetime(2026, 8, 3, 8, 30, tzinfo=TZ))
+    install_api_mock(aioclient_mock)
+    entry = make_entry(options={CONF_FAVORITE_TRAINS: ["9999"]})
+    await setup_entry(hass, entry)
+    assert entry.runtime_data.progress.data is None
+
+    # Hand it a train mid-journey: origin behind, destination still ahead.
+    entry.runtime_data.progress.async_set_updated_data(
+        TrainRun(
+            train_id="9999",
+            stops=parse_stops(
+                load_fixture("stop_list_6320")["data"]["getTrainStopList"],
+                datetime(2026, 8, 3, 8, 28, tzinfo=TZ),
+            ),
+        )
+    )
+    await entry.runtime_data.progress.async_refresh()
+    assert entry.runtime_data.progress.data is not None, "the latch never took"
+
+    freezer.move_to(datetime(2026, 8, 3, 11, 0, tzinfo=TZ))
+    await entry.runtime_data.progress.async_refresh()
+
+    assert entry.runtime_data.progress.data is None
 
 
 async def test_no_favorite_in_the_window_follows_nothing(

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -14,8 +14,8 @@ from homeassistant.const import UnitOfTime
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .api.models import CrowdLevel, Departure, SystemAlert
-from .api.parsing import alert_line_codes
+from .api.models import CrowdLevel, Departure, SystemAlert, TrainRun
+from .api.parsing import alert_line_codes, now_local
 from .const import (
     CONF_DEPARTURE_COUNT,
     DEFAULT_DEPARTURE_COUNT,
@@ -201,13 +201,51 @@ class ProgressSensor(NJTransitEntity, SensorEntity):
     def __init__(self, entry: NJTransitConfigEntry) -> None:
         """Initialize the sensor."""
         super().__init__(entry, "stops-away")
+        # The worst lateness seen on the run being followed, and which run it
+        # belongs to. Held because the evidence is destroyed as the journey
+        # goes: a stop is only visibly overdue while the train has not reached
+        # it, and the stop list carries no actual departure times. The moment
+        # a late stop flips to departed, the next stop is still in the future
+        # and a stateless estimate snaps back to "on time".
+        #
+        # That matters most on the longest leg. Newark Broad Street to New
+        # York Penn is 22 minutes of a morning run with no intermediate stop
+        # to be overdue for, so a train that arrived at Newark ten late would
+        # have spent the whole final approach claiming a punctual arrival --
+        # during exactly the stretch someone is deciding whether they will
+        # make a connection.
+        self._peak_late: tuple[str, int] | None = None
 
     async def async_added_to_hass(self) -> None:
         """Also follow the progress coordinator, which polls separately."""
         await super().async_added_to_hass()
         self.async_on_remove(
-            self.runtime.progress.async_add_listener(self._handle_coordinator_update)
+            self.runtime.progress.async_add_listener(self._handle_progress_update)
         )
+
+    @callback
+    def _handle_progress_update(self) -> None:
+        """Note how late the train has ever looked, then write state."""
+        run = self.runtime.progress.data
+        if run is None:
+            self._peak_late = None
+        else:
+            observed = run.minutes_late(now_local())
+            if observed is not None:
+                train, peak = self._peak_late or (run.train_id, 0)
+                if train != run.train_id:
+                    peak = 0
+                self._peak_late = (run.train_id, max(peak, observed))
+        self._handle_coordinator_update()
+
+    def _lateness(self, run: TrainRun, now: datetime) -> int | None:
+        """Return the worst lateness seen on this run, or what is visible now."""
+        observed = run.minutes_late(now)
+        if self._peak_late is None or self._peak_late[0] != run.train_id:
+            return observed
+        if observed is None:
+            return None
+        return max(observed, self._peak_late[1])
 
     @property
     def native_value(self) -> int | None:
@@ -224,12 +262,30 @@ class ProgressSensor(NJTransitEntity, SensorEntity):
         if run is None:
             return None
 
+        now = now_local()
         last = run.last_departed
         upcoming = run.next_stop
+        destination = self.runtime.destination
+        late = self._lateness(run, now)
         due_origin = run.due_at(self.runtime.origin)
-        due_destination = (
-            run.due_at(self.runtime.destination) if self.runtime.destination else None
+        due_destination = run.due_at(destination) if destination else None
+        eta_destination = (
+            due_destination + timedelta(minutes=late)
+            if due_destination is not None and late is not None
+            else None
         )
+        to_destination = run.stops_until(destination) if destination else None
+
+        # Whether the journey has started. The origin falling behind the train
+        # is the only observable that says so -- and once it does, the
+        # departure board has already dropped this train, so everything below
+        # is the only account of it left.
+        on_board = (
+            destination is not None
+            and run.stops_until(self.runtime.origin) is None
+            and to_destination is not None
+        )
+
         return {
             "train_id": run.train_id,
             "last_departed": last.name if last else None,
@@ -238,6 +294,15 @@ class ProgressSensor(NJTransitEntity, SensorEntity):
             "due_at_destination": (
                 due_destination.isoformat() if due_destination else None
             ),
+            # Scheduled arrival moved by however late it is running. The
+            # schedule alone stops being an answer at exactly the moment
+            # someone starts asking.
+            "eta_at_destination": (
+                eta_destination.isoformat() if eta_destination else None
+            ),
+            "minutes_late": late,
+            "stops_to_destination": to_destination,
+            "on_board": on_board,
             "stops_total": len(run.stops),
             "stops_remaining": [stop.name for stop in run.stops if not stop.departed],
         }
