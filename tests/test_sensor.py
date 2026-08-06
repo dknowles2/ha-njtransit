@@ -531,7 +531,9 @@ class TestProgress:
         freezer.move_to(datetime(2026, 8, 4, 8, 40, tzinfo=TZ))
         self._install(hass, load_payload("stop_list_6320", "getTrainStopList"))
         await hass.async_block_till_done()
-        assert hass.states.get(f"{PREFIX}_stops_away").attributes["minutes_late"] == 8
+        overdue = hass.states.get(f"{PREFIX}_stops_away")
+        assert overdue is not None
+        assert overdue.attributes["minutes_late"] == 8
 
         # Maplewood now behind it, and the next stop is not due yet.
         stops = load_payload("stop_list_6320", "getTrainStopList")
