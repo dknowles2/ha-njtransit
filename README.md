@@ -461,9 +461,17 @@ was fixed at registration and does not follow.
 
 **Dismissing it.** Live Activities cannot carry buttons, and iOS does not
 report when you swipe one away, so a plain notification with a **Dismiss**
-button is sent alongside. Tapping it ends the activity and stays quiet for the
-rest of the window — without it, a second favourite departing soon after the
-one you actually caught starts counting down at you on the train.
+button is sent alongside. **Press and hold it, then tap Dismiss** — an action
+on an iOS notification only appears on a long press, and this one is sent at
+`passive` interruption level so it never banners; it goes straight to
+Notification Center. Dismissing ends the activity and stays quiet for the rest
+of the window — without it, a second favourite departing soon after the one you
+actually caught starts counting down at you on the train.
+
+A plain tap opens the dashboard instead, if one is configured. That is the
+whole failure mode this wording exists to prevent: the notification used to say
+"tap to dismiss", so tapping it opened a dashboard and looked like the dismiss
+silently doing nothing.
 
 That needs somewhere to remember you dismissed it, so the blueprint takes an
 `input_boolean` helper. It is reset when the commute schedule ends, or at 3am

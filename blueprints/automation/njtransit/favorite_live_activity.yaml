@@ -37,11 +37,13 @@ blueprint:
     **Dismissing.** Live Activities cannot carry buttons, and swiping one
     away tells iOS but not Home Assistant — so the next refresh puts it back.
     A plain, silent notification carrying a **Dismiss** button is therefore
-    sent alongside it. Tapping that ends the activity and stays quiet for the
-    rest of the window, which is what stops a second favourite departing soon
-    after the one you caught from counting down at you on the train. It
-    resets when the commute window ends, or at 3am if you are not using a
-    schedule.
+    sent alongside it. **Press and hold that notification, then tap Dismiss** —
+    an action on an iOS notification only appears on a long press, and this one
+    is delivered silently, so it never banners on its own. Dismissing ends the
+    activity and stays quiet for the rest of the window, which is what stops a
+    second favourite departing soon after the one you caught from counting down
+    at you on the train. It resets when the commute window ends, or at 3am if
+    you are not using a schedule.
   domain: automation
   source_url: https://github.com/dknowles2/ha-njtransit/blob/main/blueprints/automation/njtransit/favorite_live_activity.yaml
   homeassistant:
@@ -407,7 +409,15 @@ actions:
               - action: "{{ notify_action }}"
                 data:
                   title: "{{ activity_title }}"
-                  message: Tap to dismiss until the next commute
+                  # The gesture matters and is not guessable. An action on
+                  # an iOS notification only appears on a long press, and
+                  # this notification is `passive` -- it never banners, it
+                  # goes straight to Notification Center, so there is no
+                  # moment where the button is on screen by itself. Saying
+                  # "tap" here sent people to the `url` below instead, which
+                  # opens the dashboard and looks like the dismiss silently
+                  # failing.
+                  message: Hold this notification, then tap Dismiss
                   data: >-
                     {{ {
                          'tag': dismiss_tag,
