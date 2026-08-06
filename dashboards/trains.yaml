@@ -19,35 +19,48 @@
 # `short_hills_station_to_new_york_penn_station` here. Check yours in
 # Developer tools -> States by searching for `_next_departure`.
 #
-# Requires card-mod (available in HACS) for the type sizing. Without it the
-# cards still render, just at uniform size -- the countdown stops being
-# readable at arm's length, which is most of the point.
+# Requires card-mod (available in HACS). Without it every card still renders,
+# just as undifferentiated body text -- the countdown stops being readable at
+# arm's length and the pills become backticked words, which is most of the
+# point.
 #
-# What each view shows, in the order it matters on a platform:
+# HOW THE PILLS WORK. A markdown card cannot carry class names, so the pill
+# colour is chosen by how the markdown nests around the backticks:
 #
-#   1. Why your commute is broken, when it is. Hidden otherwise.
-#   2. One train, big. Your favourite when it is on the board, and the next
-#      departure when it is not, so the card is never a wall of apology.
-#   3. The next three departures.
-#   4. Service notices, hidden when there are none.
+#     `Track 4`            plain code       line green, the neutral fact
+#     **`Cancelled`**      strong > code    red, something is wrong
+#     ~~`12 min late`~~    del > code       amber, degraded but running
+#     *`Track due ~3 min`* em > code        outlined, merely informational
+#
+# The strikethrough is undone in CSS; it is a selector, not a decoration.
+#
+# The accent green is #00953b, which is what the departure board itself sends
+# as the Morristown Line's colour. Other lines send their own -- the feed
+# carries it per row -- but it also uses that field to mark cancellations, so
+# it is not a dependable line identity and the integration does not expose it.
+# Change the four occurrences below if your line is a different colour.
 #
 # The track line is the part worth understanding. New York Penn posts NJ
 # Transit tracks a median of 9 minutes before departure with an interquartile
 # range of 0.2 minutes -- it is a scheduled process, not a tendency. So a
 # missing track inside 8 minutes is not "not yet", it is a deviation, and the
-# card says so. It only says so when *other* trains on the board have their
-# tracks, which is the same test the integration's `track_overdue` event uses:
-# a station that posts nothing tells you nothing.
+# card says so in red. It only says so when *other* trains on the board have
+# their tracks, which is the same test the integration's `track_overdue` event
+# uses: a station that posts nothing tells you nothing.
 
 views:
 - title: Morning
   path: morning
-  icon: mdi:weather-sunset-up
   type: sections
   max_columns: 1
   sections:
   - type: grid
     cards:
+
+    - type: heading
+      heading: Short Hills → New York Penn
+      heading_style: title
+      icon: mdi:weather-sunset-up
 
     # Leave now, and here is why. Nothing at all when the commute is fine.
     - type: markdown
@@ -61,12 +74,18 @@ views:
         entity: binary_sensor.short_hills_station_to_new_york_penn_station_commute_disrupted
         state: "on"
       card_mod:
-        style: |
-          ha-card {
-            background: rgba(var(--rgb-error-color), 0.12);
-            border: 1px solid var(--error-color);
-          }
-          ha-markdown p { margin: 0 0 6px 0; line-height: 1.5; }
+        style:
+          .: |
+            ha-card {
+              border: none;
+              border-left: 4px solid var(--error-color);
+              border-radius: 12px;
+              background: color-mix(in srgb, var(--error-color) 13%, var(--card-background-color));
+            }
+          ha-markdown $: |
+            :host { display: block; padding: 12px 14px; }
+            p { margin: 0 0 6px; line-height: 1.45; font-size: 0.95rem; }
+            p:last-child { margin-bottom: 0; }
 
     # The one train you are actually catching.
     - type: markdown
@@ -96,19 +115,30 @@ views:
             track overdue. -#}
         {%- set posting = rows | map('state_attr', 'track') | select('string') | list | count > 0 -%}
         {%- set status = state_attr(s, 'status_text') -%}
-        {%- set busy = {'moderate': 'Filling up', 'heavy': 'Busy'}.get(state_attr(s, 'crowding'), '') -%}
-        # {{ 'Departed' if mins < 0 else (mins ~ ' min') }}
+        {%- set cancelled = state_attr(s, 'status') == 'cancelled' -%}
+        {%- set delay = state_attr(s, 'delay_minutes') -%}
+        {%- set crowding = state_attr(s, 'crowding') -%}
+        # {% if mins < 0 %}Departed{% elif mins == 0 %}Now{% else %}{{ mins }} *min*{% endif %}
 
         ## {{ as_timestamp(t) | timestamp_custom('%-I:%M %p') }} · Train {{ state_attr(s, 'train_id') }}
 
-        {% if track %}**Track {{ track }}**
-        {%- elif not posting %}*Track not posted*
-        {%- elif mins <= 8 %}⚠️ **Track overdue**
-        {%- elif mins <= 11 %}*Track due any minute*
-        {%- elif mins <= 25 %}*Track due in ~{{ mins - 9 }} min*
-        {%- else %}*Track not posted yet*{% endif -%}
-        {%- if status %} · {{ status }}{% endif -%}
-        {%- if busy %} · {{ busy }}{% endif %}
+        {# Pills, in the order a platform gets read: where, then how, then how
+           full. Nesting picks the colour -- see the header. This comment opens
+           without a dash on purpose: `{#-` would eat the blank line above it
+           and weld the first pill onto the end of the heading. -#}
+        {% if track %}`Track {{ track }}`
+        {%- elif not posting %}*`Track not posted`*
+        {%- elif mins <= 8 %}**`⚠️ Track overdue`**
+        {%- elif mins <= 11 %}*`Track due any minute`*
+        {%- elif mins <= 25 %}*`Track due in ~{{ mins - 9 }} min`*
+        {%- else %}*`Track not posted yet`*{% endif -%}
+        {%- if status %}
+        {%- if cancelled %} **`{{ status }}`**
+        {%- elif delay %} ~~`{{ status }}`~~
+        {%- else %} *`{{ status }}`*{% endif -%}
+        {%- endif -%}
+        {%- if crowding == 'heavy' %} ~~`Busy`~~
+        {%- elif crowding == 'moderate' %} *`Filling up`*{% endif %}
 
         {#- Where to stand, and only when standing somewhere else would help.
             "Front light · Middle light · Back light" is three facts and no
@@ -122,21 +152,7 @@ views:
         {%- endfor -%}
         {%- if ns.best and ns.high > ns.low %}
 
-        {{ ns.best | title }} cars are emptier
-        {%- endif -%}
-
-        {#- Alerts that name this train by number, as opposed to the line-level
-            notices further down. -#}
-        {%- for message in state_attr(s, 'alerts') or [] %}
-
-        🚨 {{ message }}
-        {%- endfor -%}
-
-        {%- if not tracking %}
-        {%- set favorites = state_attr(fav, 'favorites') or [] %}
-
-        {% if favorites %}*Waiting for {{ favorites | join(', ') }} — not on the board yet.*
-        {%- else %}*No favourite set. Pick one in this commute's options.*{% endif -%}
+        *{{ ns.best | title }} cars are emptier*
         {%- endif -%}
 
         {#- Stops away only follows the favourite, so it is only ever news
@@ -151,34 +167,112 @@ views:
         {%- if state_attr(prog, 'next_stop') %} · next {{ state_attr(prog, 'next_stop') }}{% endif %}
         {%- endif -%}
         {%- endif -%}
+
+        {#- Alerts that name this train by number, as opposed to the line-level
+            notices further down. -#}
+        {%- for message in state_attr(s, 'alerts') or [] %}
+
+        > {{ message }}
+        {%- endfor -%}
+
+        {%- if not tracking %}
+        {%- set favorites = state_attr(fav, 'favorites') or [] %}
+
+        {% if favorites %}*Waiting for {{ favorites | join(', ') }} — not on the board yet.*
+        {%- else %}*No favourite set. Pick one in this commute's options.*{% endif -%}
+        {%- endif -%}
         {%- endif -%}
       card_mod:
-        style: |
-          ha-markdown { padding: 4px 2px !important; }
-          ha-markdown h1 {
-            font-size: 3.2em;
-            font-weight: 700;
-            line-height: 1;
-            margin: 0 0 4px 0;
-            letter-spacing: -0.02em;
-          }
-          ha-markdown h2 {
-            font-size: 1.05em;
-            font-weight: 500;
-            color: var(--secondary-text-color);
-            margin: 0 0 10px 0;
-          }
-          ha-markdown h3 { font-size: 1.2em; margin: 0 0 6px 0; }
-          ha-markdown hr {
-            border: none;
-            border-top: 1px solid var(--divider-color);
-            margin: 12px 0 10px 0;
-          }
-          ha-markdown p { margin: 0 0 6px 0; line-height: 1.5; }
-          ha-markdown p:last-child { margin-bottom: 0; }
+        style:
+          .: |
+            ha-card {
+              border: none;
+              border-top: 3px solid #00953b;
+              border-radius: 16px;
+              overflow: hidden;
+              background:
+                linear-gradient(168deg,
+                  color-mix(in srgb, #00953b 10%, var(--card-background-color)) 0%,
+                  var(--card-background-color) 62%);
+            }
+          ha-markdown $: |
+            :host { display: block; padding: 16px 16px 18px; }
+            h1 {
+              margin: 0 0 2px;
+              font-size: 3.5rem;
+              font-weight: 800;
+              line-height: 0.95;
+              letter-spacing: -0.035em;
+              font-variant-numeric: tabular-nums;
+              color: var(--primary-text-color);
+            }
+            /* The unit, kept small so the number carries the card. */
+            h1 em {
+              font-size: 0.28em;
+              font-style: normal;
+              font-weight: 600;
+              letter-spacing: 0.1em;
+              text-transform: uppercase;
+              color: var(--secondary-text-color);
+              margin-left: 0.3em;
+              vertical-align: 0.6em;
+            }
+            h2 {
+              margin: 0 0 14px;
+              font-size: 0.78rem;
+              font-weight: 600;
+              letter-spacing: 0.1em;
+              text-transform: uppercase;
+              color: var(--secondary-text-color);
+            }
+            h3 { margin: 0 0 6px; font-size: 1.15rem; font-weight: 600; }
+            p { margin: 0 0 10px; line-height: 1.6; }
+            p:last-child { margin-bottom: 0; }
+            em { color: var(--secondary-text-color); }
+            hr {
+              border: none;
+              border-top: 1px solid var(--divider-color);
+              margin: 14px 0 12px;
+            }
+            /* Pills. The wrapper element picks the colour -- see the file
+               header. `del` is a selector here, not a decoration, so the
+               line through it is removed. */
+            code {
+              font-family: inherit;
+              font-size: 0.8rem;
+              font-weight: 700;
+              letter-spacing: 0.015em;
+              white-space: nowrap;
+              padding: 4px 10px;
+              border-radius: 999px;
+              background: #00953b;
+              color: #fff;
+              border: 1px solid transparent;
+            }
+            strong code { background: var(--error-color); color: #fff; }
+            del { text-decoration: none; }
+            del code { background: var(--warning-color); color: #111; }
+            em code {
+              background: transparent;
+              color: var(--secondary-text-color);
+              border-color: var(--divider-color);
+              font-weight: 600;
+              font-style: normal;
+            }
+            blockquote {
+              margin: 12px 0 0;
+              padding: 9px 12px;
+              border: none;
+              border-left: 3px solid var(--error-color);
+              border-radius: 0 8px 8px 0;
+              background: color-mix(in srgb, var(--error-color) 10%, transparent);
+              font-size: 0.9rem;
+            }
+            blockquote p { margin: 0; line-height: 1.5; }
 
+    # The board itself. A real table, because aligned columns are what makes
+    # three departures readable at a glance rather than three sentences.
     - type: markdown
-      title: Next departures
       content: |-
         {%- set p = 'short_hills_station_to_new_york_penn_station' -%}
         {%- set nothing = ['unknown', 'unavailable', 'none', ''] -%}
@@ -192,24 +286,94 @@ views:
         {%- if t not in nothing -%}
         {%- set mins = ((as_timestamp(t) - as_timestamp(now())) / 60) | round(0) | int -%}
         {%- set track = state_attr(row, 'track') -%}
-        {%- set bits = ['**' ~ (as_timestamp(t) | timestamp_custom('%-I:%M')) ~ '**',
-                        mins ~ ' min', state_attr(row, 'train_id')] -%}
+        {%- set status = state_attr(row, 'status_text') -%}
+        {%- set when = '**' ~ (as_timestamp(t) | timestamp_custom('%-I:%M')) ~ '**'
+                       ~ ' *' ~ (mins ~ 'm' if mins > 0 else 'now') ~ '*' -%}
+        {%- set train = (state_attr(row, 'train_id') | string)
+                        ~ (' ⭐' if state_attr(row, 'favorite') else '') -%}
         {%- if track -%}
-        {%- set bits = bits + ['Trk ' ~ track] -%}
+        {%- set cell = '`' ~ track ~ '`' -%}
         {%- elif posting and mins <= 8 -%}
-        {%- set bits = bits + ['⚠️ no track'] -%}
+        {%- set cell = '**`⚠️`**' -%}
+        {%- else -%}
+        {%- set cell = '*`—`*' -%}
         {%- endif -%}
-        {%- if state_attr(row, 'status_text') -%}
-        {%- set bits = bits + [state_attr(row, 'status_text')] -%}
+        {%- if not status -%}
+        {%- set tail = '' -%}
+        {%- elif state_attr(row, 'status') == 'cancelled' -%}
+        {%- set tail = '**`' ~ status ~ '`**' -%}
+        {%- elif state_attr(row, 'delay_minutes') -%}
+        {%- set tail = '~~`' ~ status ~ '`~~' -%}
+        {%- else -%}
+        {%- set tail = '*`' ~ status ~ '`*' -%}
         {%- endif -%}
-        {%- set ns.out = ns.out + [bits | join('  ·  ')
-            ~ ('  ⭐' if state_attr(row, 'favorite') else '')] -%}
+        {%- set ns.out = ns.out + ['| ' ~ when ~ ' | ' ~ train ~ ' | ' ~ cell ~ ' | ' ~ tail ~ ' |'] -%}
         {%- endif -%}
         {%- endfor -%}
-        {{ ns.out | join('\n\n') if ns.out else '*Nothing scheduled.*' }}
+        {%- if ns.out -%}
+        | Departs | Train | Trk | |
+        |:--|:--|:--|:--|
+        {{ ns.out | join('\n') }}
+        {%- else -%}
+        *Nothing scheduled.*
+        {%- endif -%}
       card_mod:
-        style: |
-          ha-markdown p { margin: 0 0 6px 0; line-height: 1.6; }
+        style:
+          .: |
+            ha-card { border-radius: 16px; }
+          ha-markdown $: |
+            :host { display: block; padding: 12px 16px 14px; }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              font-variant-numeric: tabular-nums;
+            }
+            th {
+              padding: 0 4px 8px 0;
+              border-bottom: 1px solid var(--divider-color);
+              text-align: left;
+              font-size: 0.65rem;
+              font-weight: 700;
+              letter-spacing: 0.12em;
+              text-transform: uppercase;
+              color: var(--secondary-text-color);
+            }
+            td {
+              padding: 10px 4px 10px 0;
+              border-bottom: 1px solid color-mix(in srgb, var(--divider-color) 45%, transparent);
+              font-size: 0.98rem;
+              white-space: nowrap;
+            }
+            tr:last-child td { border-bottom: none; }
+            td em {
+              font-style: normal;
+              font-size: 0.8rem;
+              color: var(--secondary-text-color);
+              margin-left: 4px;
+            }
+            code {
+              font-family: inherit;
+              font-size: 0.75rem;
+              font-weight: 700;
+              white-space: nowrap;
+              padding: 3px 9px;
+              border-radius: 999px;
+              background: #00953b;
+              color: #fff;
+              border: 1px solid transparent;
+            }
+            strong code { background: var(--error-color); color: #fff; }
+            del { text-decoration: none; }
+            del code { background: var(--warning-color); color: #111; }
+            em code {
+              background: transparent;
+              color: var(--secondary-text-color);
+              border-color: var(--divider-color);
+              font-weight: 600;
+              font-size: 0.75rem;
+              margin-left: 0;
+            }
+            p { margin: 0; color: var(--secondary-text-color); }
 
     # Line-level notices. Hidden when there are none, and it leads with
     # whether any of them name a train you might actually be on -- three
@@ -223,7 +387,7 @@ views:
         {%- set advisories = 'sensor.' ~ p ~ '_planned_advisories' -%}
         {%- set mine = state_attr(live, 'affects_my_trains') or [] -%}
         {%- if mine %}
-        **Names your train{{ 's' if mine | count > 1 else '' }}: {{ mine | join(', ') }}**
+        **`Names your train{{ 's' if mine | count > 1 else '' }} {{ mine | join(', ') }}`**
         {% endif -%}
         {%- for message in state_attr(live, 'messages') or [] %}
         🚨 {{ message }}
@@ -241,17 +405,43 @@ views:
           entity: sensor.short_hills_station_to_new_york_penn_station_planned_advisories
           above: 0
       card_mod:
-        style: |
-          ha-markdown p { margin: 0 0 10px 0; line-height: 1.5; }
+        style:
+          .: |
+            ha-card { border-radius: 16px; }
+            .card-header {
+              padding: 14px 16px 0;
+              font-size: 0.7rem;
+              font-weight: 700;
+              letter-spacing: 0.12em;
+              text-transform: uppercase;
+              color: var(--secondary-text-color);
+            }
+          ha-markdown $: |
+            :host { display: block; padding: 10px 16px 14px; }
+            p { margin: 0 0 12px; line-height: 1.5; font-size: 0.9rem; }
+            p:last-child { margin-bottom: 0; }
+            code {
+              font-family: inherit;
+              font-size: 0.75rem;
+              font-weight: 700;
+              padding: 3px 9px;
+              border-radius: 999px;
+              background: var(--error-color);
+              color: #fff;
+            }
 
 - title: Evening
   path: evening
-  icon: mdi:weather-night
   type: sections
   max_columns: 1
   sections:
   - type: grid
     cards:
+
+    - type: heading
+      heading: New York Penn → Short Hills
+      heading_style: title
+      icon: mdi:weather-night
 
     # Leave now, and here is why. Nothing at all when the commute is fine.
     - type: markdown
@@ -265,12 +455,18 @@ views:
         entity: binary_sensor.new_york_penn_station_to_short_hills_station_commute_disrupted
         state: "on"
       card_mod:
-        style: |
-          ha-card {
-            background: rgba(var(--rgb-error-color), 0.12);
-            border: 1px solid var(--error-color);
-          }
-          ha-markdown p { margin: 0 0 6px 0; line-height: 1.5; }
+        style:
+          .: |
+            ha-card {
+              border: none;
+              border-left: 4px solid var(--error-color);
+              border-radius: 12px;
+              background: color-mix(in srgb, var(--error-color) 13%, var(--card-background-color));
+            }
+          ha-markdown $: |
+            :host { display: block; padding: 12px 14px; }
+            p { margin: 0 0 6px; line-height: 1.45; font-size: 0.95rem; }
+            p:last-child { margin-bottom: 0; }
 
     # The one train you are actually catching.
     - type: markdown
@@ -300,19 +496,30 @@ views:
             track overdue. -#}
         {%- set posting = rows | map('state_attr', 'track') | select('string') | list | count > 0 -%}
         {%- set status = state_attr(s, 'status_text') -%}
-        {%- set busy = {'moderate': 'Filling up', 'heavy': 'Busy'}.get(state_attr(s, 'crowding'), '') -%}
-        # {{ 'Departed' if mins < 0 else (mins ~ ' min') }}
+        {%- set cancelled = state_attr(s, 'status') == 'cancelled' -%}
+        {%- set delay = state_attr(s, 'delay_minutes') -%}
+        {%- set crowding = state_attr(s, 'crowding') -%}
+        # {% if mins < 0 %}Departed{% elif mins == 0 %}Now{% else %}{{ mins }} *min*{% endif %}
 
         ## {{ as_timestamp(t) | timestamp_custom('%-I:%M %p') }} · Train {{ state_attr(s, 'train_id') }}
 
-        {% if track %}**Track {{ track }}**
-        {%- elif not posting %}*Track not posted*
-        {%- elif mins <= 8 %}⚠️ **Track overdue**
-        {%- elif mins <= 11 %}*Track due any minute*
-        {%- elif mins <= 25 %}*Track due in ~{{ mins - 9 }} min*
-        {%- else %}*Track not posted yet*{% endif -%}
-        {%- if status %} · {{ status }}{% endif -%}
-        {%- if busy %} · {{ busy }}{% endif %}
+        {# Pills, in the order a platform gets read: where, then how, then how
+           full. Nesting picks the colour -- see the header. This comment opens
+           without a dash on purpose: `{#-` would eat the blank line above it
+           and weld the first pill onto the end of the heading. -#}
+        {% if track %}`Track {{ track }}`
+        {%- elif not posting %}*`Track not posted`*
+        {%- elif mins <= 8 %}**`⚠️ Track overdue`**
+        {%- elif mins <= 11 %}*`Track due any minute`*
+        {%- elif mins <= 25 %}*`Track due in ~{{ mins - 9 }} min`*
+        {%- else %}*`Track not posted yet`*{% endif -%}
+        {%- if status %}
+        {%- if cancelled %} **`{{ status }}`**
+        {%- elif delay %} ~~`{{ status }}`~~
+        {%- else %} *`{{ status }}`*{% endif -%}
+        {%- endif -%}
+        {%- if crowding == 'heavy' %} ~~`Busy`~~
+        {%- elif crowding == 'moderate' %} *`Filling up`*{% endif %}
 
         {#- Where to stand, and only when standing somewhere else would help.
             "Front light · Middle light · Back light" is three facts and no
@@ -326,21 +533,7 @@ views:
         {%- endfor -%}
         {%- if ns.best and ns.high > ns.low %}
 
-        {{ ns.best | title }} cars are emptier
-        {%- endif -%}
-
-        {#- Alerts that name this train by number, as opposed to the line-level
-            notices further down. -#}
-        {%- for message in state_attr(s, 'alerts') or [] %}
-
-        🚨 {{ message }}
-        {%- endfor -%}
-
-        {%- if not tracking %}
-        {%- set favorites = state_attr(fav, 'favorites') or [] %}
-
-        {% if favorites %}*Waiting for {{ favorites | join(', ') }} — not on the board yet.*
-        {%- else %}*No favourite set. Pick one in this commute's options.*{% endif -%}
+        *{{ ns.best | title }} cars are emptier*
         {%- endif -%}
 
         {#- Stops away only follows the favourite, so it is only ever news
@@ -355,34 +548,112 @@ views:
         {%- if state_attr(prog, 'next_stop') %} · next {{ state_attr(prog, 'next_stop') }}{% endif %}
         {%- endif -%}
         {%- endif -%}
+
+        {#- Alerts that name this train by number, as opposed to the line-level
+            notices further down. -#}
+        {%- for message in state_attr(s, 'alerts') or [] %}
+
+        > {{ message }}
+        {%- endfor -%}
+
+        {%- if not tracking %}
+        {%- set favorites = state_attr(fav, 'favorites') or [] %}
+
+        {% if favorites %}*Waiting for {{ favorites | join(', ') }} — not on the board yet.*
+        {%- else %}*No favourite set. Pick one in this commute's options.*{% endif -%}
+        {%- endif -%}
         {%- endif -%}
       card_mod:
-        style: |
-          ha-markdown { padding: 4px 2px !important; }
-          ha-markdown h1 {
-            font-size: 3.2em;
-            font-weight: 700;
-            line-height: 1;
-            margin: 0 0 4px 0;
-            letter-spacing: -0.02em;
-          }
-          ha-markdown h2 {
-            font-size: 1.05em;
-            font-weight: 500;
-            color: var(--secondary-text-color);
-            margin: 0 0 10px 0;
-          }
-          ha-markdown h3 { font-size: 1.2em; margin: 0 0 6px 0; }
-          ha-markdown hr {
-            border: none;
-            border-top: 1px solid var(--divider-color);
-            margin: 12px 0 10px 0;
-          }
-          ha-markdown p { margin: 0 0 6px 0; line-height: 1.5; }
-          ha-markdown p:last-child { margin-bottom: 0; }
+        style:
+          .: |
+            ha-card {
+              border: none;
+              border-top: 3px solid #00953b;
+              border-radius: 16px;
+              overflow: hidden;
+              background:
+                linear-gradient(168deg,
+                  color-mix(in srgb, #00953b 10%, var(--card-background-color)) 0%,
+                  var(--card-background-color) 62%);
+            }
+          ha-markdown $: |
+            :host { display: block; padding: 16px 16px 18px; }
+            h1 {
+              margin: 0 0 2px;
+              font-size: 3.5rem;
+              font-weight: 800;
+              line-height: 0.95;
+              letter-spacing: -0.035em;
+              font-variant-numeric: tabular-nums;
+              color: var(--primary-text-color);
+            }
+            /* The unit, kept small so the number carries the card. */
+            h1 em {
+              font-size: 0.28em;
+              font-style: normal;
+              font-weight: 600;
+              letter-spacing: 0.1em;
+              text-transform: uppercase;
+              color: var(--secondary-text-color);
+              margin-left: 0.3em;
+              vertical-align: 0.6em;
+            }
+            h2 {
+              margin: 0 0 14px;
+              font-size: 0.78rem;
+              font-weight: 600;
+              letter-spacing: 0.1em;
+              text-transform: uppercase;
+              color: var(--secondary-text-color);
+            }
+            h3 { margin: 0 0 6px; font-size: 1.15rem; font-weight: 600; }
+            p { margin: 0 0 10px; line-height: 1.6; }
+            p:last-child { margin-bottom: 0; }
+            em { color: var(--secondary-text-color); }
+            hr {
+              border: none;
+              border-top: 1px solid var(--divider-color);
+              margin: 14px 0 12px;
+            }
+            /* Pills. The wrapper element picks the colour -- see the file
+               header. `del` is a selector here, not a decoration, so the
+               line through it is removed. */
+            code {
+              font-family: inherit;
+              font-size: 0.8rem;
+              font-weight: 700;
+              letter-spacing: 0.015em;
+              white-space: nowrap;
+              padding: 4px 10px;
+              border-radius: 999px;
+              background: #00953b;
+              color: #fff;
+              border: 1px solid transparent;
+            }
+            strong code { background: var(--error-color); color: #fff; }
+            del { text-decoration: none; }
+            del code { background: var(--warning-color); color: #111; }
+            em code {
+              background: transparent;
+              color: var(--secondary-text-color);
+              border-color: var(--divider-color);
+              font-weight: 600;
+              font-style: normal;
+            }
+            blockquote {
+              margin: 12px 0 0;
+              padding: 9px 12px;
+              border: none;
+              border-left: 3px solid var(--error-color);
+              border-radius: 0 8px 8px 0;
+              background: color-mix(in srgb, var(--error-color) 10%, transparent);
+              font-size: 0.9rem;
+            }
+            blockquote p { margin: 0; line-height: 1.5; }
 
+    # The board itself. A real table, because aligned columns are what makes
+    # three departures readable at a glance rather than three sentences.
     - type: markdown
-      title: Next departures
       content: |-
         {%- set p = 'new_york_penn_station_to_short_hills_station' -%}
         {%- set nothing = ['unknown', 'unavailable', 'none', ''] -%}
@@ -396,24 +667,94 @@ views:
         {%- if t not in nothing -%}
         {%- set mins = ((as_timestamp(t) - as_timestamp(now())) / 60) | round(0) | int -%}
         {%- set track = state_attr(row, 'track') -%}
-        {%- set bits = ['**' ~ (as_timestamp(t) | timestamp_custom('%-I:%M')) ~ '**',
-                        mins ~ ' min', state_attr(row, 'train_id')] -%}
+        {%- set status = state_attr(row, 'status_text') -%}
+        {%- set when = '**' ~ (as_timestamp(t) | timestamp_custom('%-I:%M')) ~ '**'
+                       ~ ' *' ~ (mins ~ 'm' if mins > 0 else 'now') ~ '*' -%}
+        {%- set train = (state_attr(row, 'train_id') | string)
+                        ~ (' ⭐' if state_attr(row, 'favorite') else '') -%}
         {%- if track -%}
-        {%- set bits = bits + ['Trk ' ~ track] -%}
+        {%- set cell = '`' ~ track ~ '`' -%}
         {%- elif posting and mins <= 8 -%}
-        {%- set bits = bits + ['⚠️ no track'] -%}
+        {%- set cell = '**`⚠️`**' -%}
+        {%- else -%}
+        {%- set cell = '*`—`*' -%}
         {%- endif -%}
-        {%- if state_attr(row, 'status_text') -%}
-        {%- set bits = bits + [state_attr(row, 'status_text')] -%}
+        {%- if not status -%}
+        {%- set tail = '' -%}
+        {%- elif state_attr(row, 'status') == 'cancelled' -%}
+        {%- set tail = '**`' ~ status ~ '`**' -%}
+        {%- elif state_attr(row, 'delay_minutes') -%}
+        {%- set tail = '~~`' ~ status ~ '`~~' -%}
+        {%- else -%}
+        {%- set tail = '*`' ~ status ~ '`*' -%}
         {%- endif -%}
-        {%- set ns.out = ns.out + [bits | join('  ·  ')
-            ~ ('  ⭐' if state_attr(row, 'favorite') else '')] -%}
+        {%- set ns.out = ns.out + ['| ' ~ when ~ ' | ' ~ train ~ ' | ' ~ cell ~ ' | ' ~ tail ~ ' |'] -%}
         {%- endif -%}
         {%- endfor -%}
-        {{ ns.out | join('\n\n') if ns.out else '*Nothing scheduled.*' }}
+        {%- if ns.out -%}
+        | Departs | Train | Trk | |
+        |:--|:--|:--|:--|
+        {{ ns.out | join('\n') }}
+        {%- else -%}
+        *Nothing scheduled.*
+        {%- endif -%}
       card_mod:
-        style: |
-          ha-markdown p { margin: 0 0 6px 0; line-height: 1.6; }
+        style:
+          .: |
+            ha-card { border-radius: 16px; }
+          ha-markdown $: |
+            :host { display: block; padding: 12px 16px 14px; }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              font-variant-numeric: tabular-nums;
+            }
+            th {
+              padding: 0 4px 8px 0;
+              border-bottom: 1px solid var(--divider-color);
+              text-align: left;
+              font-size: 0.65rem;
+              font-weight: 700;
+              letter-spacing: 0.12em;
+              text-transform: uppercase;
+              color: var(--secondary-text-color);
+            }
+            td {
+              padding: 10px 4px 10px 0;
+              border-bottom: 1px solid color-mix(in srgb, var(--divider-color) 45%, transparent);
+              font-size: 0.98rem;
+              white-space: nowrap;
+            }
+            tr:last-child td { border-bottom: none; }
+            td em {
+              font-style: normal;
+              font-size: 0.8rem;
+              color: var(--secondary-text-color);
+              margin-left: 4px;
+            }
+            code {
+              font-family: inherit;
+              font-size: 0.75rem;
+              font-weight: 700;
+              white-space: nowrap;
+              padding: 3px 9px;
+              border-radius: 999px;
+              background: #00953b;
+              color: #fff;
+              border: 1px solid transparent;
+            }
+            strong code { background: var(--error-color); color: #fff; }
+            del { text-decoration: none; }
+            del code { background: var(--warning-color); color: #111; }
+            em code {
+              background: transparent;
+              color: var(--secondary-text-color);
+              border-color: var(--divider-color);
+              font-weight: 600;
+              font-size: 0.75rem;
+              margin-left: 0;
+            }
+            p { margin: 0; color: var(--secondary-text-color); }
 
     # Line-level notices. Hidden when there are none, and it leads with
     # whether any of them name a train you might actually be on -- three
@@ -427,7 +768,7 @@ views:
         {%- set advisories = 'sensor.' ~ p ~ '_planned_advisories' -%}
         {%- set mine = state_attr(live, 'affects_my_trains') or [] -%}
         {%- if mine %}
-        **Names your train{{ 's' if mine | count > 1 else '' }}: {{ mine | join(', ') }}**
+        **`Names your train{{ 's' if mine | count > 1 else '' }} {{ mine | join(', ') }}`**
         {% endif -%}
         {%- for message in state_attr(live, 'messages') or [] %}
         🚨 {{ message }}
@@ -445,5 +786,27 @@ views:
           entity: sensor.new_york_penn_station_to_short_hills_station_planned_advisories
           above: 0
       card_mod:
-        style: |
-          ha-markdown p { margin: 0 0 10px 0; line-height: 1.5; }
+        style:
+          .: |
+            ha-card { border-radius: 16px; }
+            .card-header {
+              padding: 14px 16px 0;
+              font-size: 0.7rem;
+              font-weight: 700;
+              letter-spacing: 0.12em;
+              text-transform: uppercase;
+              color: var(--secondary-text-color);
+            }
+          ha-markdown $: |
+            :host { display: block; padding: 10px 16px 14px; }
+            p { margin: 0 0 12px; line-height: 1.5; font-size: 0.9rem; }
+            p:last-child { margin-bottom: 0; }
+            code {
+              font-family: inherit;
+              font-size: 0.75rem;
+              font-weight: 700;
+              padding: 3px 9px;
+              border-radius: 999px;
+              background: var(--error-color);
+              color: #fff;
+            }

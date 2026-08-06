@@ -469,8 +469,19 @@ commute. Copy it into a new dashboard's raw configuration editor, change the
 prefix on the first line of each card, and point the blueprint's **Open when
 tapped** at it. Instructions are in the file's header.
 
-Uses [card-mod][card-mod] for the type sizing. Without it the cards still
-render, just at uniform size.
+Uses [card-mod][card-mod] for the type sizing and the status pills. Without it
+every card still renders, just as undifferentiated body text.
+
+Note the selector form: card-mod styles reach a markdown card's contents only
+through `ha-markdown $:`, because `ha-markdown` is a Lit element and its
+rendered HTML sits inside its shadow root. The plain `style: |` string form
+styles the card, not the markdown in it, which fails silently.
+
+Since a markdown card cannot carry class names, pill colour is chosen by how
+the markdown nests around the backticks -- plain `` `code` `` for the neutral
+fact, `**`bold`**` for red, `~~`struck`~~` for amber, `*`italic`*` for a muted
+outline. The strikethrough is undone in CSS; it is a selector, not a
+decoration.
 
 ### Or write it yourself
 
