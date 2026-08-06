@@ -420,6 +420,23 @@ The countdown is a `chronometer`, which ticks on the phone. That is why the
 automation does not push once a minute — only a real change needs sending, and
 iOS rate-limits Live Activity updates.
 
+**Picking the phone.** The **Phone** input is a picker over the `notify`
+entities the companion app creates, e.g. `notify.davids_iphone`. What the
+blueprint actually calls is the older `notify.mobile_app_davids_iphone` action
+for the same device, derived from what you pick.
+
+That indirection is forced, not stylistic. A notify entity's `send_message`
+takes a message and a title and nothing else — there is nowhere to put the
+`data` payload that carries `live_activity`, the tag, or the dismiss action.
+The entity is the thing worth *picking*; the action is the only thing that can
+be *called*. Typing the action name in directly still works, so automations
+built before this became a picker keep running.
+
+One caveat: both names are slugified from the same device name at app
+registration, which is why one is the other with a prefix. Rename the notify
+entity afterwards and the derivation stops resolving, because the action name
+was fixed at registration and does not follow.
+
 **Dismissing it.** Live Activities cannot carry buttons, and iOS does not
 report when you swipe one away, so a plain notification with a **Dismiss**
 button is sent alongside. Tapping it ends the activity and stays quiet for the
