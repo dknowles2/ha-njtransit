@@ -69,6 +69,24 @@ def no_alerts() -> dict[str, object]:
     return {"data": {"getSystemStatus": []}}
 
 
+def alert_saying(message: str) -> dict[str, object]:
+    """Return a system-status payload carrying one live incident."""
+    return {
+        "data": {
+            "getSystemStatus": [
+                {
+                    "abbreviation": "MNE",
+                    "message": message,
+                    "msg_richtext": message,
+                    "msg_url": "",
+                    "service": "Rail",
+                    "advisoryAlert": "0",
+                }
+            ]
+        }
+    }
+
+
 class TestTheReasonThisExists:
     """Cross-feed correlation."""
 
@@ -106,6 +124,57 @@ class TestTheReasonThisExists:
         assert state is not None
         assert state.state == "on", "an alert naming an on-time train was ignored"
         assert "6607" in state.attributes["affected_trains"]
+
+    async def test_matches_an_alert_that_writes_the_train_id_in_lower_case(
+        self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+    ) -> None:
+        """An alert naming `a624` is about the board's `A624`.
+
+        The extractor matches `train` case-insensitively but returns whatever
+        the prose wrote, so before the IDs were normalized this comparison
+        failed and the alert vanished -- no reason, no affected train, no
+        error. Only lines with lettered IDs can hit it, which is why every
+        numeric fixture in this suite passed straight through it.
+        """
+        install_api_mock(
+            aioclient_mock,
+            {
+                "TrainDepartureScreens": board_with([row("A624", status="in 5 Min")]),
+                "SystemStatus": alert_saying("train a624 is operating 20 min late"),
+                "TripPlannerSchedule": {"data": {"getTripPlannerSchedule": None}},
+            },
+        )
+        await setup_entry(hass, make_entry())
+
+        state = hass.states.get(ENTITY)
+        assert state is not None
+        assert state.state == "on", "a lower-case alert lost its train"
+        assert "A624" in state.attributes["affected_trains"]
+
+    async def test_matches_an_alert_when_the_board_writes_the_id_in_lower_case(
+        self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+    ) -> None:
+        """The mirror case, and the reason both sides are normalized.
+
+        Normalizing only the alert side would leave this failing. The board and
+        the alert feed are different upstream systems, and one casing mismatch
+        between them has already been found -- assuming the other direction is
+        safe would be an assumption, not a finding.
+        """
+        install_api_mock(
+            aioclient_mock,
+            {
+                "TrainDepartureScreens": board_with([row("a624", status="in 5 Min")]),
+                "SystemStatus": alert_saying("Train A624 is operating 20 min late"),
+                "TripPlannerSchedule": {"data": {"getTripPlannerSchedule": None}},
+            },
+        )
+        await setup_entry(hass, make_entry())
+
+        state = hass.states.get(ENTITY)
+        assert state is not None
+        assert state.state == "on", "a lower-case board id lost its alert"
+        assert "a624" in state.attributes["affected_trains"]
 
     async def test_quiet_when_both_feeds_are_clean(
         self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker

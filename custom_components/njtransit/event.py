@@ -215,7 +215,7 @@ class TrainEvent(NJTransitEntity, EventEntity):
             # minutes is not an event, and `None` means no realtime data yet,
             # which is not the same as on time.
             over_threshold=delay is not None and delay >= self._threshold,
-            alerted=departure.train_id in alerted,
+            alerted=departure.train_id.upper() in alerted,
             # A cancelled train is never getting a track, and saying so adds
             # nothing to having been told it is cancelled.
             track_overdue=(

@@ -164,6 +164,15 @@ class TestExtractTrainIds:
         """Trenton's board carries Amtrak services like A79."""
         assert extract_train_ids("Amtrak train A79 is delayed") == {"A79"}
 
+    def test_upper_cases_what_the_prose_wrote(self) -> None:
+        """The pattern ignores case; `findall` does not.
+
+        Every consumer checks these against a board train ID, so returning the
+        prose's own casing meant an alert about `a624` silently failed to match
+        the board's `A624`.
+        """
+        assert extract_train_ids("train a624 is late") == {"A624"}
+
     @pytest.mark.parametrize("message", ["", None, "Track work this weekend"])
     def test_line_level_alerts_name_no_train(self, message: str | None) -> None:
         assert extract_train_ids(message) == frozenset()

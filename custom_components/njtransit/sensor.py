@@ -130,7 +130,7 @@ def _details(
         "alerts": [
             alert.message
             for alert in alerts or ()
-            if departure.train_id in alert.train_ids
+            if departure.train_id.upper() in alert.train_ids
         ],
     }
 
@@ -373,8 +373,14 @@ class AlertSensor(NJTransitEntity, SensorEntity):
         matching = self._matching()
         named = {train_id for alert in matching for train_id in alert.train_ids}
         board = self.coordinator.data
+        # Both sides upper-cased before intersecting, the same convention
+        # favourite matching uses. `extract_train_ids` normalizes the alert
+        # side; the board side is normalized here because nothing guarantees
+        # upstream is consistent between the two feeds either.
         ours = (
-            {departure.train_id for departure in board.departures} if board else set()
+            {departure.train_id.upper() for departure in board.departures}
+            if board
+            else set()
         )
 
         return {
