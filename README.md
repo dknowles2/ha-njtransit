@@ -420,6 +420,28 @@ The countdown is a `chronometer`, which ticks on the phone. That is why the
 automation does not push once a minute — only a real change needs sending, and
 iOS rate-limits Live Activity updates.
 
+**Once you are aboard.** When the train you were waiting for leaves, the
+activity stops counting down to a departure that has happened and starts
+counting down to your arrival, showing how many stops are left and the next
+station. It clears when you get there rather than a couple of minutes after
+departure.
+
+That needs the commute's **Stops away** sensor, derived from the favourite
+sensor unless you set it explicitly. It is the only thing that can cover this
+stretch: the departure board drops a train the moment it leaves, and
+`sensor.<commute>_next_favorite` has already moved on to whichever favourite
+comes next — not the train you are sitting on.
+
+It cannot tell whether you actually boarded. Home Assistant cannot see which
+platform you are standing on, so it follows the train you were waiting for; if
+you watched it go, use **Dismiss**.
+
+The arrival estimate is scheduled arrival plus however late the train is
+running, worked out from the stop list alone — a stop that is overdue puts a
+floor under the delay. It is a lower bound on purpose: claiming a train will
+make up time is a guess, and this is a number someone reads while deciding
+whether to run for a connection.
+
 **Picking the phone.** The **Phone** input is a picker over the `notify`
 entities the companion app creates, e.g. `notify.davids_iphone`. What the
 blueprint actually calls is the older `notify.mobile_app_davids_iphone` action

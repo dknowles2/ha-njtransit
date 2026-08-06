@@ -8,6 +8,7 @@ questions and the second one is easy to answer wrongly.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime
 
 import pytest
@@ -122,3 +123,60 @@ def test_an_empty_run_answers_without_raising() -> None:
     assert train.next_stop is None
     assert train.stops_until("Anywhere") is None
     assert train.due_at("Anywhere") is None
+
+
+class TestArrivalEstimate:
+    """When the train gets there, once the board can no longer say.
+
+    A departed train is dropped from the departure board entirely, and a
+    terminal never published a delay in the first place (SPEC 3.8). Between
+    boarding and arriving, the stop list is the only account of the journey
+    left, so the estimate has to come out of it alone.
+    """
+
+    def test_a_train_running_to_time_is_not_late(self) -> None:
+        """Next stop still ahead of the clock, so nothing is known to be lost."""
+        train = run()
+        assert train.minutes_late(CAPTURED_AT) == 0
+        assert train.eta_at("New York Penn Station", CAPTURED_AT) == datetime(
+            2026, 8, 4, 9, 12, tzinfo=TZ
+        )
+
+    def test_an_overdue_next_stop_puts_a_floor_under_the_delay(self) -> None:
+        """Maplewood was due at 8:32 and the train has not reached it.
+
+        At 8:40 that is eight minutes nobody can argue with, and it is the
+        only lateness signal available -- the alternative is reporting a
+        schedule that stopped being true.
+        """
+        now = datetime(2026, 8, 4, 8, 40, tzinfo=TZ)
+        train = run()
+        assert train.minutes_late(now) == 8
+        assert train.eta_at("New York Penn Station", now) == datetime(
+            2026, 8, 4, 9, 20, tzinfo=TZ
+        )
+
+    def test_running_early_is_reported_as_on_time(self) -> None:
+        """A lower bound, deliberately.
+
+        Claiming a train will make up time is a guess, and this number is an
+        arrival estimate someone reads while deciding whether to run.
+        """
+        now = datetime(2026, 8, 4, 8, 20, tzinfo=TZ)
+        assert run().minutes_late(now) == 0
+
+    def test_a_station_off_the_route_has_no_estimate(self) -> None:
+        assert run().eta_at("Trenton Station", CAPTURED_AT) is None
+
+    def test_an_arrived_train_has_no_next_stop_to_measure(self) -> None:
+        """Every stop behind it, so there is nothing left to be overdue for.
+
+        `None` rather than 0: the journey is over, which is not the same
+        claim as it having finished on time.
+        """
+        train = TrainRun(
+            train_id="6320",
+            stops=tuple(replace(stop, departed=True) for stop in run().stops),
+        )
+        assert train.minutes_late(CAPTURED_AT) is None
+        assert train.eta_at("New York Penn Station", CAPTURED_AT) is None

@@ -10,6 +10,7 @@ from datetime import datetime
 from typing import Any
 
 import pytest
+from freezegun.api import FrozenDateTimeFactory
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.test_util.aiohttp import (
     AiohttpClientMocker,
@@ -41,6 +42,10 @@ from .test_init import NY_PENN, make_entry, setup_entry
 from .test_parsing import at
 
 PREFIX = "sensor.short_hills_station_to_new_york_penn_station"
+
+# The moment the recorded stop list was captured: train 6320 three stops in,
+# Short Hills behind it, New York Penn still 22 minutes ahead.
+RUN_CAPTURED_AT = datetime(2026, 8, 4, 8, 28, tzinfo=TZ)
 
 
 def departure(
@@ -458,7 +463,7 @@ class TestProgress:
             if stops is None
             else TrainRun(
                 train_id="6320",
-                stops=parse_stops(stops, datetime(2026, 8, 4, 8, 28, tzinfo=TZ)),
+                stops=parse_stops(stops, RUN_CAPTURED_AT),
             )
         )
 
@@ -478,6 +483,95 @@ class TestProgress:
         assert state.attributes["next_stop"] == "Maplewood"
         assert state.attributes["train_id"] == "6320"
         assert state.attributes["due_at_destination"] is not None
+
+    async def test_reports_an_arrival_estimate_once_aboard(
+        self,
+        hass: HomeAssistant,
+        aioclient_mock: AiohttpClientMocker,
+        freezer: FrozenDateTimeFactory,
+    ) -> None:
+        """Past the origin, still short of the destination: you are on it.
+
+        This is the window the departure board cannot cover at all -- it drops
+        a train the moment it leaves -- so these attributes are the only
+        account of the journey while it is happening.
+        """
+        install_api_mock(aioclient_mock)
+        await setup_entry(hass, make_entry())
+        freezer.move_to(RUN_CAPTURED_AT)
+        self._install(hass, load_payload("stop_list_6320", "getTrainStopList"))
+        await hass.async_block_till_done()
+
+        state = hass.states.get(f"{PREFIX}_stops_away")
+        assert state is not None
+        assert state.attributes["on_board"] is True
+        assert state.attributes["stops_to_destination"] == 5
+        assert state.attributes["minutes_late"] == 0
+        assert state.attributes["eta_at_destination"] == "2026-08-04T09:12:00-04:00"
+
+    async def test_lateness_is_not_undone_by_passing_the_late_stop(
+        self,
+        hass: HomeAssistant,
+        aioclient_mock: AiohttpClientMocker,
+        freezer: FrozenDateTimeFactory,
+    ) -> None:
+        """The evidence of being late is destroyed by arriving.
+
+        A stop is only visibly overdue while the train has not reached it, and
+        the stop list carries no actual times -- so the moment a late stop
+        flips to departed, a stateless estimate snaps back to "on time". On
+        the 22-minute run from Newark Broad Street into New York Penn there is
+        nothing left to be overdue for, so a train ten minutes down would have
+        promised a punctual arrival for the whole final approach.
+        """
+        install_api_mock(aioclient_mock)
+        await setup_entry(hass, make_entry())
+
+        # Overdue at Maplewood by eight minutes, and seen that way.
+        freezer.move_to(datetime(2026, 8, 4, 8, 40, tzinfo=TZ))
+        self._install(hass, load_payload("stop_list_6320", "getTrainStopList"))
+        await hass.async_block_till_done()
+        overdue = hass.states.get(f"{PREFIX}_stops_away")
+        assert overdue is not None
+        assert overdue.attributes["minutes_late"] == 8
+
+        # Maplewood now behind it, and the next stop is not due yet.
+        stops = load_payload("stop_list_6320", "getTrainStopList")
+        for stop in stops[:4]:
+            stop["departed"] = True
+        self._install(hass, stops)
+        await hass.async_block_till_done()
+
+        state = hass.states.get(f"{PREFIX}_stops_away")
+        assert state is not None
+        assert state.attributes["minutes_late"] == 8, "the delay was forgotten"
+        assert state.attributes["eta_at_destination"] == "2026-08-04T09:20:00-04:00"
+
+    async def test_is_not_aboard_while_the_train_is_still_coming(
+        self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+    ) -> None:
+        """The origin still ahead of the train means you are on the platform.
+
+        Worth pinning separately: `on_board` decides whether the Live Activity
+        counts down to a departure or to an arrival, and getting it backwards
+        would tell someone waiting at Short Hills that they had arrived.
+        """
+        install_api_mock(aioclient_mock)
+        await setup_entry(hass, make_entry())
+        self._install(
+            hass,
+            [
+                {"name": "Summit", "time": "8:20 AM", "departed": True},
+                {"name": "Short Hills", "time": "8:31 AM", "departed": False},
+                {"name": "New York Penn Station", "time": "9:12 AM", "departed": False},
+            ],
+        )
+        await hass.async_block_till_done()
+
+        state = hass.states.get(f"{PREFIX}_stops_away")
+        assert state is not None
+        assert state.attributes["on_board"] is False
+        assert state.state == "0"
 
     async def test_unknown_without_a_tracked_train(
         self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker

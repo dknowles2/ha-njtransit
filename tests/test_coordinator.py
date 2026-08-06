@@ -232,13 +232,45 @@ class TestProgressCoordinator:
         session = mocker.create_session(asyncio.get_running_loop())
         try:
             coordinator = ProgressCoordinator(
-                hass, NJTransitClient(session), lambda: None, timedelta(minutes=1)
+                hass,
+                NJTransitClient(session),
+                lambda _following: None,
+                timedelta(minutes=1),
             )
             await coordinator.async_refresh()
             assert coordinator.data is None
             assert "TrainStopList" not in called
         finally:
             await session.close()
+
+    async def test_the_chooser_is_told_which_run_is_being_followed(
+        self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+    ) -> None:
+        """Without it the chooser cannot stay with a departed train.
+
+        The board drops a train the moment it leaves, so a chooser that only
+        sees the board would hand the tracker to the next favourite while
+        someone is sitting on the previous one.
+        """
+        seen: list[str | None] = []
+
+        def pick(following: Any) -> str | None:
+            seen.append(following.train_id if following else None)
+            return "6320"
+
+        mocker = AiohttpClientMocker()
+        install_api_mock(mocker)
+        session = mocker.create_session(asyncio.get_running_loop())
+        try:
+            coordinator = ProgressCoordinator(
+                hass, NJTransitClient(session), pick, timedelta(minutes=1)
+            )
+            await coordinator.async_refresh()
+            await coordinator.async_refresh()
+        finally:
+            await session.close()
+
+        assert seen == [None, "6320"], "the second poll forgot what it was following"
 
     async def test_a_train_not_running_today_is_not_a_failure(
         self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
@@ -251,7 +283,10 @@ class TestProgressCoordinator:
         session = mocker.create_session(asyncio.get_running_loop())
         try:
             coordinator = ProgressCoordinator(
-                hass, NJTransitClient(session), lambda: "9999", timedelta(minutes=1)
+                hass,
+                NJTransitClient(session),
+                lambda _following: "9999",
+                timedelta(minutes=1),
             )
             await coordinator.async_refresh()
             assert coordinator.last_update_success is True
