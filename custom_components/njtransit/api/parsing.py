@@ -185,12 +185,20 @@ def extract_train_ids(message: str | None) -> frozenset[str]:
     Alert bodies name trains inconsistently -- ``train 6612`` and
     ``train #6607`` both occur -- and often suggest a substitute, which is
     excluded so it is not reported as disrupted.
+
+    Upper-cased, because the pattern matches case-insensitively but ``findall``
+    returns whatever the prose wrote. Every consumer checks these against a
+    board train ID, so an alert saying ``train a624`` about the board's ``A624``
+    used to match nothing and vanish -- out of the disruption reasons, the
+    per-departure alerts, and the ``alerted`` event, with no error anywhere.
+    Only lines carrying lettered IDs can hit it, which is Amtrak at Trenton and
+    Newark, and is exactly the kind of gap that stays hidden.
     """
     if not message:
         return frozenset()
 
     head = re.split(_SUBSTITUTE_MARKER, message, flags=re.IGNORECASE)[0]
-    return frozenset(_TRAIN_RE.findall(head))
+    return frozenset(found.upper() for found in _TRAIN_RE.findall(head))
 
 
 def expand_line(abbreviation: str) -> frozenset[str]:

@@ -122,7 +122,7 @@ class DisruptionSensor(NJTransitEntity, BinarySensorEntity):
             # Only reached when the board looks fine, which is exactly the
             # case a board-only integration gets wrong.
             for alert in alerts:
-                if departure.train_id in alert.train_ids:
+                if departure.train_id.upper() in alert.train_ids:
                     reasons.append(
                         f"Train {departure.train_id} ({when}): {alert.message}"
                     )
@@ -150,7 +150,7 @@ class DisruptionSensor(NJTransitEntity, BinarySensorEntity):
                 departure.delay_minutes is not None
                 and departure.delay_minutes >= self._threshold
             )
-            or any(departure.train_id in alert.train_ids for alert in alerts)
+            or any(departure.train_id.upper() in alert.train_ids for alert in alerts)
         ]
 
         return {

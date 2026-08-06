@@ -85,6 +85,16 @@ run "favourite matching becomes case-sensitive" \
   "departure.train_id.upper() in favorites" \
   "departure.train_id in favorites"
 
+run "alert train ids keep the prose's casing" \
+  custom_components/njtransit/api/parsing.py \
+  "found.upper() for found in _TRAIN_RE.findall(head)" \
+  "found for found in _TRAIN_RE.findall(head)"
+
+run "alert matching stops normalizing the board id" \
+  custom_components/njtransit/binary_sensor.py \
+  "if departure.train_id.upper() in alert.train_ids:" \
+  "if departure.train_id in alert.train_ids:"
+
 run "status_text drops the delay" \
   custom_components/njtransit/api/models.py \
   'return f"{self.delay_minutes} min late"' 'return "late"'
