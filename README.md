@@ -445,17 +445,29 @@ if you want the tap to land somewhere useful — see below.
 An example phone-shaped dashboard, built to be read one-handed on a platform
 rather than to be comprehensive:
 
-- how many minutes until your favourite train, in the largest type on the page
+- why your commute is broken, at the top, and nothing at all when it is not
+- how many minutes until your train, in the largest type on the page
 - its track, status and busyness underneath
 - how far away it currently is, and its next stop
-- service notices, only when there are any
-- the next three departures, as the fallback when your train is not the answer
+- the next three departures
+- service notices, only when there are any, led by whether one names a train
+  you might actually be on
+
+Two things it does that a list of entities would not. It falls back to the next
+departure when your favourite is not on the board, so it is worth opening at
+any hour rather than being a wall of apology for the twenty hours a day you are
+not commuting. And it reports a missing track as *overdue* inside eight
+minutes, rather than as "not yet" — New York Penn posts tracks a median of nine
+minutes out with an interquartile range of 0.2 minutes, so a track that has not
+appeared by then is a deviation from a schedule, not a wait. It only says so
+when other trains on the board have their tracks, which is the same test the
+`track_overdue` event uses.
 
 It is an example rather than something the integration installs, because
 dashboards are personal and because the entity ids are specific to your
 commute. Copy it into a new dashboard's raw configuration editor, change the
-station names in the entity ids, and point the blueprint's **Open when tapped**
-at it. Instructions are in the file's header.
+prefix on the first line of each card, and point the blueprint's **Open when
+tapped** at it. Instructions are in the file's header.
 
 Uses [card-mod][card-mod] for the type sizing. Without it the cards still
 render, just at uniform size.

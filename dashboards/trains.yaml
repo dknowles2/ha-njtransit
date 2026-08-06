@@ -3,7 +3,7 @@
 # This is an *example*, not something the integration installs. Tapping a Live
 # Activity can only open a dashboard that already exists, so the blueprint's
 # "Open when tapped" input is empty by default and this file is what fills the
-# gap -- copy it, change the entity ids, and point the input at it.
+# gap -- copy it, change the two prefixes, and point the input at it.
 #
 # To install: Settings -> Dashboards -> Add dashboard -> New dashboard from
 # scratch, give it the URL `nj-trains`, then open its raw configuration editor
@@ -13,13 +13,31 @@
 # outbound automation and `/nj-trains/evening` on the return one. The view
 # paths are what those URLs refer to, so renaming a view breaks the link.
 #
-# The entity ids below are for a Short Hills <-> New York Penn commute.
-# Yours will differ: every one of them is `sensor.<origin>_to_<destination>_*`,
-# slugified from the station titles.
+# ADAPTING THIS: every card builds its entity ids from a `p` set on its first
+# line, so there is exactly one string to change per card, and the two views
+# are identical apart from it. The prefix is the slugified commute name --
+# `short_hills_station_to_new_york_penn_station` here. Check yours in
+# Developer tools -> States by searching for `_next_departure`.
 #
 # Requires card-mod (available in HACS) for the type sizing. Without it the
 # cards still render, just at uniform size -- the countdown stops being
 # readable at arm's length, which is most of the point.
+#
+# What each view shows, in the order it matters on a platform:
+#
+#   1. Why your commute is broken, when it is. Hidden otherwise.
+#   2. One train, big. Your favourite when it is on the board, and the next
+#      departure when it is not, so the card is never a wall of apology.
+#   3. The next three departures.
+#   4. Service notices, hidden when there are none.
+#
+# The track line is the part worth understanding. New York Penn posts NJ
+# Transit tracks a median of 9 minutes before departure with an interquartile
+# range of 0.2 minutes -- it is a scheduled process, not a tendency. So a
+# missing track inside 8 minutes is not "not yet", it is a deviation, and the
+# card says so. It only says so when *other* trains on the board have their
+# tracks, which is the same test the integration's `track_overdue` event uses:
+# a station that posts nothing tells you nothing.
 
 views:
 - title: Morning
@@ -30,72 +48,190 @@ views:
   sections:
   - type: grid
     cards:
+
+    # Leave now, and here is why. Nothing at all when the commute is fine.
     - type: markdown
       content: |-
-        {%- set s = 'sensor.short_hills_station_to_new_york_penn_station_next_favorite' -%}
-        {%- set p = 'sensor.short_hills_station_to_new_york_penn_station_stops_away' -%}
+        {%- set p = 'short_hills_station_to_new_york_penn_station' -%}
+        {%- for reason in state_attr('binary_sensor.' ~ p ~ '_commute_disrupted', 'reasons') or [] %}
+        **{{ reason }}**
+        {% endfor -%}
+      visibility:
+      - condition: state
+        entity: binary_sensor.short_hills_station_to_new_york_penn_station_commute_disrupted
+        state: "on"
+      card_mod:
+        style: |
+          ha-card {
+            background: rgba(var(--rgb-error-color), 0.12);
+            border: 1px solid var(--error-color);
+          }
+          ha-markdown p { margin: 0 0 6px 0; line-height: 1.5; }
+
+    # The one train you are actually catching.
+    - type: markdown
+      content: |-
+        {%- set p = 'short_hills_station_to_new_york_penn_station' -%}
+        {%- set nothing = ['unknown', 'unavailable', 'none', ''] -%}
+        {%- set fav = 'sensor.' ~ p ~ '_next_favorite' -%}
+        {%- set prog = 'sensor.' ~ p ~ '_stops_away' -%}
+        {%- set rows = ['sensor.' ~ p ~ '_next_departure',
+                        'sensor.' ~ p ~ '_departure_2',
+                        'sensor.' ~ p ~ '_departure_3'] -%}
+        {#- Follow the favourite when it is on the board, otherwise the next
+            train out. A dashboard that says "nothing to show" for the twenty
+            hours a day you are not commuting is not worth opening. -#}
+        {%- set tracking = states(fav) not in nothing -%}
+        {%- set s = fav if tracking else rows[0] -%}
         {%- set t = states(s) -%}
-        {%- if t in ['unknown', 'unavailable', 'none', ''] -%}
-        {%- set favs = state_attr(s, 'favorites') or [] -%}
-        {%- if not favs -%}
-        ### No favourite set
+        {%- if t in nothing -%}
+        ### Nothing on the board
 
-        Pick **Favorite trains** in this commute's options.
-        {%- else -%}
-        ### Not on the board yet
-
-        Waiting for {{ favs | join(', ') }}. The board only reaches a couple of
-        hours ahead, so an evening train will not appear in the morning.
-        {%- endif -%}
+        No departures in the next couple of hours.
         {%- else -%}
         {%- set mins = ((as_timestamp(t) - as_timestamp(now())) / 60) | round(0) | int -%}
         {%- set track = state_attr(s, 'track') -%}
+        {#- Other trains having tracks is what makes a missing one mean
+            something. Same test the integration uses before it will call a
+            track overdue. -#}
+        {%- set posting = rows | map('state_attr', 'track') | select('string') | list | count > 0 -%}
         {%- set status = state_attr(s, 'status_text') -%}
         {%- set busy = {'moderate': 'Filling up', 'heavy': 'Busy'}.get(state_attr(s, 'crowding'), '') -%}
         # {{ 'Departed' if mins < 0 else (mins ~ ' min') }}
 
         ## {{ as_timestamp(t) | timestamp_custom('%-I:%M %p') }} · Train {{ state_attr(s, 'train_id') }}
 
-        {% if track %}**Track {{ track }}**{% else %}*Track not posted yet*{% endif %}
-        {%- if status %} · {{ status }}{% endif %}
+        {% if track %}**Track {{ track }}**
+        {%- elif not posting %}*Track not posted*
+        {%- elif mins <= 8 %}⚠️ **Track overdue**
+        {%- elif mins <= 11 %}*Track due any minute*
+        {%- elif mins <= 25 %}*Track due in ~{{ mins - 9 }} min*
+        {%- else %}*Track not posted yet*{% endif -%}
+        {%- if status %} · {{ status }}{% endif -%}
         {%- if busy %} · {{ busy }}{% endif %}
 
-        {%- set away = states(p) -%}
-        {%- if away not in ['unknown', 'unavailable', 'none', ''] %}
+        {#- Where to stand, and only when standing somewhere else would help.
+            "Front light · Middle light · Back light" is three facts and no
+            decision. -#}
+        {%- set rank = {'light': 0, 'moderate': 1, 'heavy': 2} -%}
+        {%- set ns = namespace(best=none, low=9, high=-1) -%}
+        {%- for car in state_attr(s, 'cars') or [] if car.crowding in rank and car.position -%}
+        {%- set r = rank[car.crowding] -%}
+        {%- if r < ns.low %}{% set ns.low = r %}{% set ns.best = car.position %}{% endif -%}
+        {%- if r > ns.high %}{% set ns.high = r %}{% endif -%}
+        {%- endfor -%}
+        {%- if ns.best and ns.high > ns.low %}
+
+        {{ ns.best | title }} cars are emptier
+        {%- endif -%}
+
+        {#- Alerts that name this train by number, as opposed to the line-level
+            notices further down. -#}
+        {%- for message in state_attr(s, 'alerts') or [] %}
+
+        🚨 {{ message }}
+        {%- endfor -%}
+
+        {%- if not tracking %}
+        {%- set favorites = state_attr(fav, 'favorites') or [] %}
+
+        {% if favorites %}*Waiting for {{ favorites | join(', ') }} — not on the board yet.*
+        {%- else %}*No favourite set. Pick one in this commute's options.*{% endif -%}
+        {%- endif -%}
+
+        {#- Stops away only follows the favourite, so it is only ever news
+            when we are following one. -#}
+        {%- if tracking -%}
+        {%- set away = states(prog) -%}
+        {%- if away not in nothing %}
 
         ---
 
         {% if away | int == 0 %}Arriving now{% else %}**{{ away }}** stops away{% endif %}
-        {%- if state_attr(p, 'next_stop') %} · next {{ state_attr(p, 'next_stop') }}{% endif %}
+        {%- if state_attr(prog, 'next_stop') %} · next {{ state_attr(prog, 'next_stop') }}{% endif %}
+        {%- endif -%}
         {%- endif -%}
         {%- endif -%}
       card_mod:
-        style: |2
+        style: |
+          ha-markdown { padding: 4px 2px !important; }
+          ha-markdown h1 {
+            font-size: 3.2em;
+            font-weight: 700;
+            line-height: 1;
+            margin: 0 0 4px 0;
+            letter-spacing: -0.02em;
+          }
+          ha-markdown h2 {
+            font-size: 1.05em;
+            font-weight: 500;
+            color: var(--secondary-text-color);
+            margin: 0 0 10px 0;
+          }
+          ha-markdown h3 { font-size: 1.2em; margin: 0 0 6px 0; }
+          ha-markdown hr {
+            border: none;
+            border-top: 1px solid var(--divider-color);
+            margin: 12px 0 10px 0;
+          }
+          ha-markdown p { margin: 0 0 6px 0; line-height: 1.5; }
+          ha-markdown p:last-child { margin-bottom: 0; }
 
-                        ha-markdown {
-                          padding: 4px 2px !important;
-                        }
-                        ha-markdown h1 {
-                          font-size: 3.2em;
-                          font-weight: 700;
-                          line-height: 1;
-                          margin: 0 0 4px 0;
-                          letter-spacing: -0.02em;
-                        }
-                        ha-markdown h2 {
-                          font-size: 1.05em;
-                          font-weight: 500;
-                          color: var(--secondary-text-color);
-                          margin: 0 0 10px 0;
-                        }
-                        ha-markdown hr {
-                          border: none;
-                          border-top: 1px solid var(--divider-color);
-                          margin: 12px 0 10px 0;
-                        }
-                        ha-markdown p { margin: 0; line-height: 1.5; }
-    - type: conditional
-      conditions:
+    - type: markdown
+      title: Next departures
+      content: |-
+        {%- set p = 'short_hills_station_to_new_york_penn_station' -%}
+        {%- set nothing = ['unknown', 'unavailable', 'none', ''] -%}
+        {%- set rows = ['sensor.' ~ p ~ '_next_departure',
+                        'sensor.' ~ p ~ '_departure_2',
+                        'sensor.' ~ p ~ '_departure_3'] -%}
+        {%- set posting = rows | map('state_attr', 'track') | select('string') | list | count > 0 -%}
+        {%- set ns = namespace(out=[]) -%}
+        {%- for row in rows -%}
+        {%- set t = states(row) -%}
+        {%- if t not in nothing -%}
+        {%- set mins = ((as_timestamp(t) - as_timestamp(now())) / 60) | round(0) | int -%}
+        {%- set track = state_attr(row, 'track') -%}
+        {%- set bits = ['**' ~ (as_timestamp(t) | timestamp_custom('%-I:%M')) ~ '**',
+                        mins ~ ' min', state_attr(row, 'train_id')] -%}
+        {%- if track -%}
+        {%- set bits = bits + ['Trk ' ~ track] -%}
+        {%- elif posting and mins <= 8 -%}
+        {%- set bits = bits + ['⚠️ no track'] -%}
+        {%- endif -%}
+        {%- if state_attr(row, 'status_text') -%}
+        {%- set bits = bits + [state_attr(row, 'status_text')] -%}
+        {%- endif -%}
+        {%- set ns.out = ns.out + [bits | join('  ·  ')
+            ~ ('  ⭐' if state_attr(row, 'favorite') else '')] -%}
+        {%- endif -%}
+        {%- endfor -%}
+        {{ ns.out | join('\n\n') if ns.out else '*Nothing scheduled.*' }}
+      card_mod:
+        style: |
+          ha-markdown p { margin: 0 0 6px 0; line-height: 1.6; }
+
+    # Line-level notices. Hidden when there are none, and it leads with
+    # whether any of them name a train you might actually be on -- three
+    # paragraphs about the Gladstone Branch and one about your 6:31 look
+    # identical until something says which is which.
+    - type: markdown
+      title: Service notices
+      content: |-
+        {%- set p = 'short_hills_station_to_new_york_penn_station' -%}
+        {%- set live = 'sensor.' ~ p ~ '_service_alerts' -%}
+        {%- set advisories = 'sensor.' ~ p ~ '_planned_advisories' -%}
+        {%- set mine = state_attr(live, 'affects_my_trains') or [] -%}
+        {%- if mine %}
+        **Names your train{{ 's' if mine | count > 1 else '' }}: {{ mine | join(', ') }}**
+        {% endif -%}
+        {%- for message in state_attr(live, 'messages') or [] %}
+        🚨 {{ message }}
+        {% endfor -%}
+        {%- for message in state_attr(advisories, 'messages') or [] %}
+        ℹ️ {{ message }}
+        {% endfor -%}
+      visibility:
       - condition: or
         conditions:
         - condition: numeric_state
@@ -104,48 +240,10 @@ views:
         - condition: numeric_state
           entity: sensor.short_hills_station_to_new_york_penn_station_planned_advisories
           above: 0
-      card:
-        type: markdown
-        title: Service notices
-        content: |-
-          {%- set live = 'sensor.short_hills_station_to_new_york_penn_station_service_alerts' -%}
-          {%- set adv = 'sensor.short_hills_station_to_new_york_penn_station_planned_advisories' -%}
-          {%- for m in state_attr(live, 'messages') or [] %}
-          🚨 {{ m }}
-          {% endfor -%}
-          {%- for m in state_attr(adv, 'messages') or [] %}
-          ℹ️ {{ m }}
-          {% endfor -%}
-        card_mod:
-          style: |2
-
-                              ha-markdown p { margin: 0 0 10px 0; line-height: 1.5; }
-    - type: markdown
-      title: Next departures
-      content: |-
-        {%- set rows = ["sensor.short_hills_station_to_new_york_penn_station_next_departure", "sensor.short_hills_station_to_new_york_penn_station_departure_2", "sensor.short_hills_station_to_new_york_penn_station_departure_3"] -%}
-        {%- set ns = namespace(out=[]) -%}
-        {%- for r in rows -%}
-        {%- set t = states(r) -%}
-        {%- if t not in ['unknown', 'unavailable', 'none', ''] -%}
-        {%- set mins = ((as_timestamp(t) - as_timestamp(now())) / 60) | round(0) | int -%}
-        {%- set bits = ['**' ~ (as_timestamp(t) | timestamp_custom('%-I:%M')) ~ '**',
-                         mins ~ ' min', state_attr(r, 'train_id')] -%}
-        {%- if state_attr(r, 'track') -%}
-        {%- set bits = bits + ['Trk ' ~ state_attr(r, 'track')] -%}
-        {%- endif -%}
-        {%- if state_attr(r, 'status_text') -%}
-        {%- set bits = bits + [state_attr(r, 'status_text')] -%}
-        {%- endif -%}
-        {%- set ns.out = ns.out + [bits | join('  ·  ')
-            ~ ('  ⭐' if state_attr(r, 'favorite') else '')] -%}
-        {%- endif -%}
-        {%- endfor -%}
-        {{ ns.out | join('\n\n') }}
       card_mod:
-        style: |2
+        style: |
+          ha-markdown p { margin: 0 0 10px 0; line-height: 1.5; }
 
-                        ha-markdown p { margin: 0 0 6px 0; line-height: 1.6; }
 - title: Evening
   path: evening
   icon: mdi:weather-night
@@ -154,72 +252,190 @@ views:
   sections:
   - type: grid
     cards:
+
+    # Leave now, and here is why. Nothing at all when the commute is fine.
     - type: markdown
       content: |-
-        {%- set s = 'sensor.new_york_penn_station_to_short_hills_station_next_favorite' -%}
-        {%- set p = 'sensor.new_york_penn_station_to_short_hills_station_stops_away' -%}
+        {%- set p = 'new_york_penn_station_to_short_hills_station' -%}
+        {%- for reason in state_attr('binary_sensor.' ~ p ~ '_commute_disrupted', 'reasons') or [] %}
+        **{{ reason }}**
+        {% endfor -%}
+      visibility:
+      - condition: state
+        entity: binary_sensor.new_york_penn_station_to_short_hills_station_commute_disrupted
+        state: "on"
+      card_mod:
+        style: |
+          ha-card {
+            background: rgba(var(--rgb-error-color), 0.12);
+            border: 1px solid var(--error-color);
+          }
+          ha-markdown p { margin: 0 0 6px 0; line-height: 1.5; }
+
+    # The one train you are actually catching.
+    - type: markdown
+      content: |-
+        {%- set p = 'new_york_penn_station_to_short_hills_station' -%}
+        {%- set nothing = ['unknown', 'unavailable', 'none', ''] -%}
+        {%- set fav = 'sensor.' ~ p ~ '_next_favorite' -%}
+        {%- set prog = 'sensor.' ~ p ~ '_stops_away' -%}
+        {%- set rows = ['sensor.' ~ p ~ '_next_departure',
+                        'sensor.' ~ p ~ '_departure_2',
+                        'sensor.' ~ p ~ '_departure_3'] -%}
+        {#- Follow the favourite when it is on the board, otherwise the next
+            train out. A dashboard that says "nothing to show" for the twenty
+            hours a day you are not commuting is not worth opening. -#}
+        {%- set tracking = states(fav) not in nothing -%}
+        {%- set s = fav if tracking else rows[0] -%}
         {%- set t = states(s) -%}
-        {%- if t in ['unknown', 'unavailable', 'none', ''] -%}
-        {%- set favs = state_attr(s, 'favorites') or [] -%}
-        {%- if not favs -%}
-        ### No favourite set
+        {%- if t in nothing -%}
+        ### Nothing on the board
 
-        Pick **Favorite trains** in this commute's options.
-        {%- else -%}
-        ### Not on the board yet
-
-        Waiting for {{ favs | join(', ') }}. The board only reaches a couple of
-        hours ahead, so an evening train will not appear in the morning.
-        {%- endif -%}
+        No departures in the next couple of hours.
         {%- else -%}
         {%- set mins = ((as_timestamp(t) - as_timestamp(now())) / 60) | round(0) | int -%}
         {%- set track = state_attr(s, 'track') -%}
+        {#- Other trains having tracks is what makes a missing one mean
+            something. Same test the integration uses before it will call a
+            track overdue. -#}
+        {%- set posting = rows | map('state_attr', 'track') | select('string') | list | count > 0 -%}
         {%- set status = state_attr(s, 'status_text') -%}
         {%- set busy = {'moderate': 'Filling up', 'heavy': 'Busy'}.get(state_attr(s, 'crowding'), '') -%}
         # {{ 'Departed' if mins < 0 else (mins ~ ' min') }}
 
         ## {{ as_timestamp(t) | timestamp_custom('%-I:%M %p') }} · Train {{ state_attr(s, 'train_id') }}
 
-        {% if track %}**Track {{ track }}**{% else %}*Track not posted yet*{% endif %}
-        {%- if status %} · {{ status }}{% endif %}
+        {% if track %}**Track {{ track }}**
+        {%- elif not posting %}*Track not posted*
+        {%- elif mins <= 8 %}⚠️ **Track overdue**
+        {%- elif mins <= 11 %}*Track due any minute*
+        {%- elif mins <= 25 %}*Track due in ~{{ mins - 9 }} min*
+        {%- else %}*Track not posted yet*{% endif -%}
+        {%- if status %} · {{ status }}{% endif -%}
         {%- if busy %} · {{ busy }}{% endif %}
 
-        {%- set away = states(p) -%}
-        {%- if away not in ['unknown', 'unavailable', 'none', ''] %}
+        {#- Where to stand, and only when standing somewhere else would help.
+            "Front light · Middle light · Back light" is three facts and no
+            decision. -#}
+        {%- set rank = {'light': 0, 'moderate': 1, 'heavy': 2} -%}
+        {%- set ns = namespace(best=none, low=9, high=-1) -%}
+        {%- for car in state_attr(s, 'cars') or [] if car.crowding in rank and car.position -%}
+        {%- set r = rank[car.crowding] -%}
+        {%- if r < ns.low %}{% set ns.low = r %}{% set ns.best = car.position %}{% endif -%}
+        {%- if r > ns.high %}{% set ns.high = r %}{% endif -%}
+        {%- endfor -%}
+        {%- if ns.best and ns.high > ns.low %}
+
+        {{ ns.best | title }} cars are emptier
+        {%- endif -%}
+
+        {#- Alerts that name this train by number, as opposed to the line-level
+            notices further down. -#}
+        {%- for message in state_attr(s, 'alerts') or [] %}
+
+        🚨 {{ message }}
+        {%- endfor -%}
+
+        {%- if not tracking %}
+        {%- set favorites = state_attr(fav, 'favorites') or [] %}
+
+        {% if favorites %}*Waiting for {{ favorites | join(', ') }} — not on the board yet.*
+        {%- else %}*No favourite set. Pick one in this commute's options.*{% endif -%}
+        {%- endif -%}
+
+        {#- Stops away only follows the favourite, so it is only ever news
+            when we are following one. -#}
+        {%- if tracking -%}
+        {%- set away = states(prog) -%}
+        {%- if away not in nothing %}
 
         ---
 
         {% if away | int == 0 %}Arriving now{% else %}**{{ away }}** stops away{% endif %}
-        {%- if state_attr(p, 'next_stop') %} · next {{ state_attr(p, 'next_stop') }}{% endif %}
+        {%- if state_attr(prog, 'next_stop') %} · next {{ state_attr(prog, 'next_stop') }}{% endif %}
+        {%- endif -%}
         {%- endif -%}
         {%- endif -%}
       card_mod:
-        style: |2
+        style: |
+          ha-markdown { padding: 4px 2px !important; }
+          ha-markdown h1 {
+            font-size: 3.2em;
+            font-weight: 700;
+            line-height: 1;
+            margin: 0 0 4px 0;
+            letter-spacing: -0.02em;
+          }
+          ha-markdown h2 {
+            font-size: 1.05em;
+            font-weight: 500;
+            color: var(--secondary-text-color);
+            margin: 0 0 10px 0;
+          }
+          ha-markdown h3 { font-size: 1.2em; margin: 0 0 6px 0; }
+          ha-markdown hr {
+            border: none;
+            border-top: 1px solid var(--divider-color);
+            margin: 12px 0 10px 0;
+          }
+          ha-markdown p { margin: 0 0 6px 0; line-height: 1.5; }
+          ha-markdown p:last-child { margin-bottom: 0; }
 
-                        ha-markdown {
-                          padding: 4px 2px !important;
-                        }
-                        ha-markdown h1 {
-                          font-size: 3.2em;
-                          font-weight: 700;
-                          line-height: 1;
-                          margin: 0 0 4px 0;
-                          letter-spacing: -0.02em;
-                        }
-                        ha-markdown h2 {
-                          font-size: 1.05em;
-                          font-weight: 500;
-                          color: var(--secondary-text-color);
-                          margin: 0 0 10px 0;
-                        }
-                        ha-markdown hr {
-                          border: none;
-                          border-top: 1px solid var(--divider-color);
-                          margin: 12px 0 10px 0;
-                        }
-                        ha-markdown p { margin: 0; line-height: 1.5; }
-    - type: conditional
-      conditions:
+    - type: markdown
+      title: Next departures
+      content: |-
+        {%- set p = 'new_york_penn_station_to_short_hills_station' -%}
+        {%- set nothing = ['unknown', 'unavailable', 'none', ''] -%}
+        {%- set rows = ['sensor.' ~ p ~ '_next_departure',
+                        'sensor.' ~ p ~ '_departure_2',
+                        'sensor.' ~ p ~ '_departure_3'] -%}
+        {%- set posting = rows | map('state_attr', 'track') | select('string') | list | count > 0 -%}
+        {%- set ns = namespace(out=[]) -%}
+        {%- for row in rows -%}
+        {%- set t = states(row) -%}
+        {%- if t not in nothing -%}
+        {%- set mins = ((as_timestamp(t) - as_timestamp(now())) / 60) | round(0) | int -%}
+        {%- set track = state_attr(row, 'track') -%}
+        {%- set bits = ['**' ~ (as_timestamp(t) | timestamp_custom('%-I:%M')) ~ '**',
+                        mins ~ ' min', state_attr(row, 'train_id')] -%}
+        {%- if track -%}
+        {%- set bits = bits + ['Trk ' ~ track] -%}
+        {%- elif posting and mins <= 8 -%}
+        {%- set bits = bits + ['⚠️ no track'] -%}
+        {%- endif -%}
+        {%- if state_attr(row, 'status_text') -%}
+        {%- set bits = bits + [state_attr(row, 'status_text')] -%}
+        {%- endif -%}
+        {%- set ns.out = ns.out + [bits | join('  ·  ')
+            ~ ('  ⭐' if state_attr(row, 'favorite') else '')] -%}
+        {%- endif -%}
+        {%- endfor -%}
+        {{ ns.out | join('\n\n') if ns.out else '*Nothing scheduled.*' }}
+      card_mod:
+        style: |
+          ha-markdown p { margin: 0 0 6px 0; line-height: 1.6; }
+
+    # Line-level notices. Hidden when there are none, and it leads with
+    # whether any of them name a train you might actually be on -- three
+    # paragraphs about the Gladstone Branch and one about your 6:31 look
+    # identical until something says which is which.
+    - type: markdown
+      title: Service notices
+      content: |-
+        {%- set p = 'new_york_penn_station_to_short_hills_station' -%}
+        {%- set live = 'sensor.' ~ p ~ '_service_alerts' -%}
+        {%- set advisories = 'sensor.' ~ p ~ '_planned_advisories' -%}
+        {%- set mine = state_attr(live, 'affects_my_trains') or [] -%}
+        {%- if mine %}
+        **Names your train{{ 's' if mine | count > 1 else '' }}: {{ mine | join(', ') }}**
+        {% endif -%}
+        {%- for message in state_attr(live, 'messages') or [] %}
+        🚨 {{ message }}
+        {% endfor -%}
+        {%- for message in state_attr(advisories, 'messages') or [] %}
+        ℹ️ {{ message }}
+        {% endfor -%}
+      visibility:
       - condition: or
         conditions:
         - condition: numeric_state
@@ -228,45 +444,6 @@ views:
         - condition: numeric_state
           entity: sensor.new_york_penn_station_to_short_hills_station_planned_advisories
           above: 0
-      card:
-        type: markdown
-        title: Service notices
-        content: |-
-          {%- set live = 'sensor.new_york_penn_station_to_short_hills_station_service_alerts' -%}
-          {%- set adv = 'sensor.new_york_penn_station_to_short_hills_station_planned_advisories' -%}
-          {%- for m in state_attr(live, 'messages') or [] %}
-          🚨 {{ m }}
-          {% endfor -%}
-          {%- for m in state_attr(adv, 'messages') or [] %}
-          ℹ️ {{ m }}
-          {% endfor -%}
-        card_mod:
-          style: |2
-
-                              ha-markdown p { margin: 0 0 10px 0; line-height: 1.5; }
-    - type: markdown
-      title: Next departures
-      content: |-
-        {%- set rows = ["sensor.new_york_penn_station_to_short_hills_station_next_departure", "sensor.new_york_penn_station_to_short_hills_station_departure_2", "sensor.new_york_penn_station_to_short_hills_station_departure_3"] -%}
-        {%- set ns = namespace(out=[]) -%}
-        {%- for r in rows -%}
-        {%- set t = states(r) -%}
-        {%- if t not in ['unknown', 'unavailable', 'none', ''] -%}
-        {%- set mins = ((as_timestamp(t) - as_timestamp(now())) / 60) | round(0) | int -%}
-        {%- set bits = ['**' ~ (as_timestamp(t) | timestamp_custom('%-I:%M')) ~ '**',
-                         mins ~ ' min', state_attr(r, 'train_id')] -%}
-        {%- if state_attr(r, 'track') -%}
-        {%- set bits = bits + ['Trk ' ~ state_attr(r, 'track')] -%}
-        {%- endif -%}
-        {%- if state_attr(r, 'status_text') -%}
-        {%- set bits = bits + [state_attr(r, 'status_text')] -%}
-        {%- endif -%}
-        {%- set ns.out = ns.out + [bits | join('  ·  ')
-            ~ ('  ⭐' if state_attr(r, 'favorite') else '')] -%}
-        {%- endif -%}
-        {%- endfor -%}
-        {{ ns.out | join('\n\n') }}
       card_mod:
-        style: |2
-
-                        ha-markdown p { margin: 0 0 6px 0; line-height: 1.6; }
+        style: |
+          ha-markdown p { margin: 0 0 10px 0; line-height: 1.5; }
