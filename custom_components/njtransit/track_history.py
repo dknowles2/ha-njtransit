@@ -27,6 +27,21 @@ has a track, and it carries how the train turned out. Trains that never get a
 track are not noise to be filtered out; they are the sharpest form of the
 question.
 
+**Outcomes are kept, not sampled.** Each row holds the worst it ever looked
+rather than the last thing seen, because the last sighting is systematically
+the emptiest: a train counts down "15 min late" for half an hour and then goes
+ALL ABOARD with no delay field, so a last-wins rule records nothing. That is
+not hypothetical -- it erased every delay in the first three days of
+collection.
+
+One limit no recording strategy fixes: **a terminal publishes no lateness at
+all.** At New York Penn every row's status is either blank or ``BOARDING``,
+because there is no arrival to count down; ``in 21 Min`` is something a through
+station says. So ``delay_at_assignment`` -- the field that separates a warning
+from a restatement -- is unobtainable there from this feed, and the outcome has
+to be recovered by matching the train against a downstream station's board,
+which is why both ends of a commute are worth recording.
+
 Recording is free: the whole board is already in ``coordinator.data`` every
 poll and all but a handful of rows are discarded. Nothing here issues a
 request.
@@ -43,7 +58,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
-from .api.models import DepartureBoard
+from .api.models import DepartureBoard, TrainStatus
 from .api.parsing import now_local
 from .const import DOMAIN, TRACK_HISTORY_DAYS, TRACK_HISTORY_SAVE_DELAY
 
@@ -53,6 +68,11 @@ STORAGE_VERSION: Final = 1
 STORAGE_KEY: Final = f"{DOMAIN}.track_history"
 
 _SEPARATOR: Final = "|"
+
+# What counts as a train having gone wrong, for the summary only. Matches the
+# analysis script rather than the disruption sensor's configurable threshold:
+# this is a fixed yardstick for "was the outcome bad", not a user preference.
+LATE_ENOUGH_TO_COUNT: Final = 5
 
 
 def day_key(station: str, service_date: date) -> str:
@@ -160,6 +180,7 @@ class TrackHistory:
                     "first_track": None,
                     "final_status": departure.status.value,
                     "final_delay": departure.delay_minutes,
+                    "worst_delay": departure.delay_minutes,
                 }
                 self._days.setdefault(key, []).append(record)
                 self._index[ident] = record
@@ -194,14 +215,35 @@ class TrackHistory:
                 record["track"] = departure.track
                 changed = True
 
-            # The board drops a train once it has gone, so whatever was last
-            # seen is how it turned out.
-            if record.get("final_status") != departure.status.value:
+            # How it turned out. The board drops a train once it has gone, so
+            # the temptation is to keep whatever was seen last -- but the last
+            # sighting is the *least* informative one. A train counts down "15
+            # min late" for half an hour, flips to ALL ABOARD with no delay
+            # field at all, and a last-wins rule overwrites the measurement
+            # with nothing. Observed: train 6666 fired a `delayed` event at 15
+            # minutes and was recorded as `final_delay: None`, and across three
+            # days not one row of 169 carried a delay. The outcome half of this
+            # dataset was erasing itself.
+            #
+            # So each field keeps what it learned rather than what it saw last.
+            if _outranks(departure.status.value, record.get("final_status")):
                 record["final_status"] = departure.status.value
                 changed = True
-            if record.get("final_delay") != departure.delay_minutes:
-                record["final_delay"] = departure.delay_minutes
-                changed = True
+
+            delay = departure.delay_minutes
+            if delay is not None:
+                # Last known, not last seen: how late it was when it actually
+                # left, ignoring the blank that follows.
+                if record.get("final_delay") != delay:
+                    record["final_delay"] = delay
+                    changed = True
+                # And the worst it ever looked, which is the honest answer to
+                # "did this train go wrong" -- a train can be twenty minutes
+                # late and then stop being reported at all.
+                worst = record.get("worst_delay")
+                if worst is None or delay > worst:
+                    record["worst_delay"] = delay
+                    changed = True
 
         if changed:
             self._prune()
@@ -245,6 +287,21 @@ class TrackHistory:
             "never_assigned": sum(1 for record in records if not record.get("track")),
             "cancelled": sum(
                 1 for record in records if record.get("final_status") == "cancelled"
+            ),
+            # The outcome side, reported here because its absence is invisible
+            # otherwise: every model of "a late track predicts a bad commute"
+            # needs bad commutes to have been recorded, and for three days none
+            # were. A run of zeroes against a non-zero `observations` means the
+            # board is publishing no lateness at this station -- which is what
+            # a terminal does, and is a fact about the station rather than a
+            # fault to chase.
+            "ran_late": sum(
+                1
+                for record in records
+                if (record.get("worst_delay") or 0) >= LATE_ENOUGH_TO_COUNT
+            ),
+            "delays_seen": sum(
+                1 for record in records if record.get("worst_delay") is not None
             ),
         }
 
@@ -324,6 +381,21 @@ def _within(key: str, cutoff: date) -> bool:
         # An unparseable key cannot be aged out on any later pass either, so
         # dropping it now is what keeps it from accumulating forever.
         return False
+
+
+def _outranks(new: str, current: str | None) -> bool:
+    """Return whether a status should replace the one already recorded.
+
+    Two statuses must not be lost to a later, vaguer sighting. A cancelled
+    train stays cancelled however the board decorates the row afterwards, and
+    ``unknown`` is the board declining to say anything -- which is not the same
+    as saying the train is fine, and must not overwrite something that was.
+    """
+    if new == current:
+        return False
+    if current == TrainStatus.CANCELLED.value:
+        return False
+    return new != TrainStatus.UNKNOWN.value or current is None
 
 
 def _seconds_before(scheduled: datetime, now: datetime) -> int:

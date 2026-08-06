@@ -472,9 +472,22 @@ Newark Penn 19/19. **Consequence:** an absent track at a terminal is normal and 
 be read as an error or as a data gap; and the useful window for predicting one is the
 20-30 minutes before the board itself will say.
 
-Amtrak rows are present on the shared board (`A177`, `A196`, `A639`, `lineAbbreviation`
-`AMTK`) and carry tracks where the station publishes them. No LIRR rows were observed, but
-the sample was late-evening and this should be treated as unproven rather than settled.
+A terminal also publishes **no lateness at all**. Across 57 recorded New York Penn rows on
+2026-08-05, `status` was `""` or `BOARDING` and nothing else; `delay_minutes` was null for
+every single row, including train 6359, which the alert feed simultaneously described as
+cancelled. `in 21 Min` is something a *through* station says, because it is counting down
+an arrival — a terminal has no arrival to count down. **Consequence:** at an origin
+terminal the board answers "which track" and "is it boarding", and cannot answer "is it
+late". Anything needing a train's outcome there must get it from another feed: the alert
+messages (§4), or the same train's row on a downstream station's board, which is one
+reason recording both ends of a commute is worth the requests.
+
+Amtrak rows are present on the shared board (`A177`, `A196`, `A639`, `A179`,
+`lineAbbreviation` `AMTK`) and carry tracks where the station publishes them. Note these
+IDs are lettered and appear at New York Penn, not only at Trenton — anything matching a
+train ID between two feeds has to normalize case, since the alert feed reproduces whatever
+its prose wrote. No LIRR rows were observed, but the sample was late-evening and this
+should be treated as unproven rather than settled.
 
 **The two operators must never be pooled when reasoning about timing.** Over one day at
 New York Penn, split by operator:
@@ -881,13 +894,30 @@ unobservable through this API — every candidate signal is a proxy for a hidden
   drops the field — reports every train as permanently overdue. The signal is "late while
   others are getting theirs", which is meaningless where nobody is.
 
-**Whether it is a warning or a restatement is not yet known.** `assigned_at` is measured
-against the *scheduled* time, so a train already running late has its track posted late by
-definition. If the late assignments turn out to be exactly the already-delayed trains, this
-says nothing the board did not. `delay_at_assignment` is recorded to settle it: a late
-assignment on a train still reported on time is the case that would make this genuinely
-predictive. `scripts/analyze_tracks.py` reports both populations separately, and reports
-"outcomes not recorded yet" rather than a misleading 0% while the fields are still filling.
+**Whether it is a warning or a restatement is not yet known, and at a terminal it may not
+be answerable at all.** `assigned_at` is measured against the *scheduled* time, so a train
+already running late has its track posted late by definition. If the late assignments turn
+out to be exactly the already-delayed trains, this says nothing the board did not.
+`delay_at_assignment` exists to settle it — but §3.8 establishes that New York Penn
+publishes no lateness whatsoever, so that field is null for every row recorded there and
+the confound cannot be controlled from the departure board alone. The outcome has to be
+recovered by matching the train against a downstream station's board, where the same
+service does carry a delay.
+
+Two ways this measurement erased itself before the design was right, both worth keeping in
+mind because neither looked like a failure:
+
+- **Outcomes were sampled at the worst moment.** Keeping "whatever the board last said"
+  sounds like the definition of a final state, but the last sighting is systematically the
+  emptiest — a train counts down `15 min late` for half an hour, flips to `ALL ABOARD`
+  with no delay field, and the final poll overwrites the measurement with null. Every
+  delay in the first three days of collection was lost this way. The recorder now keeps
+  the worst value seen (`worst_delay`) alongside the last known one (`final_delay`), and
+  treats `cancelled` as terminal.
+- **An absence was reported as a finding.** The analysis guarded on "does any row carry a
+  final status", which every row does, and so printed `0/27 = 0% went wrong` for a station
+  that had never published a single delay. It now requires an outcome to be *observable*
+  before counting it, and says so plainly when none are.
 
 The event ships regardless, because it is actionable on its own terms — you are told the
 track is not up when it should be, which is a fact whatever it turns out to correlate with.

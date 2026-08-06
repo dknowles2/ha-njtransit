@@ -57,6 +57,7 @@ class Observation(NamedTuple):
     delay_at_assignment: int | None
     final_status: str | None
     final_delay: int | None
+    worst_delay: int | None
 
     @property
     def weekday(self) -> int:
@@ -76,10 +77,28 @@ class Observation(NamedTuple):
 
     @property
     def went_wrong(self) -> bool:
-        """Return whether this train ended up cancelled or meaningfully late."""
+        """Return whether this train ended up cancelled or meaningfully late.
+
+        Judged on the worst the train ever looked, not on the last thing the
+        board said about it. Rows recorded before that distinction existed
+        carry no `worst_delay` at all and fall back to `final_delay`, which for
+        those rows is almost always null -- they cannot answer this question
+        and should not be counted as having answered it "no".
+        """
         if self.final_status == "cancelled":
             return True
-        return self.final_delay is not None and self.final_delay >= 5
+        worst = self.worst_delay if self.worst_delay is not None else self.final_delay
+        return worst is not None and worst >= 5
+
+    @property
+    def outcome_known(self) -> bool:
+        """Return whether this row can say how the train turned out at all.
+
+        A terminal publishes no lateness, so at New York Penn this is false for
+        almost every row. Reporting `went_wrong` rates without it counts
+        "the board never said" as "the train was fine".
+        """
+        return self.final_status == "cancelled" or self.worst_delay is not None
 
 
 def load(paths: list[Path]) -> list[Observation]:
@@ -117,6 +136,7 @@ def load(paths: list[Path]) -> list[Observation]:
                         delay_at_assignment=record.get("delay_at_assignment"),
                         final_status=record.get("final_status"),
                         final_delay=record.get("final_delay"),
+                        worst_delay=record.get("worst_delay"),
                     )
                 )
     return observations
@@ -139,14 +159,26 @@ def describe(observations: list[Observation]) -> None:
     print(f"  tracks in use      {len(tracks)}  {sorted(tracks, key=_track_order)}")
     print(f"  reassigned         {reassigned}  ({_pct(reassigned, len(observations))})")
 
+    # Split by operator, because pooling them describes neither. This line was
+    # pooled at first and reported a p10 of 0.0 minutes for New York Penn,
+    # which reads as "NJ Transit sometimes posts the track at departure" and
+    # was entirely Amtrak: four of its seven assignments landed at or after the
+    # scheduled minute, against three of thirty-three for NJ Transit.
     if timed:
-        print(
-            "  lead time          "
-            f"median {statistics.median(timed) / 60:.1f} min, "
-            f"p10 {_quantile(timed, 0.10) / 60:.1f} min, "
-            f"p90 {_quantile(timed, 0.90) / 60:.1f} min "
-            f"(n={len(timed)})"
-        )
+        for label, rows in (
+            ("lead time", [o for o in observations if not o.is_amtrak]),
+            ("  of which Amtrak", [o for o in observations if o.is_amtrak]),
+        ):
+            values = [o.assigned_at for o in rows if o.assigned_at is not None]
+            if not values:
+                continue
+            print(
+                f"  {label:<17}  "
+                f"median {statistics.median(values) / 60:.1f} min, "
+                f"p10 {_quantile(values, 0.10) / 60:.1f} min, "
+                f"p90 {_quantile(values, 0.90) / 60:.1f} min "
+                f"(n={len(values)})"
+            )
     else:
         print("  lead time          not measured yet")
 
@@ -185,20 +217,29 @@ def lateness_vs_outcome(observations: list[Observation]) -> None:
         print("    nothing timed yet\n")
         return
 
-    # Outcome fields were added after collection began, so early rows carry
-    # neither. Reporting those as "0% went wrong" would read as a finding when
-    # it is an absence -- the exact mistake this whole analysis exists to
-    # avoid making about track prediction.
-    if not any(o.final_status is not None or o.final_delay is not None for o in njt):
-        print("    outcomes not recorded yet -- no rows carry a final status\n")
+    # A status of `boarding` is not an outcome. The first version of this
+    # guard accepted any non-null `final_status`, which every row has, so it
+    # went on to report "0/27 = 0% went wrong" for a station that had never
+    # published a single delay -- an absence dressed up as a finding, which is
+    # the exact mistake this whole analysis exists to avoid.
+    if not any(o.outcome_known for o in njt):
+        print(
+            "    no outcomes observable here -- this station publishes no\n"
+            "    lateness, so a rate would only be counting silence as good\n"
+        )
         return
 
     def rate(rows: list[Observation], label: str) -> None:
-        if not rows:
-            print(f"    {label:<34} --")
+        known = [o for o in rows if o.outcome_known]
+        if not known:
+            print(f"    {label:<34}   --        ({len(rows)} unknown)")
             return
-        bad = sum(1 for o in rows if o.went_wrong)
-        print(f"    {label:<34} {bad:3}/{len(rows):<4} = {bad / len(rows):5.0%}")
+        bad = sum(1 for o in known if o.went_wrong)
+        blind = len(rows) - len(known)
+        suffix = f"  ({blind} unknown)" if blind else ""
+        print(
+            f"    {label:<34} {bad:3}/{len(known):<4} = {bad / len(known):5.0%}{suffix}"
+        )
 
     on_time_at_assignment = [o for o in timed if o.delay_at_assignment in (0, None)]
     print("    all trains:")

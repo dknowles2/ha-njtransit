@@ -392,6 +392,98 @@ def test_median_lead_time_over_an_odd_number_of_assignments(
     assert history.summary(STATION)["median_assigned_at_seconds"] == 1200
 
 
+def test_a_delay_survives_the_train_going_all_aboard(
+    history: TrackHistory, freezer_at: FrozenDateTimeFactory
+) -> None:
+    """The observed failure: 15 minutes late, recorded as nothing.
+
+    A train counts down its lateness for half an hour, then flips to ALL
+    ABOARD with no delay field at all. Keeping whatever was seen last threw
+    the measurement away on the final poll -- and since it happened to every
+    train, every single time, the outcome half of the dataset came out empty
+    without anything looking broken.
+    """
+    at = datetime(2026, 8, 4, 18, 31, tzinfo=TZ)
+    history.record(board(departure("6666", at=at, track="2", delay=15)))
+    history.record(
+        board(departure("6666", at=at, track="2", status=TrainStatus.ALL_ABOARD))
+    )
+
+    record = history.days_for(STATION)["2026-08-04"][0]
+    assert record["final_delay"] == 15, "the delay was erased by the last poll"
+    assert record["worst_delay"] == 15
+    assert record["final_status"] == TrainStatus.ALL_ABOARD.value
+
+
+def test_worst_delay_keeps_the_peak_and_final_delay_keeps_the_end(
+    history: TrackHistory, freezer_at: FrozenDateTimeFactory
+) -> None:
+    """They answer different questions, so both are kept.
+
+    "How bad did this get" and "how late was it when it left" are not the same
+    number for a train that recovers, and only the first one decides whether
+    the commute went wrong.
+    """
+    at = datetime(2026, 8, 4, 18, 31, tzinfo=TZ)
+    for delay in (4, 20, 6):
+        history.record(board(departure("6666", at=at, track="2", delay=delay)))
+
+    record = history.days_for(STATION)["2026-08-04"][0]
+    assert record["worst_delay"] == 20
+    assert record["final_delay"] == 6
+
+
+def test_a_cancellation_is_not_undone_by_a_later_sighting(
+    history: TrackHistory, freezer_at: FrozenDateTimeFactory
+) -> None:
+    """Cancelled is terminal, whatever the board says about the row after."""
+    at = datetime(2026, 8, 4, 18, 31, tzinfo=TZ)
+    history.record(
+        board(departure("6320", at=at, track="2", status=TrainStatus.CANCELLED))
+    )
+    history.record(
+        board(departure("6320", at=at, track="2", status=TrainStatus.BOARDING))
+    )
+
+    record = history.days_for(STATION)["2026-08-04"][0]
+    assert record["final_status"] == TrainStatus.CANCELLED.value
+    assert history.summary(STATION)["cancelled"] == 1
+
+
+def test_unknown_does_not_overwrite_something_known(
+    history: TrackHistory, freezer_at: FrozenDateTimeFactory
+) -> None:
+    """`unknown` is the board declining to answer, not an answer."""
+    at = datetime(2026, 8, 4, 18, 31, tzinfo=TZ)
+    history.record(
+        board(departure("6666", at=at, track="2", status=TrainStatus.BOARDING))
+    )
+    history.record(
+        board(departure("6666", at=at, track="2", status=TrainStatus.UNKNOWN))
+    )
+
+    record = history.days_for(STATION)["2026-08-04"][0]
+    assert record["final_status"] == TrainStatus.BOARDING.value
+
+
+def test_summary_counts_trains_that_ran_late(
+    history: TrackHistory, freezer_at: FrozenDateTimeFactory
+) -> None:
+    """A run of zeroes here is the signal that outcomes are not being seen."""
+    at = datetime(2026, 8, 4, 18, 31, tzinfo=TZ)
+    history.record(
+        board(
+            departure("6660", at=at, track="2", delay=1),
+            departure("6662", at=at, track="3", delay=12),
+            departure("6664", at=at, track="4"),
+        )
+    )
+
+    summary = history.summary(STATION)
+    assert summary["ran_late"] == 1
+    assert summary["delays_seen"] == 2, "a train with no delay field is not a zero"
+
+
 def test_summary_of_an_unwatched_station_is_empty(history: TrackHistory) -> None:
     assert history.summary("Trenton Station") == {
         "days_collected": 0,
@@ -403,6 +495,8 @@ def test_summary_of_an_unwatched_station_is_empty(history: TrackHistory) -> None
         "assignments_timed": 0,
         "never_assigned": 0,
         "cancelled": 0,
+        "ran_late": 0,
+        "delays_seen": 0,
     }
 
 

@@ -85,6 +85,18 @@ run "favourite matching becomes case-sensitive" \
   "departure.train_id.upper() in favorites" \
   "departure.train_id in favorites"
 
+run "a blank delay overwrites a recorded one" \
+  custom_components/njtransit/track_history.py \
+  "            if delay is not None:" "            if True:"
+
+run "worst_delay follows the last value instead of the peak" \
+  custom_components/njtransit/track_history.py \
+  "if worst is None or delay > worst:" "if True:"
+
+run "a cancellation can be overwritten" \
+  custom_components/njtransit/track_history.py \
+  "if current == TrainStatus.CANCELLED.value:" "if False:"
+
 run "alert train ids keep the prose's casing" \
   custom_components/njtransit/api/parsing.py \
   "found.upper() for found in _TRAIN_RE.findall(head)" \
