@@ -51,12 +51,29 @@ blueprint:
               domain: sensor
               device_class: timestamp
     notify_target:
-      name: Notify action
+      name: Phone
       description: >
-        The mobile_app action for the iPhone, e.g.
-        `notify.mobile_app_my_iphone`.
+        The iPhone to put the activity on. Pick its **notify entity** — the
+        one the Home Assistant companion app creates, named after the device.
+
+
+        What actually gets called is the older `notify.mobile_app_…` action
+        for the same phone, derived from what you pick here. That indirection
+        is not tidiness: a notify entity's `send_message` takes only a message
+        and a title, with nowhere to put the `data` payload that carries the
+        Live Activity. The entity is the thing worth *picking*, and the action
+        is the only thing that can be *called*.
+
+
+        Typing the action name directly still works, so an automation set up
+        before this became a picker keeps running. Re-pick the phone when
+        convenient — the stored text will look like an unknown entity in the
+        UI until you do.
       selector:
-        text: {}
+        entity:
+          filter:
+            - integration: mobile_app
+              domain: notify
     boarded_helper:
       name: Dismissed flag
       description: >
@@ -150,6 +167,21 @@ triggers:
 variables:
   sensor: !input favorite_sensor
   boarded: !input boarded_helper
+  # What the picker returns is `notify.davids_iphone`; what has to be called is
+  # `notify.mobile_app_davids_iphone`. Both are slugified from the same device
+  # name by the same function at registration, so one is the other with a
+  # prefix -- but only while the notify entity keeps its generated id. Rename
+  # that entity and this stops resolving, because the action name was fixed
+  # when the app registered and does not follow.
+  #
+  # The `mobile_app_` test is what lets an action name typed in before this
+  # input became a picker keep working: it is already in the target form, so
+  # it is passed through untouched rather than prefixed twice.
+  notify_target: !input notify_target
+  notify_action: >-
+    {%- set name = notify_target | replace('notify.', '') -%}
+    {{ 'notify.' ~ (name if name.startswith('mobile_app_')
+                    else 'mobile_app_' ~ name) }}
   lead: !input lead_time
   icon: !input icon
   # Empty unless a dashboard was named. The notification payloads below are
@@ -229,14 +261,14 @@ actions:
           - action: input_boolean.turn_on
             target:
               entity_id: !input boarded_helper
-          - action: !input notify_target
+          - action: "{{ notify_action }}"
             data:
               message: clear_notification
               data:
                 tag: "{{ tag }}"
           # The button's own notification has to go too, or it sits there
           # offering to dismiss something already gone.
-          - action: !input notify_target
+          - action: "{{ notify_action }}"
             data:
               message: clear_notification
               data:
@@ -260,7 +292,7 @@ actions:
           - condition: template
             value_template: "{{ showing }}"
         sequence:
-          - action: !input notify_target
+          - action: "{{ notify_action }}"
             data:
               title: "{{ headline }}"
               # Dropped on the phone, where `chronometer` takes this line, but
@@ -304,7 +336,7 @@ actions:
               - condition: template
                 value_template: "{{ boarded | length > 0 }}"
             then:
-              - action: !input notify_target
+              - action: "{{ notify_action }}"
                 data:
                   title: "{{ headline }}"
                   message: Tap to dismiss until the next commute
@@ -330,12 +362,12 @@ actions:
           - condition: trigger
             id: refresh
         sequence:
-          - action: !input notify_target
+          - action: "{{ notify_action }}"
             data:
               message: clear_notification
               data:
                 tag: "{{ tag }}"
-          - action: !input notify_target
+          - action: "{{ notify_action }}"
             data:
               message: clear_notification
               data:
