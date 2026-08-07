@@ -528,6 +528,18 @@ just opens Home Assistant wherever it was and everything else works unchanged.
 [`dashboards/trains.yaml`](dashboards/trains.yaml) is a ready-made one to copy
 if you want the tap to land somewhere useful — see below.
 
+**Setup suggests your station.** The origin dropdown comes pre-filled with the
+rail station nearest your Home Assistant home location. It is only a
+suggestion — the field stays required and the full list of 167 is still there —
+and it disappears silently if home is unset or the lookup fails, because a
+convenience must never be able to block setup.
+
+The station list itself carries no coordinates and cannot be made to: SPEC 3.1
+records that asking for `latitude` there nulls the entire response. The
+proximity search is a separate operation that takes a point and answers in
+feet, and it does **not** sort — a reply recorded standing on the Short Hills
+platform lists Millburn first. See SPEC 3.9.
+
 ### The Trains dashboard
 
 An example phone-shaped dashboard, built to be read one-handed on a platform

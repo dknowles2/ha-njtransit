@@ -17,7 +17,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, Final
 from zoneinfo import ZoneInfo
 
 from .models import (
@@ -25,6 +25,7 @@ from .models import (
     CrowdLevel,
     Departure,
     DepartureBoard,
+    NearbyStation,
     RailLine,
     ScheduledTrip,
     Station,
@@ -342,6 +343,52 @@ def parse_stations(payload: list[dict[str, Any]] | None) -> tuple[Station, ...]:
             )
         )
     return tuple(stations)
+
+
+# Upstream reports proximity in feet. Nothing says so; it was established by
+# checking a known separation against the coordinates the trip planner returns.
+_FEET_TO_METRES: Final = 0.3048
+
+
+def parse_nearby_stations(
+    payload: list[dict[str, Any]] | None,
+) -> tuple[NearbyStation, ...]:
+    """Return stations near a point, nearest first."""
+    found: list[NearbyStation] = []
+    for item in payload or []:
+        title = (item.get("title") or "").strip()
+        penta_id = (item.get("pentaStationID") or "").strip()
+        if not title or not penta_id:
+            continue
+        try:
+            metres = float(item["distance"]) * _FEET_TO_METRES
+        except KeyError, TypeError, ValueError:
+            # A row without a usable distance cannot be ranked, and ranking is
+            # the only reason to ask. Dropping it beats sorting it to the front
+            # with a zero.
+            continue
+        found.append(NearbyStation(title=title, penta_id=penta_id, metres=metres))
+    return tuple(sorted(found, key=lambda station: station.metres))
+
+
+def parse_station_coordinates(
+    payload: list[dict[str, Any]] | None, title: str
+) -> tuple[float, float] | None:
+    """Return the coordinates of ``title`` exactly, or ``None``.
+
+    Only an exact title match counts. Asked about a title it does not know,
+    this operation still answers -- with real stations several miles away --
+    so taking the first row would report a confident wrong location rather
+    than an absent one. See SPEC 3.9.
+    """
+    for item in payload or []:
+        if (item.get("title") or "").strip() != title:
+            continue
+        try:
+            return float(item["latitude"]), float(item["longitude"])
+        except KeyError, TypeError, ValueError:
+            return None
+    return None
 
 
 def parse_lines(payload: list[dict[str, Any]] | None) -> tuple[RailLine, ...]:

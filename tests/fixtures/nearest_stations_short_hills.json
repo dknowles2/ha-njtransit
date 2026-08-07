@@ -1,0 +1,37 @@
+{
+  "data": {
+    "getTrainScheduleStationsRailForDVClose": [
+      {
+        "title": "Millburn",
+        "pentaStationID": "MB",
+        "accessible": null,
+        "distance": "5530"
+      },
+      {
+        "title": "Short Hills",
+        "pentaStationID": "RT",
+        "accessible": null,
+        "distance": "1"
+      },
+      {
+        "title": "Summit",
+        "pentaStationID": "ST",
+        "accessible": null,
+        "distance": "9936"
+      }
+    ]
+  },
+  "extensions": {
+    "cacheControl": {
+      "version": 1,
+      "hints": [
+        {
+          "path": [
+            "getTrainScheduleStationsRailForDVClose"
+          ],
+          "maxAge": 600
+        }
+      ]
+    }
+  }
+}

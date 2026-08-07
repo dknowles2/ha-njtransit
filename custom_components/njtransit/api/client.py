@@ -17,6 +17,7 @@ from .exceptions import (
 )
 from .models import (
     DepartureBoard,
+    NearbyStation,
     RailLine,
     ScheduledTrip,
     Station,
@@ -29,6 +30,8 @@ from .parsing import (
     parse_alerts,
     parse_board,
     parse_lines,
+    parse_nearby_stations,
+    parse_station_coordinates,
     parse_stations,
     parse_stops,
     parse_trips,
@@ -36,8 +39,10 @@ from .parsing import (
 from .queries import (
     DEPARTURE_BOARD,
     ENDPOINT,
+    NEAREST_STATIONS,
     PLANNER_DATE_FORMAT,
     PLANNER_TIME_FORMAT,
+    STATION_COORDINATES,
     STATIONS,
     STOP_LIST,
     SYSTEM_STATUS,
@@ -177,6 +182,36 @@ class NJTransitClient:
         these to a user.
         """
         return parse_stations(await self._execute(STATIONS))
+
+    async def nearest_stations(
+        self, latitude: float, longitude: float
+    ) -> tuple[NearbyStation, ...]:
+        """Return rail stations near a point, nearest first.
+
+        Used to suggest which station someone actually leaves from. Upstream
+        answers in feet; this converts, because everything else in the
+        integration that measures distance is metric and mixing the two in one
+        codebase is how a radius ends up 3.28 times too large.
+        """
+        payload = await self._execute(
+            NEAREST_STATIONS, {"_latLong": f"{latitude},{longitude}"}
+        )
+        return parse_nearby_stations(payload)
+
+    async def station_coordinates(self, title: str) -> tuple[float, float] | None:
+        """Return a station's ``(latitude, longitude)``, or ``None``.
+
+        ``None`` means the endpoint did not recognize the title, which happens
+        for the platform-level aliases in SPEC 3.5. It deliberately does not
+        guess: the rows this operation returns for a title it does not know are
+        real stations several miles away, so answering with the closest one
+        would place a station in the wrong town rather than admit it did not
+        know. See SPEC 3.9.
+        """
+        payload = await self._execute(
+            STATION_COORDINATES, {"title": title, "_latLong": None}
+        )
+        return parse_station_coordinates(payload, title)
 
     async def train_lines(self) -> tuple[RailLine, ...]:
         """Return every rail line."""

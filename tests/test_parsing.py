@@ -25,6 +25,8 @@ from custom_components.njtransit.api.parsing import (
     parse_countdown,
     parse_crowd_level,
     parse_lines,
+    parse_nearby_stations,
+    parse_station_coordinates,
     parse_stations,
     parse_status,
     parse_trips,
@@ -482,3 +484,90 @@ class TestParseLines:
 
     def test_skips_rows_without_an_abbreviation(self) -> None:
         assert parse_lines([{"id": "x", "title": "y", "abbreviation": ""}]) == ()
+
+
+class TestNearbyStations:
+    """Proximity results, which arrive unsorted and in feet."""
+
+    def test_sorts_by_distance(self) -> None:
+        """Upstream does not.
+
+        The recorded capture is taken *at* Short Hills and still lists
+        Millburn first, so a parser that trusted the order would suggest the
+        wrong station to someone standing on the right platform.
+        """
+        stations = parse_nearby_stations(
+            load_payload(
+                "nearest_stations_short_hills",
+                "getTrainScheduleStationsRailForDVClose",
+            )
+        )
+        assert stations[0].penta_id == "RT"
+        assert [station.metres for station in stations] == sorted(
+            station.metres for station in stations
+        )
+
+    def test_converts_feet_to_metres(self) -> None:
+        """One row, one metre away, recorded standing on the station."""
+        stations = parse_nearby_stations(
+            [{"title": "Short Hills", "pentaStationID": "RT", "distance": "5280"}]
+        )
+        assert stations[0].metres == pytest.approx(1609.34, abs=0.1)
+
+    @pytest.mark.parametrize(
+        "row",
+        [
+            {"title": "Short Hills", "pentaStationID": "RT"},
+            {"title": "Short Hills", "pentaStationID": "RT", "distance": None},
+            {"title": "Short Hills", "pentaStationID": "RT", "distance": "soon"},
+            {"title": "", "pentaStationID": "RT", "distance": "10"},
+        ],
+        ids=["missing", "null", "unparseable", "no title"],
+    )
+    def test_drops_rows_that_cannot_be_ranked(self, row: dict[str, Any]) -> None:
+        """Ranking is the only reason to ask, so an unrankable row is noise.
+
+        Defaulting the distance to zero would sort it to the front and make it
+        the suggestion.
+        """
+        assert parse_nearby_stations([row]) == ()
+
+
+class TestStationCoordinates:
+    """Where a station is, via an operation that answers even when it cannot."""
+
+    def test_returns_the_exact_title(self) -> None:
+        coordinates = parse_station_coordinates(
+            load_payload("station_coordinates_short_hills", "getTripPlannerAlternates"),
+            "Short Hills Station",
+        )
+        assert coordinates is not None
+        assert coordinates[0] == pytest.approx(40.725249)
+        assert coordinates[1] == pytest.approx(-74.323751)
+
+    def test_an_unknown_title_is_none_not_the_nearest_row(self) -> None:
+        """The dangerous case, and the reason this is not `rows[0]`.
+
+        Asked about a title it does not know, upstream still answers -- with
+        real stations miles away. Secaucus Junction Lower Level comes back as
+        Hoboken Terminal and Lincoln Harbor. Taking the first row would place
+        a station in the wrong town with total confidence.
+        """
+        payload = load_payload(
+            "station_coordinates_short_hills", "getTripPlannerAlternates"
+        )
+        assert (
+            parse_station_coordinates(payload, "Secaucus Junction Lower Level") is None
+        )
+
+    def test_a_matching_row_without_usable_numbers_is_none(self) -> None:
+        assert (
+            parse_station_coordinates(
+                [{"title": "Short Hills Station", "latitude": "", "longitude": ""}],
+                "Short Hills Station",
+            )
+            is None
+        )
+
+    def test_no_payload_is_none(self) -> None:
+        assert parse_station_coordinates(None, "Short Hills Station") is None

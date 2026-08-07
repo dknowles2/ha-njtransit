@@ -203,6 +203,25 @@ class Station:
 
 
 @dataclass(frozen=True)
+class NearbyStation:
+    """A station near a point, with how far away it is."""
+
+    title: str
+    """Station name as the proximity search reports it, e.g. ``Short Hills``.
+
+    Shorter than the canonical titles the config flow uses (``Short Hills
+    Station``) -- a fifth vocabulary. Match on :attr:`penta_id`, which is the
+    same identifier the canonical list uses."""
+
+    penta_id: str
+    """Stable two-letter identifier, e.g. ``RT``."""
+
+    metres: float
+    """Distance from the point asked about. Upstream answers in feet; this is
+    converted at the parser so nothing downstream has to remember which."""
+
+
+@dataclass(frozen=True)
 class RailLine:
     """A rail line."""
 

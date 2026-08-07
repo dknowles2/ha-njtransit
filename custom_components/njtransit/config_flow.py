@@ -98,6 +98,7 @@ class NJTransitConfigFlow(ConfigFlow, domain=DOMAIN):
     def __init__(self) -> None:
         """Initialize the flow."""
         self._stations: list[Station] = []
+        self._suggested_origin: str | None = None
 
     async def _load_stations(self) -> list[Station]:
         """Fetch and collapse the canonical station list."""
@@ -148,11 +149,49 @@ class NJTransitConfigFlow(ConfigFlow, domain=DOMAIN):
                         data=self._data(origin, destination),
                     )
 
+        if self._suggested_origin is None:
+            self._suggested_origin = await self._suggest_origin(stations)
+
         return self.async_show_form(
             step_id="user",
-            data_schema=self._schema(stations),
+            data_schema=self._schema(stations, self._suggested_origin),
             errors=errors,
         )
+
+    async def _suggest_origin(self, stations: list[Station]) -> str | None:
+        """Return the canonical title of the station nearest to home.
+
+        Home Assistant already knows where home is, and the endpoint will say
+        which stations are near a point, so the station someone actually
+        leaves from is derivable rather than something to hunt for in a list
+        of 167. It is only a default -- the dropdown is unchanged.
+
+        Returns ``None`` whenever anything is missing or unrecognized. A
+        suggestion is a convenience, and a wrong one is worse than none: it
+        would be pre-selected, and pre-selected fields are the ones nobody
+        reads.
+        """
+        latitude = self.hass.config.latitude
+        longitude = self.hass.config.longitude
+        if not latitude and not longitude:
+            return None
+
+        client = NJTransitClient(async_get_clientsession(self.hass))
+        try:
+            nearby = await client.nearest_stations(latitude, longitude)
+        except NJTransitError:
+            # Never block setup for a nicety.
+            return None
+
+        # The proximity search reports shorter names than the canonical list
+        # ("Short Hills" against "Short Hills Station"), so match on the
+        # identifier both carry rather than on the text.
+        by_penta = {station.penta_id: station for station in stations}
+        for candidate in nearby:
+            station = by_penta.get(candidate.penta_id)
+            if station is not None:
+                return station.title
+        return None
 
     async def _validate_origin(self, title: str) -> None:
         """Confirm the origin has a departure board.
@@ -164,15 +203,23 @@ class NJTransitConfigFlow(ConfigFlow, domain=DOMAIN):
         await client.departures(title)
 
     @staticmethod
-    def _schema(stations: list[Station]) -> vol.Schema:
+    def _schema(stations: list[Station], suggested: str | None = None) -> vol.Schema:
         """Return the origin/destination form schema."""
         options = station_options(stations)
         selector = SelectSelector(
             SelectSelectorConfig(options=options, mode=SelectSelectorMode.DROPDOWN)
         )
+        # `description` rather than `default`: this pre-fills the field while
+        # leaving it required, so a wrong guess is corrected rather than
+        # silently accepted by someone pressing submit.
+        origin: Any = vol.Required(CONF_ORIGIN)
+        if suggested is not None:
+            origin = vol.Required(
+                CONF_ORIGIN, description={"suggested_value": suggested}
+            )
         return vol.Schema(
             {
-                vol.Required(CONF_ORIGIN): selector,
+                origin: selector,
                 vol.Optional(CONF_DESTINATION): selector,
             }
         )
