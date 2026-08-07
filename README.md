@@ -442,6 +442,26 @@ floor under the delay. It is a lower bound on purpose: claiming a train will
 make up time is a guess, and this is a number someone reads while deciding
 whether to run for a connection.
 
+**Only during your commute.** Set a **Commute window** schedule and the
+activity is sent only while it is on. Leave it empty and there is no time
+gating at all.
+
+This is the only thing that can tell a day off from a commute, and it is worth
+being clear why location cannot. On a working-from-home morning you are at
+home — which is exactly where you would be if you *were* about to catch the
+train. No radius and no zone can separate those two, because they are the same
+place. A schedule that runs Tuesday to Thursday simply says nothing on a
+Friday.
+
+The window's end also resets the dismissed flag, which is what it did before
+it gated anything. If you set a schedule expecting notifications outside it,
+that behaviour changed.
+
+Deliberately **not** applied once you are aboard. A window ending at 10:00
+while you are on a train arriving at 10:30 must not take the arrival countdown
+with it — the window is about whether to board, not about a journey already
+under way.
+
 **Using where you are.** Two optional inputs, **Where you are** (a person or
 device tracker) and **Only when you are in one of these** (zones), stop the
 activity being sent when you could not act on it. Set neither and nothing
