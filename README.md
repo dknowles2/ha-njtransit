@@ -456,12 +456,10 @@ from* — and it covers three separate annoyances:
 | already on the train | morning: home, or the station | you have left, so the countdown to the *next* train out stops |
 | still in the city late | evening: your workplace | you are there, so it keeps going |
 
-Zones are the unit because station coordinates cannot be had: the API's
-`latitude` field nulls the entire response (SPEC 3.1), so the integration does
-not know where a station is and should not pretend to. You know which places
-mean "I might catch this train"; a zone is how you say so. Make the morning
-zone big enough to cover getting to the station, or draw a second one around
-it.
+Zones are the unit because they are how *you* say which places mean "I might
+catch this train" — home, or the office, or a radius around the station wide
+enough to cover getting there. Make the morning zone big enough for that walk,
+or draw a second one around the station itself.
 
 Membership is measured by distance against each zone's own radius rather than
 by comparing a person's state to a zone name — a person entity reports `home`

@@ -504,6 +504,47 @@ its departures until the departure minute itself. A figure computed across both 
 neither, and an earlier "median 9.0 minutes" in this document was pooled and landed on the
 right answer by coincidence.
 
+### 3.9 Station coordinates are available, through the trip planner
+
+Not from the station list. `getTrainScheduleStationsRailForDV` selects `title`,
+`pentaStationID` and `accessible` and nothing else, and §3.1 records why widening it is
+not an option.
+
+They come from the trip planner instead. Re-deriving the site's operations (§2) turns up
+several that are latitude-aware, and one answers directly:
+
+```graphql
+query TripPlannerAlternates($title: String!, $_latLong: String) {
+  getTripPlannerAlternates(title: $title, _latLong: $_latLong) {
+    title
+    distance
+    latitude
+    longitude
+  }
+}
+```
+
+Asked for a station title it returns that station at `0.0 miles` alongside its
+neighbours, with coordinates:
+
+```
+Short Hills Station     40.725249, -74.323751   (0.0 miles)
+New York Penn Station   40.750051, -73.992358   (0.0 miles)
+```
+
+`getTripPlannerGoogleAddress(title:)` corroborates to within about two metres, but it is
+plainly a Google geocoding proxy — it answers for addresses that are not stations at all.
+Prefer the alternates operation, which returns NJ Transit's own station records.
+
+**Take the exact title match, never the first row.** Sampled across the canonical list,
+25 of 26 titles came back at `0.0 miles`. The miss was `Secaucus Junction Lower Level` —
+a platform-level alias (§3.5) — and it did not fail loudly: it returned Hoboken Terminal
+and Lincoln Harbor two to three miles away. Taking `rows[0]` would have silently placed
+Secaucus in Weehawken. Matching the title exactly turns that into a clean "not found".
+
+**Consequence:** "where is this station" is answerable, at one request per station,
+cached. It is what makes proximity usable without asking someone to draw a zone by hand.
+
 ## 4. Repository layout
 
 ```
