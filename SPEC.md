@@ -950,7 +950,14 @@ out to be exactly the already-delayed trains, this says nothing the board did no
 publishes no lateness whatsoever, so that field is null for every row recorded there and
 the confound cannot be controlled from the departure board alone. The outcome has to be
 recovered by matching the train against a downstream station's board, where the same
-service does carry a delay.
+service does carry a delay. `scripts/analyze_tracks.py` does that, on train and service
+day, searching adjacent days because each station files a departure under its own
+scheduled date -- a train leaving Penn at 23:50 reaches Short Hills after midnight. Over
+the first three days it recovered 44 outcomes that were otherwise unobservable, which is
+the difference between the hypothesis being testable and not. Recovered outcomes are
+labelled as borrowed wherever they are reported: second-hand evidence is a different
+thing from a direct observation and a reader deciding whether to trust a rate is entitled
+to know which it is.
 
 Two ways this measurement erased itself before the design was right, both worth keeping in
 mind because neither looked like a failure:

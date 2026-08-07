@@ -58,6 +58,12 @@ class Observation(NamedTuple):
     final_status: str | None
     final_delay: int | None
     worst_delay: int | None
+    outcome_from: str | None = None
+    """The station this row's outcome was borrowed from, if it was.
+
+    ``None`` means the outcome is the station's own, or that there is none.
+    Kept so a report can say how much of its evidence is second-hand rather
+    than presenting a recovered outcome as a directly observed one."""
 
     @property
     def weekday(self) -> int:
@@ -140,6 +146,63 @@ def load(paths: list[Path]) -> list[Observation]:
                     )
                 )
     return observations
+
+
+def join_outcomes(observations: list[Observation]) -> list[Observation]:
+    """Fill in unobservable outcomes from the same train seen elsewhere.
+
+    A terminal publishes no lateness at all (SPEC 3.8), so a New York Penn row
+    can say when its track was posted but never how the train turned out. The
+    same physical train reaches a through station forty minutes later and is
+    counted down there, which is the only account of its lateness that exists.
+    Both ends of the commute are already recorded, so this costs nothing but a
+    lookup.
+
+    Matching is on train and service day. Train IDs are unique per direction,
+    so there is no risk of pairing an outbound service with a return one.
+
+    Adjacent days are searched because each station files a departure under
+    *its own* scheduled date: a train leaving Penn at 23:50 reaches Short Hills
+    after midnight and is filed a day later. Without that, every late-evening
+    train -- the ones a commuter most wants to know about -- would silently
+    fail to join.
+
+    Only rows with no outcome of their own are filled, and each one records
+    where its outcome came from.
+    """
+    donors: dict[tuple[date, str], Observation] = {}
+    for observation in observations:
+        if observation.outcome_known:
+            donors[(observation.day, observation.train_id)] = observation
+
+    joined: list[Observation] = []
+    for observation in observations:
+        if observation.outcome_known:
+            joined.append(observation)
+            continue
+
+        donor = None
+        for offset in (0, 1, -1):
+            candidate = donors.get(
+                (observation.day + timedelta(days=offset), observation.train_id)
+            )
+            if candidate is not None and candidate.station != observation.station:
+                donor = candidate
+                break
+
+        if donor is None:
+            joined.append(observation)
+            continue
+
+        joined.append(
+            observation._replace(
+                final_status=donor.final_status,
+                final_delay=donor.final_delay,
+                worst_delay=donor.worst_delay,
+                outcome_from=donor.station,
+            )
+        )
+    return joined
 
 
 def describe(observations: list[Observation]) -> None:
@@ -236,7 +299,16 @@ def lateness_vs_outcome(observations: list[Observation]) -> None:
             return
         bad = sum(1 for o in known if o.went_wrong)
         blind = len(rows) - len(known)
-        suffix = f"  ({blind} unknown)" if blind else ""
+        borrowed = sum(1 for o in known if o.outcome_from)
+        notes = []
+        if blind:
+            notes.append(f"{blind} unknown")
+        if borrowed:
+            # Said out loud because a recovered outcome is a different kind of
+            # evidence from a directly observed one, and a reader deciding
+            # whether to trust the rate is entitled to know which this is.
+            notes.append(f"{borrowed} borrowed")
+        suffix = f"  ({', '.join(notes)})" if notes else ""
         print(
             f"    {label:<34} {bad:3}/{len(known):<4} = {bad / len(known):5.0%}{suffix}"
         )
@@ -443,12 +515,23 @@ def main() -> int:
     args = parser.parse_args()
 
     observations = load(args.paths)
-    if args.station:
-        observations = [o for o in observations if o.station == args.station]
-
     if not observations:
         print("no observations found", file=sys.stderr)
         return 1
+
+    # Before any station filter: the whole point is to borrow across stations,
+    # and `--station "New York Penn Station"` would otherwise discard the only
+    # rows that can say how those trains turned out.
+    direct = sum(1 for o in observations if o.outcome_known)
+    observations = join_outcomes(observations)
+    recovered = sum(1 for o in observations if o.outcome_from)
+    print(
+        f"\noutcomes: {direct} observed directly, "
+        f"{recovered} recovered from another station"
+    )
+
+    if args.station:
+        observations = [o for o in observations if o.station == args.station]
 
     stations = sorted({observation.station for observation in observations})
     for station in stations:
