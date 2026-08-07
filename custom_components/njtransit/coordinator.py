@@ -401,6 +401,14 @@ class EntryRuntime:
     history: TrackHistory
     origin: str
     destination: str | None
+    origin_coordinates: tuple[float, float] | None = None
+    """Where the origin station is, when the endpoint would say.
+
+    Looked up once at setup and never refreshed -- stations do not move, and
+    it is not worth a request per poll to confirm that. ``None`` when the
+    lookup failed or the title is one of the platform-level aliases the
+    proximity operation does not recognize (SPEC 3.9)."""
+
     options: dict[str, Any] = field(default_factory=dict)
     """The options this entry was built with.
 

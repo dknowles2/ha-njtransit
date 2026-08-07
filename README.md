@@ -461,8 +461,37 @@ catch this train" — home, or the office, or a radius around the station wide
 enough to cover getting there. Make the morning zone big enough for that walk,
 or draw a second one around the station itself.
 
-Membership is measured by distance against each zone's own radius rather than
-by comparing a person's state to a zone name — a person entity reports `home`
+**Or skip the zones.** Leave them empty and set **How far from the station
+still counts** instead — one number, measured from the origin station, whose
+coordinates the integration looks up at setup and publishes on the favourite
+sensor.
+
+Left at 0 it is derived: half the distance from your home location to that
+station, floored at 2. One rule covers both legs, which is why there is no
+separate setting per direction:
+
+| leg | home to station | derived radius | effect |
+|---|---|---|---|
+| outbound | 0.6 | 2 (the floor) | covers home and the walk |
+| return | 17.3 | 8.6 (the halving) | covers the whole city, excludes home |
+
+Halving is the point: it is the largest radius that *cannot* reach home, so the
+return leg silences itself on a day worked from home without anyone choosing a
+number.
+
+The units are whatever your Home Assistant uses — miles on a US install,
+kilometres elsewhere. The number box carries no unit label because a blueprint
+cannot know which one you are on, and the derived default is computed through
+the same function, so it is right either way. Only a number you type has to
+match your instance. (Worth stating because it is not obvious: `distance()`
+returns the instance's configured unit, not always kilometres. A station
+measured at 0.99 km came back from it as 0.61.)
+
+Zones take precedence when set, so they remain the way to say something a
+radius cannot.
+
+Membership in a zone is measured by distance against that zone's own radius
+rather than by comparing a person's state to a zone name — a person entity reports `home`
 for the home zone but the zone's title for every other one, and a device
 tracker reports neither reliably.
 
