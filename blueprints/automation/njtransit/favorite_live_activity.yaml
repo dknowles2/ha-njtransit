@@ -205,8 +205,20 @@ blueprint:
     commute_window:
       name: Commute window
       description: >
-        Optional. A schedule covering the hours you travel. Its end is what
-        resets the dismissed flag; without one it resets at 3am.
+        Optional. A schedule covering the hours you travel — and, if you set
+        one, **the activity is only sent while it is on**. Leave it empty and
+        no time gating happens at all.
+
+
+        This is the only thing that can tell a day off from a commute. Location
+        cannot: on a working-from-home morning you are at home, which is
+        exactly where you would be if you *were* about to catch the train, so
+        no radius or zone can separate the two. A schedule that runs Tuesday to
+        Thursday simply says nothing on a Friday.
+
+
+        Its end also resets the dismissed flag. Without a schedule that happens
+        at 3am instead.
       default: []
       selector:
         entity:
@@ -414,9 +426,19 @@ variables:
   # train you are running for slips off the board. An unset helper is "", and
   # is_state on "" is simply false, so leaving it empty behaves exactly as this
   # blueprint did before the input existed.
+  # Note `in_window`. Without it the commute window only ever reset the
+  # dismissed flag, so a schedule that deliberately excludes Friday still
+  # counted down at someone working from home -- the input was named for a
+  # behaviour it did not have.
+  #
+  # Deliberately not applied to `riding` below. A window ending at 10:00 while
+  # you are aboard a train arriving at 10:30 must not take the arrival
+  # countdown with it; the same reasoning as the location gate, which is also
+  # about deciding whether to *board*, not whether you already have.
   waiting: >-
     {{ known and minutes_out <= (lead | int) and minutes_out > -2
-       and not is_state(boarded, 'on') and nearby | bool(false) }}
+       and not is_state(boarded, 'on') and nearby | bool(false)
+       and in_window }}
   # Where the train is, once the departure board can no longer say. It drops a
   # train the moment it leaves, so from that point the stop list is the only
   # account of the journey -- and `sensor` has already moved on to whatever
