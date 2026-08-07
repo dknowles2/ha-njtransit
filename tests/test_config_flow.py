@@ -25,8 +25,20 @@ from custom_components.njtransit.const import (
     DOMAIN,
 )
 
-from .conftest import install_api_mock, load_payload
+from .conftest import install_api_mock, load_fixture, load_payload
 from .test_init import HOBOKEN, NY_PENN, SHORT_HILLS, make_entry, setup_entry
+
+
+def suggested_origin(result: Any) -> str | None:
+    """Return the origin field's pre-filled value, if the form offers one.
+
+    Voluptuous carries a suggestion in the marker's `description`, not in the
+    schema's values, so it takes a walk over the keys to read back.
+    """
+    for key in result["data_schema"].schema:
+        if key == CONF_ORIGIN:
+            return (key.description or {}).get("suggested_value")
+    return None
 
 
 async def start_flow(hass: HomeAssistant) -> Any:
@@ -116,6 +128,83 @@ class TestUserFlow:
             CONF_DESTINATION: NY_PENN,
             CONF_DESTINATION_ID: "NY",
         }
+
+    async def test_suggests_the_station_nearest_home(
+        self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+    ) -> None:
+        """Home Assistant knows where home is; the endpoint knows what is near it.
+
+        Between them the station someone actually leaves from is derivable,
+        which beats hunting for it in a list of 167. Only a suggestion -- the
+        dropdown is unchanged and the field stays required.
+        """
+        hass.config.latitude = 40.7252
+        hass.config.longitude = -74.3238
+        install_api_mock(aioclient_mock)
+
+        result = await start_flow(hass)
+
+        assert result["type"] is FlowResultType.FORM
+        assert suggested_origin(result) == SHORT_HILLS
+
+    async def test_the_suggestion_ranks_by_distance_not_by_reply_order(
+        self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+    ) -> None:
+        """The recorded reply lists Millburn first, taken *at* Short Hills.
+
+        Trusting the order would suggest the wrong station to someone standing
+        on the right platform.
+        """
+        hass.config.latitude = 40.7252
+        hass.config.longitude = -74.3238
+        install_api_mock(aioclient_mock)
+        first = load_fixture("nearest_stations_short_hills")["data"][
+            "getTrainScheduleStationsRailForDVClose"
+        ][0]
+        assert first["title"] == "Millburn", "fixture no longer exercises the sort"
+
+        result = await start_flow(hass)
+
+        assert suggested_origin(result) == SHORT_HILLS
+
+    @pytest.mark.parametrize(
+        "override",
+        [{"DVCloseStation": TimeoutError()}, {"DVCloseStation": {"data": {}}}],
+        ids=["unreachable", "no payload"],
+    )
+    async def test_setup_still_works_without_a_suggestion(
+        self,
+        hass: HomeAssistant,
+        aioclient_mock: AiohttpClientMocker,
+        override: dict[str, object],
+    ) -> None:
+        """A convenience must never be able to block setup."""
+        hass.config.latitude = 40.7252
+        hass.config.longitude = -74.3238
+        install_api_mock(aioclient_mock, override)
+
+        result = await start_flow(hass)
+
+        assert result["type"] is FlowResultType.FORM
+        assert suggested_origin(result) is None
+
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_ORIGIN: SHORT_HILLS, CONF_DESTINATION: NY_PENN}
+        )
+        await hass.async_block_till_done()
+        assert result["type"] is FlowResultType.CREATE_ENTRY
+
+    async def test_no_suggestion_without_a_home_location(
+        self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+    ) -> None:
+        """A fresh install has no coordinates, and 0,0 is in the Atlantic."""
+        hass.config.latitude = 0.0
+        hass.config.longitude = 0.0
+        install_api_mock(aioclient_mock)
+
+        result = await start_flow(hass)
+
+        assert suggested_origin(result) is None
 
     async def test_destination_is_optional(
         self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker

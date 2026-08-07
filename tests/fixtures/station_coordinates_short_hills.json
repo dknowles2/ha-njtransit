@@ -1,0 +1,79 @@
+{
+  "data": {
+    "getTripPlannerAlternates": [
+      {
+        "title": "New Providence Station",
+        "distance": "3.4 miles",
+        "latitude": "40.712024",
+        "longitude": "-74.386498"
+      },
+      {
+        "title": "Short Hills Station",
+        "distance": "0.0 miles",
+        "latitude": "40.725249",
+        "longitude": "-74.323751"
+      },
+      {
+        "title": "South Orange Station",
+        "distance": "3.6 miles",
+        "latitude": "40.745952",
+        "longitude": "-74.260538"
+      },
+      {
+        "title": "Summit Station",
+        "distance": "1.9 miles",
+        "latitude": "40.716549",
+        "longitude": "-74.357807"
+      },
+      {
+        "title": "Chatham Station",
+        "distance": "3.4 miles",
+        "latitude": "40.740137",
+        "longitude": "-74.384812"
+      },
+      {
+        "title": "Springfield Center - Springfield Twp",
+        "distance": "1.2 miles",
+        "latitude": "40.710510",
+        "longitude": "-74.312660"
+      },
+      {
+        "title": "Pine Avenue - Union Twp",
+        "distance": "3.4 miles",
+        "latitude": "40.697766",
+        "longitude": "-74.270541"
+      },
+      {
+        "title": "Bonnel Court - Union Twp",
+        "distance": "3.4 miles",
+        "latitude": "40.696076",
+        "longitude": "-74.272277"
+      },
+      {
+        "title": "Maplewood Station",
+        "distance": "2.6 miles",
+        "latitude": "40.731149",
+        "longitude": "-74.275424"
+      },
+      {
+        "title": "Millburn Station",
+        "distance": "1.0 miles",
+        "latitude": "40.725622",
+        "longitude": "-74.303752"
+      }
+    ]
+  },
+  "extensions": {
+    "cacheControl": {
+      "version": 1,
+      "hints": [
+        {
+          "path": [
+            "getTripPlannerAlternates"
+          ],
+          "maxAge": 600
+        }
+      ]
+    }
+  }
+}

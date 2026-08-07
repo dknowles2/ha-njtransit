@@ -64,6 +64,8 @@ DEFAULT_RESPONSES: dict[str, str] = {
     "TrainLines": "train_lines",
     "TripPlannerSchedule": "trip_planner_short_hills_to_ny",
     "TrainStopList": "stop_list_6320",
+    "DVCloseStation": "nearest_stations_short_hills",
+    "TripPlannerAlternates": "station_coordinates_short_hills",
 }
 
 

@@ -112,6 +112,42 @@ query TrainScheduleStationsRailForDV {
 """,
 )
 
+NEAREST_STATIONS = Operation(
+    name="DVCloseStation",
+    root_field="getTrainScheduleStationsRailForDVClose",
+    document="""
+query DVCloseStation($_latLong: String!) {
+  getTrainScheduleStationsRailForDVClose(_latLong: $_latLong) {
+    title
+    pentaStationID
+    accessible
+    distance
+  }
+}
+""",
+)
+
+# Station coordinates, which the station list itself does not carry and cannot
+# be made to (SPEC 3.1). This is a trip-planner operation being used outside
+# its purpose: asked for a station title it returns that station at 0.0 miles
+# alongside its neighbours. See SPEC 3.9, including why only an exact title
+# match may be taken -- the near misses it returns for an unknown title are
+# real stations miles away, so `rows[0]` would answer confidently and wrongly.
+STATION_COORDINATES = Operation(
+    name="TripPlannerAlternates",
+    root_field="getTripPlannerAlternates",
+    document="""
+query TripPlannerAlternates($title: String!, $_latLong: String) {
+  getTripPlannerAlternates(title: $title, _latLong: $_latLong) {
+    title
+    distance
+    latitude
+    longitude
+  }
+}
+""",
+)
+
 TRAIN_LINES = Operation(
     name="TrainLines",
     root_field="getTrainLines",
