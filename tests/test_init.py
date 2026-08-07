@@ -483,6 +483,47 @@ async def test_the_progress_coordinator_follows_a_favorite(
     assert run.train_id == "6624"
 
 
+async def test_the_origin_coordinates_reach_the_favourite_sensor(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """An automation cannot ask "am I near the station" without them.
+
+    They ride on the favourite sensor because that is the entity an automation
+    is pointed at, alongside `favorites`, which is on it for the same reason.
+    """
+    install_api_mock(aioclient_mock)
+    await setup_entry(hass, make_entry())
+
+    state = hass.states.get(
+        "sensor.short_hills_station_to_new_york_penn_station_next_favorite"
+    )
+    assert state is not None
+    assert state.attributes["origin_latitude"] == pytest.approx(40.725249)
+    assert state.attributes["origin_longitude"] == pytest.approx(-74.323751)
+
+
+async def test_setup_survives_the_coordinate_lookup_failing(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """Proximity is a convenience laid on a working commute.
+
+    The attributes are absent rather than zeroed: `0, 0` is a real place in
+    the Atlantic, and a distance measured against it would be silently
+    enormous -- which reads as "you are never near the station" rather than as
+    "this is not known", and would suppress every notification for good.
+    """
+    install_api_mock(aioclient_mock, {"TripPlannerAlternates": TimeoutError()})
+    entry = make_entry()
+    await setup_entry(hass, entry)
+
+    assert entry.state is ConfigEntryState.LOADED
+    state = hass.states.get(
+        "sensor.short_hills_station_to_new_york_penn_station_next_favorite"
+    )
+    assert state is not None
+    assert "origin_latitude" not in state.attributes
+
+
 async def test_the_train_you_boarded_is_not_swapped_for_the_next_one(
     hass: HomeAssistant,
     aioclient_mock: AiohttpClientMocker,

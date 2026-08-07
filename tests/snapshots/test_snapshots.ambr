@@ -179,6 +179,8 @@
         'favorites': list([
         ]),
         <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to New York Penn Station Next favorite',
+        'origin_latitude': 40.725249,
+        'origin_longitude': -74.323751,
       }),
       'state': 'unknown',
       'unique_id': 'RT-NY-next-favorite',
@@ -423,6 +425,8 @@
         'favorites': list([
         ]),
         <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station Next favorite',
+        'origin_latitude': 40.725249,
+        'origin_longitude': -74.323751,
       }),
       'state': 'unknown',
       'unique_id': 'RT-next-favorite',
@@ -713,6 +717,8 @@
         'favorites': list([
         ]),
         <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to Hoboken Terminal Next favorite',
+        'origin_latitude': 40.725249,
+        'origin_longitude': -74.323751,
       }),
       'state': 'unknown',
       'unique_id': 'RT-HB-next-favorite',
@@ -906,6 +912,8 @@
         'favorites': list([
         ]),
         <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Short Hills Station to New York Penn Station Next favorite',
+        'origin_latitude': 40.725249,
+        'origin_longitude': -74.323751,
       }),
       'state': 'unknown',
       'unique_id': 'RT-NY-next-favorite',

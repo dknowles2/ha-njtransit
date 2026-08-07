@@ -11,6 +11,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api.client import NJTransitClient
+from .api.exceptions import NJTransitError
 from .api.models import TrainRun
 from .api.parsing import now_local
 from .const import (
@@ -171,6 +172,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: NJTransitConfigEntry) ->
                 return departure.train_id
         return None
 
+    # Where the origin is, so an automation can ask whether you are near enough
+    # to catch anything leaving it. Once, at setup: stations do not move.
+    # A failure here is not a setup failure -- proximity is a convenience laid
+    # on top of a working commute, and the alternative to a coordinate is an
+    # automation that does not filter by location, which is how this behaved
+    # before the lookup existed.
+    try:
+        origin_coordinates = await client.station_coordinates(origin)
+    except NJTransitError:
+        origin_coordinates = None
+
     progress = ProgressCoordinator(
         hass,
         client,
@@ -191,6 +203,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: NJTransitConfigEntry) ->
         history=store.history,
         origin=origin,
         destination=destination,
+        origin_coordinates=origin_coordinates,
         options=dict(entry.options),
     )
 

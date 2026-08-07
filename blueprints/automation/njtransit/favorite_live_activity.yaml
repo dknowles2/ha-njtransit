@@ -154,6 +154,38 @@ blueprint:
           multiple: true
           filter:
             - domain: zone
+    origin_radius:
+      name: How far from the station still counts
+      description: >
+        Optional, and does nothing without **Where you are**. Used instead of
+        zones when you have not set any.
+
+
+        **In whatever unit your Home Assistant measures distance in** — miles
+        on a US install, kilometres elsewhere. There is no unit shown on the
+        box because a blueprint cannot know which one you are on, and printing
+        the wrong one is worse than printing none. The derived default is
+        computed the same way, so it is right either way.
+
+
+        Leave it at 0 and it is worked out for you, from how far the origin
+        station is from your Home Assistant home location: half that distance,
+        floored at 2. For a station you walk to the floor does the work and
+        covers home and the walk. For the far end of the commute the halving
+        does — it takes in the whole city you might be anywhere in, while
+        still excluding home, because half a distance can never reach it.
+
+
+        That single rule is why there is no separate setting for the outbound
+        and return legs. Set a number here only if it gets your geography
+        wrong.
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 50
+          step: 0.5
+          mode: box
     follow_any_train:
       name: Follow any train once your favourites have gone
       description: >
@@ -292,6 +324,34 @@ variables:
   zones: !input presence_zones
   windows: !input commute_window
   any_train: !input follow_any_train
+  radius: !input origin_radius
+  origin_lat: "{{ state_attr(sensor, 'origin_latitude') }}"
+  origin_lon: "{{ state_attr(sensor, 'origin_longitude') }}"
+  # How far home is from the station this commute leaves from. `distance` with
+  # a bare coordinate pair measures from Home Assistant's own home location,
+  # which is exactly the anchor wanted here.
+  #
+  # It answers in the instance's own distance unit, not always kilometres: on a
+  # US install this is miles. Verified rather than assumed -- a station measured
+  # at 0.99 km came back as 0.61. Nothing here converts, because every distance
+  # in this gate comes from the same function and the derived radius is built
+  # from that same answer, so the comparison is consistent whichever unit it
+  # is. Only a *typed-in* number has to match the instance, which is what the
+  # input description says.
+  home_to_origin: >-
+    {{ distance(origin_lat | float(0), origin_lon | float(0))
+       if origin_lat is not none and origin_lon is not none else none }}
+  # Half the distance home sits at, floored at 2.
+  #
+  # Halving is not arbitrary: it is the largest radius that cannot reach home,
+  # so the far end of a commute silences itself on a day worked from home
+  # without anyone choosing a number. At the near end the halving is irrelevant
+  # and the floor does the work -- a station you walk to needs a radius that
+  # still includes the house you walk from.
+  effective_radius: >-
+    {{ radius | float(0) if radius | float(0) > 0
+       else ([2.0, home_to_origin | float(0) / 2] | max
+             if home_to_origin is not none else 0) }}
   # Whether you are somewhere this train could still be caught from.
   #
   # Measured with `distance` against each zone's own radius rather than by
@@ -305,10 +365,18 @@ variables:
   # countdown is invisible, and the failure would look like the integration
   # having nothing to say rather than a location lookup going wrong.
   nearby: >-
-    {%- if not presence or not zones -%}
+    {%- if not presence -%}
+    true
+    {%- elif not zones and effective_radius | float(0) <= 0 -%}
     true
     {%- elif states(presence) in nothing or state_attr(presence, 'latitude') is none -%}
     true
+    {%- elif not zones -%}
+    {#- No zones, so fall back to plain distance from the station. `distance`
+        returns null if the entity has no position, which is the same
+        can-not-measure case the zone branch handles below. -#}
+    {%- set away = distance(presence, origin_lat | float(0), origin_lon | float(0)) -%}
+    {{ away is none or away <= effective_radius | float(0) }}
     {%- else -%}
     {%- set ns = namespace(near=false, measured=false) -%}
     {%- for z in zones -%}

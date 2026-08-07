@@ -172,14 +172,35 @@ class FavoriteDepartureSensor(NJTransitEntity, SensorEntity):
         return departure.scheduled if departure else None
 
     @property
+    def _commute(self) -> dict[str, Any]:
+        """Return facts about the commute rather than about one departure.
+
+        `favorites` was already here for the same reason: this is the entity an
+        automation is pointed at, so it is where anything the automation needs
+        about the commute as a whole has to be readable.
+
+        The coordinates are what let a countdown be suppressed when you are
+        nowhere near the station it is counting down to. They are absent rather
+        than zeroed when unknown -- `0, 0` is a real place in the Atlantic, and
+        a distance measured against it would be silently enormous, which reads
+        as "you are never close enough" rather than "this is not known".
+        """
+        commute: dict[str, Any] = {"favorites": sorted(self.favorites)}
+        coordinates = self.runtime.origin_coordinates
+        if coordinates is not None:
+            commute["origin_latitude"] = coordinates[0]
+            commute["origin_longitude"] = coordinates[1]
+        return commute
+
+    @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
         """Return the same details the numbered departure sensors report."""
         departure = self._next
         if departure is None:
-            return {"favorites": sorted(self.favorites)}
+            return self._commute
         return {
             **_details(departure, self.favorites, self.runtime.status.data),
-            "favorites": sorted(self.favorites),
+            **self._commute,
         }
 
 
