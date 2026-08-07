@@ -442,6 +442,49 @@ floor under the delay. It is a lower bound on purpose: claiming a train will
 make up time is a guess, and this is a number someone reads while deciding
 whether to run for a connection.
 
+**Using where you are.** Two optional inputs, **Where you are** (a person or
+device tracker) and **Only when you are in one of these** (zones), stop the
+activity being sent when you could not act on it. Set neither and nothing
+changes.
+
+The rule is one line — *are you somewhere this train could still be caught
+from* — and it covers three separate annoyances:
+
+| situation | zones for that automation | result |
+|---|---|---|
+| working from home | evening: your workplace | you are not there, so no evening countdown |
+| already on the train | morning: home, or the station | you have left, so the countdown to the *next* train out stops |
+| still in the city late | evening: your workplace | you are there, so it keeps going |
+
+Zones are the unit because station coordinates cannot be had: the API's
+`latitude` field nulls the entire response (SPEC 3.1), so the integration does
+not know where a station is and should not pretend to. You know which places
+mean "I might catch this train"; a zone is how you say so. Make the morning
+zone big enough to cover getting to the station, or draw a second one around
+it.
+
+Membership is measured by distance against each zone's own radius rather than
+by comparing a person's state to a zone name — a person entity reports `home`
+for the home zone but the zone's title for every other one, and a device
+tracker reports neither reliably.
+
+**It fails open, everywhere.** No entity, no zones, no coordinates, a zone that
+cannot be measured because it was renamed — all of these show the activity.
+Suppressing on missing data would be invisible: you would never learn that the
+countdown you were waiting for had been silenced, you would just miss the
+train.
+
+Being aboard is deliberately exempt. You are on it, which settles the question,
+and the zones that make sense for waiting are exactly the places you are not
+while riding.
+
+**Trains you would never normally take.** **Follow any train once your
+favourites have gone** falls back to the next departure that actually serves
+your destination, for the evening you stayed late and your usual train left
+hours ago. Off by default, since without zones it means a countdown to *some*
+train all day; it applies only while you are in one of your zones and inside
+the commute window, if you set one.
+
 **Picking the phone.** The **Phone** input is a picker over the `notify`
 entities the companion app creates, e.g. `notify.davids_iphone`. What the
 blueprint actually calls is the older `notify.mobile_app_davids_iphone` action

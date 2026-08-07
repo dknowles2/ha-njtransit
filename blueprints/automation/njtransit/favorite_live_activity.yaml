@@ -113,6 +113,63 @@ blueprint:
         entity:
           filter:
             - domain: input_boolean
+    presence_entity:
+      name: Where you are
+      description: >
+        Optional. The person or device tracker to judge by. Leave empty and
+        location is ignored entirely, which is how this behaved before.
+
+
+        **It fails open.** If this entity has no location — phone off, GPS
+        denied, not reported yet — the activity is shown anyway. A missing
+        countdown for a train you were running for is a worse failure than an
+        unnecessary one, and it would be invisible: you would simply never
+        find out the notification was suppressed.
+      default: ""
+      selector:
+        entity:
+          filter:
+            - domain: person
+            - domain: device_tracker
+    presence_zones:
+      name: Only when you are in one of these
+      description: >
+        Optional, and does nothing without **Where you are**. The activity is
+        shown only while you are inside one of these zones.
+
+
+        Pick the places from which you would actually catch this train. For an
+        outbound morning commute that is home, or a zone around the station
+        big enough to cover getting there. For the return it is wherever you
+        spend the day.
+
+
+        This is what makes the activity stop being noise: on a day working
+        from home you are not in the zone for the evening train, so nothing is
+        sent. Once you are on the train you have left the morning zone, so the
+        countdown to the *next* service out of your origin stops too.
+      default: []
+      selector:
+        entity:
+          multiple: true
+          filter:
+            - domain: zone
+    follow_any_train:
+      name: Follow any train once your favourites have gone
+      description: >
+        Optional. When no favourite is left to catch, fall back to the next
+        departure that actually serves your destination.
+
+
+        For the evening you stayed late and your usual train went hours ago —
+        the trains you would never normally take are exactly the ones you need
+        then. Off by default, because without **Only when you are in one of
+        these** set it means a countdown to *some* train all day. It only
+        applies while you are in one of those zones, and inside the commute
+        window if you have set one.
+      default: false
+      selector:
+        boolean: {}
     commute_window:
       name: Commute window
       description: >
@@ -230,9 +287,58 @@ variables:
   tag: >-
     {{ 'njt_' ~ (sensor | replace('sensor.', '') | replace('_next_favorite', '')) }}
   dismiss_tag: "{{ tag ~ '_dismiss' }}"
-  scheduled: "{{ states(sensor) }}"
-  known: >-
-    {{ scheduled not in ['unknown', 'unavailable', 'none', ''] }}
+  nothing: "{{ ['unknown', 'unavailable', 'none', ''] }}"
+  presence: !input presence_entity
+  zones: !input presence_zones
+  windows: !input commute_window
+  any_train: !input follow_any_train
+  # Whether you are somewhere this train could still be caught from.
+  #
+  # Measured with `distance` against each zone's own radius rather than by
+  # comparing the person's state to a zone name: a person entity reports
+  # `home` for the home zone but the zone's *title* for every other one, and
+  # a device tracker reports neither reliably. Coordinates are the only thing
+  # both agree on.
+  #
+  # Fails open at every step. Not configured, no coordinates, or a zone that
+  # cannot be measured all come out as "yes, show it" -- a suppressed
+  # countdown is invisible, and the failure would look like the integration
+  # having nothing to say rather than a location lookup going wrong.
+  nearby: >-
+    {%- if not presence or not zones -%}
+    true
+    {%- elif states(presence) in nothing or state_attr(presence, 'latitude') is none -%}
+    true
+    {%- else -%}
+    {%- set ns = namespace(near=false, measured=false) -%}
+    {%- for z in zones -%}
+    {%- set away = distance(presence, z) -%}
+    {%- if away is not none -%}
+    {%- set ns.measured = true -%}
+    {%- if (away * 1000) <= (state_attr(z, 'radius') | float(100)) -%}
+    {%- set ns.near = true -%}
+    {%- endif -%}
+    {%- endif -%}
+    {%- endfor -%}
+    {#- `not measured` is the fail-open case and it is not hypothetical: a
+        renamed or deleted zone makes `distance` return null for every entry,
+        and without this line that reads as "you are nowhere near any of them"
+        and silences the commute permanently. Measured-and-outside and
+        could-not-measure are different answers. -#}
+    {{ ns.near or not ns.measured }}
+    {%- endif -%}
+  in_window: >-
+    {{ not windows or windows | select('is_state', 'on') | list | count > 0 }}
+  # The next train out, whoever is driving it. Only consulted once the
+  # favourites are gone, and only somewhere you could board -- otherwise this
+  # is a countdown to a service leaving a station you are nowhere near.
+  fallback_entity: "{{ sensor | replace('_next_favorite', '_next_departure') }}"
+  favorite_known: "{{ states(sensor) not in nothing }}"
+  use_fallback: >-
+    {{ any_train and not favorite_known and nearby | bool(false) and in_window }}
+  source: "{{ fallback_entity if use_fallback else sensor }}"
+  scheduled: "{{ states(source) }}"
+  known: "{{ scheduled not in nothing }}"
   minutes_out: >-
     {{ ((as_timestamp(scheduled) - as_timestamp(now())) / 60) | round(0) | int
        if known else 9999 }}
@@ -242,7 +348,7 @@ variables:
   # blueprint did before the input existed.
   waiting: >-
     {{ known and minutes_out <= (lead | int) and minutes_out > -2
-       and not is_state(boarded, 'on') }}
+       and not is_state(boarded, 'on') and nearby | bool(false) }}
   # Where the train is, once the departure board can no longer say. It drops a
   # train the moment it leaves, so from that point the stop list is the only
   # account of the journey -- and `sensor` has already moved on to whatever
@@ -255,6 +361,11 @@ variables:
   # destination still ahead. There is no way to know you actually boarded --
   # Home Assistant cannot see which platform you are on -- so this follows the
   # train you were waiting for and Dismiss remains the answer if you let it go.
+  # Deliberately not gated on location. Being aboard is itself the answer to
+  # "could you catch this train", and the zones that make sense for waiting --
+  # home, or the office -- are exactly the places you are *not* while riding.
+  # Applying the gate here would kill the arrival countdown the moment it
+  # became the useful half.
   riding: >-
     {{ state_attr(progress_entity, 'on_board') | default(false, true)
        and eta not in [none, 'unknown', 'unavailable', '']
@@ -264,10 +375,10 @@ variables:
   ride_stops: "{{ state_attr(progress_entity, 'stops_to_destination') }}"
   ride_next: "{{ state_attr(progress_entity, 'next_stop') or '' }}"
   ride_late: "{{ state_attr(progress_entity, 'minutes_late') | int(0) }}"
-  train: "{{ state_attr(sensor, 'train_id') or '' }}"
-  track: "{{ state_attr(sensor, 'track') }}"
-  status: "{{ state_attr(sensor, 'status_text') or 'Scheduled' }}"
-  destination: "{{ state_attr(sensor, 'destination') or '' }}"
+  train: "{{ state_attr(source, 'train_id') or '' }}"
+  track: "{{ state_attr(source, 'track') }}"
+  status: "{{ state_attr(source, 'status_text') or 'Scheduled' }}"
+  destination: "{{ state_attr(source, 'destination') or '' }}"
   # How full the train is, when the board says. It only carries consist data
   # for imminent departures -- roughly a quarter of rows -- so this is empty
   # for most of the lead window and appears as departure nears, which is
@@ -280,7 +391,7 @@ variables:
   # being reported as a crowding level.
   busy: >-
     {{ {'moderate': 'Filling up', 'heavy': 'Busy'}
-       .get(state_attr(sensor, 'crowding'), '') }}
+       .get(state_attr(source, 'crowding'), '') }}
   # The status has to live in the title. `chronometer` replaces the message
   # line with the countdown, and replaces critical_text too, so the title is
   # the only text field that survives alongside a timer. An Apple Watch
