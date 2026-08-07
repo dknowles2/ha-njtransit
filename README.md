@@ -607,7 +607,7 @@ departure when your favourite is not on the board, so it is worth opening at
 any hour rather than being a wall of apology for the twenty hours a day you are
 not commuting. And it reports a missing track as *overdue* inside eight
 minutes, rather than as "not yet" — New York Penn posts tracks a median of nine
-minutes out with an interquartile range of 0.2 minutes, so a track that has not
+minutes out with an interquartile range of 1.9 minutes, so a track that has not
 appeared by then is a deviation from a schedule, not a wait. It only says so
 when other trains on the board have their tracks, which is the same test the
 `track_overdue` event uses.

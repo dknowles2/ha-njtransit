@@ -11,8 +11,9 @@ candidates against a bar set before the data existed -- 60% top-1.
 
 **When the track is posted.** The more promising question, and it came from
 watching rather than modelling: New York Penn posts NJ Transit tracks a median
-of 9.0 minutes before departure with an interquartile range of *0.2 minutes*.
-That is a scheduled process, not a tendency, which is why a regular traveller
+of 8.8 minutes before departure with an interquartile range of *1.9 minutes*
+(n=236; an early 125-observation sample read 0.2 and was wrong).
+That is a regular process rather than a coincidence, which is why a traveller
 can feel a deviation from it. The claim to test is that a track arriving late
 predicts a bad commute.
 
