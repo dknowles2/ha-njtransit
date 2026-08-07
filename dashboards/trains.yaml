@@ -41,8 +41,8 @@
 # Change the four occurrences below if your line is a different colour.
 #
 # The track line is the part worth understanding. New York Penn posts NJ
-# Transit tracks a median of 9 minutes before departure with an interquartile
-# range of 0.2 minutes -- it is a scheduled process, not a tendency. So a
+# Transit tracks a median of 8.8 minutes before departure with an
+# interquartile range of 1.9 minutes (n=236). So a
 # missing track inside 8 minutes is not "not yet", it is a deviation, and the
 # card says so in red. It only says so when *other* trains on the board have
 # their tracks, which is the same test the integration's `track_overdue` event

@@ -46,11 +46,16 @@ KNOCK_ON_LEAD = timedelta(minutes=30)
 
 # When a missing track stops being normal and starts being news.
 #
-# Measured, not guessed: over 125 New York Penn assignments, NJ Transit posts a
-# track a median of 9.0 minutes before departure with a quartile range of 0.2
-# minutes -- 8.9 to 9.1. It is a scheduled process rather than a tendency,
-# which is what makes a deviation meaningful at all. Eight minutes sits below
-# the first quartile, so this fires for roughly the slowest tenth.
+# Measured, and then re-measured. Over 236 New York Penn assignments NJ
+# Transit posts a track a median of 8.8 minutes before departure, Q1 7.9,
+# Q3 9.7 -- an interquartile range of 1.9 minutes. An early 125-observation
+# sample read 0.2 minutes and that was simply wrong.
+#
+# **This threshold is therefore miscalibrated.** Eight minutes was chosen to
+# sit below the first quartile and fire for roughly the slowest tenth; at the
+# real spread, 26% of assignments land inside it. The p10 is 5.7 minutes, so
+# 6 is the value that does what 8 was meant to do. Left at 8 pending a
+# decision, because changing when a shipped event fires is not a silent fix.
 #
 # Amtrak is excluded from those figures and would wreck this threshold: it
 # announces at a median of 13 minutes but leaves 16% until the departure

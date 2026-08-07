@@ -497,7 +497,14 @@ New York Penn, split by operator:
 | NJ Transit | 125 | 7.0 | 8.9 | **9.0** | 9.1 | 1% |
 | Amtrak | 43 | 0.0 | 6.0 | 13.0 | 14.1 | **16%** |
 
-NJ Transit's interquartile range is **0.2 minutes**. That is a scheduled process, not a
+NJ Transit's interquartile range is **1.9 minutes** (Q1 7.9, median 8.8, Q3 9.7, n=236).
+An early 125-observation sample put it at 0.2 minutes; that figure was wrong and is
+corrected here rather than quietly refined. **26% of assignments land inside 8 minutes**,
+which matters because `TRACK_OVERDUE_LEAD` was set to 8 on the belief it would fire for
+roughly the slowest tenth. It fires for a quarter. The p10 is 5.7 minutes, so 6 would be
+the threshold that does what 8 was meant to do.
+
+It is still a regular process, not a
 tendency, and it is what makes a deviation from it meaningful — see §7.3. Amtrak is a
 different operating practice entirely, announcing later on average while leaving a sixth of
 its departures until the departure minute itself. A figure computed across both describes
@@ -923,7 +930,7 @@ It is a better shape of question than track prediction, and for a specific reaso
 track a train leaves from depends on the equipment turn, which §3.8 establishes is
 unobservable through this API — every candidate signal is a proxy for a hidden variable.
 *When* the track is posted is not a proxy for anything. It is directly observed, on a
-60-second poll, against a process whose quartile range is 0.2 minutes.
+60-second poll, against a process whose quartile range is 1.9 minutes (n=236).
 
 `event.py` fires `track_overdue` when one of your trains is inside `TRACK_OVERDUE_LEAD`
 (8 minutes, below NJ Transit's first quartile) with no track published. Two guards matter:
