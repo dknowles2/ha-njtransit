@@ -566,9 +566,17 @@ actions:
             value_template: >-
               {{ boarded and trigger.event.data.action == action_id }}
         sequence:
+          # Templated rather than `!input`. The helper is optional, and an
+          # empty `!input` lands in `target.entity_id` as `''`, which fails
+          # config validation -- so leaving it empty, which the input's own
+          # description invites, did not merely skip the Dismiss button: it
+          # stopped the whole automation loading. A template is resolved at
+          # run time instead, and this branch is unreachable without a helper
+          # because the notification carrying the button is only sent when one
+          # is set.
           - action: input_boolean.turn_on
             target:
-              entity_id: !input boarded_helper
+              entity_id: "{{ boarded }}"
           - action: "{{ notify_action }}"
             data:
               message: clear_notification
@@ -589,9 +597,11 @@ actions:
           - condition: template
             value_template: "{{ boarded | length > 0 }}"
         sequence:
+          # Templated for the same reason as the branch above, and guarded by
+          # this branch's own `boarded | length > 0` condition.
           - action: input_boolean.turn_off
             target:
-              entity_id: !input boarded_helper
+              entity_id: "{{ boarded }}"
 
       - alias: Show or refresh the activity
         conditions:

@@ -238,11 +238,26 @@ line-length reflow with everything else green.
 
 `./scripts/mutation_check.sh` breaks one real behaviour at a time and checks
 the suite notices. It is not part of CI and is not a routine step -- run it
-after changing behaviour in `event.py`, `coordinator.py`, `binary_sensor.py`
-or `track_history.py`. Every gap it has found so far was a fully covered line
-sitting under a test that could not fail: `pick_favorite` never once matched a
-favourite, and the direct-only trip filter was asserted only as "some trains
-resolved". A SKIP means a pattern went stale and the entry needs rewriting.
+after changing behaviour in `event.py`, `coordinator.py`, `binary_sensor.py`,
+`track_history.py`, or the Live Activity blueprint. Every gap it has found so
+far was a fully covered line sitting under a test that could not fail:
+`pick_favorite` never once matched a favourite, and the direct-only trip filter
+was asserted only as "some trains resolved". A SKIP means a pattern went stale
+and the entry needs rewriting.
+
+**Blueprints are tested too, and they have to be.** `tests/test_blueprint_live_activity.py`
+copies the real blueprint into the test config, builds an automation from it
+and drives it, asserting on what reaches a mocked `notify.mobile_app_*`. Every
+blueprint bug this repository has had was invisible to the Python suite and
+visible on a phone -- a countdown to a cancelled train, a notification on a day
+off, `as_timestamp` raising on `unknown`. None of that is logic the integration
+owns, so no amount of testing the integration would have found it.
+
+Two things that harness needs. Set an `expected_lingering_timers` fixture,
+because the blueprint's five-minute refresh is a real registered timer rather
+than a leak. And filter `clear_notification` out of the recorded calls before
+asserting nothing was sent -- it fires on every quiet poll, so counting it
+makes "sent nothing" unassertable.
 
 `uv run pytest` alone is fine for quick iteration, but run the coverage
 variant before finishing — CI enforces the gate, and new code without tests

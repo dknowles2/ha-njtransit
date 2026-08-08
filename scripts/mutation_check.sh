@@ -107,6 +107,33 @@ run "alert matching stops normalizing the board id" \
   "if departure.train_id.upper() in alert.train_ids:" \
   "if departure.train_id in alert.train_ids:"
 
+# The blueprint is not Python, but it is where the bugs a user actually feels
+# have come from, and `run` only cares about text. Each of these is a real
+# defect that reached a phone.
+
+run "blueprint: as_timestamp loses its default" \
+  blueprints/automation/njtransit/favorite_live_activity.yaml \
+  "as_timestamp(scheduled, 0)) | int }}" \
+  "as_timestamp(scheduled)) | int }}"
+
+run "blueprint: fallback stops skipping cancelled trains" \
+  blueprints/automation/njtransit/favorite_live_activity.yaml \
+  "and state_attr(row, 'status') != 'cancelled' -%}" \
+  "-%}"
+
+run "blueprint: the commute window stops gating" \
+  blueprints/automation/njtransit/favorite_live_activity.yaml \
+  "and not is_state(boarded, 'on') and nearby | bool(false)
+       and in_window }}" \
+  "and not is_state(boarded, 'on') and nearby | bool(false) }}"
+
+run "blueprint: an unset helper breaks config validation" \
+  blueprints/automation/njtransit/favorite_live_activity.yaml \
+  '              entity_id: "{{ boarded }}"
+          - action: "{{ notify_action }}"' \
+  '              entity_id: !input boarded_helper
+          - action: "{{ notify_action }}"'
+
 run "status_text drops the delay" \
   custom_components/njtransit/api/models.py \
   'return f"{self.delay_minutes} min late"' 'return "late"'
