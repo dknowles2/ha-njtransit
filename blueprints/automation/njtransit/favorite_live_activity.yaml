@@ -412,10 +412,32 @@ variables:
   # The next train out, whoever is driving it. Only consulted once the
   # favourites are gone, and only somewhere you could board -- otherwise this
   # is a countdown to a service leaving a station you are nowhere near.
-  fallback_entity: "{{ sensor | replace('_next_favorite', '_next_departure') }}"
+  #
+  # The first train you could actually board, which is not the same as the
+  # first train on the board: a cancelled service stays listed, and that is the
+  # point of it being listed. Counting down to one on a Lock Screen is worse
+  # than saying nothing, because a chronometer ticking toward a departure reads
+  # as a train that is coming.
+  #
+  # Empty when every upcoming departure is cancelled -- during a line
+  # suspension the honest Live Activity is no Live Activity, and the disruption
+  # blueprint is what carries that news.
+  fallback_entity: >-
+    {%- set rows = [sensor | replace('_next_favorite', '_next_departure'),
+                    sensor | replace('_next_favorite', '_departure_2'),
+                    sensor | replace('_next_favorite', '_departure_3')] -%}
+    {%- set pick = namespace(row='') -%}
+    {%- for row in rows if not pick.row -%}
+    {%- if states(row) not in nothing
+           and state_attr(row, 'status') != 'cancelled' -%}
+    {%- set pick.row = row -%}
+    {%- endif -%}
+    {%- endfor -%}
+    {{ pick.row }}
   favorite_known: "{{ states(sensor) not in nothing }}"
   use_fallback: >-
-    {{ any_train and not favorite_known and nearby | bool(false) and in_window }}
+    {{ any_train and not favorite_known and nearby | bool(false) and in_window
+       and fallback_entity != '' }}
   source: "{{ fallback_entity if use_fallback else sensor }}"
   scheduled: "{{ states(source) }}"
   known: "{{ scheduled not in nothing }}"

@@ -101,12 +101,34 @@ views:
             train out. A dashboard that says "nothing to show" for the twenty
             hours a day you are not commuting is not worth opening. -#}
         {%- set tracking = states(fav) not in nothing -%}
-        {%- set s = fav if tracking else rows[0] -%}
-        {%- set t = states(s) -%}
+        {#- Falling back to "the next train out" has to mean the next train you
+            could actually board. A cancelled service is still on the board --
+            that is the point of it being there -- so taking row zero blindly
+            put a five-centimetre countdown to a train that was not running at
+            the top of the page, with the word Cancelled underneath it in
+            eight-point type. Observed during a line suspension, which is
+            exactly when someone reads this card hardest.
+
+            Your *favourite* is deliberately not filtered this way: if the
+            train you were going to catch is cancelled, that is the single most
+            important thing the card can tell you. -#}
+        {%- set pick = namespace(row=none) -%}
+        {%- for row in rows if pick.row is none -%}
+        {%- if states(row) not in nothing
+               and state_attr(row, 'status') != 'cancelled' -%}
+        {%- set pick.row = row -%}
+        {%- endif -%}
+        {%- endfor -%}
+        {%- set s = fav if tracking else pick.row -%}
+        {%- set t = states(s) if s else 'unknown' -%}
         {%- if t in nothing -%}
         ### Nothing on the board
 
+        {% if pick.row is none and states(rows[0]) not in nothing -%}
+        Every upcoming departure is cancelled.
+        {%- else -%}
         No departures in the next couple of hours.
+        {%- endif -%}
         {%- else -%}
         {%- set mins = ((as_timestamp(t) - as_timestamp(now())) / 60) | round(0) | int -%}
         {%- set track = state_attr(s, 'track') -%}
@@ -482,12 +504,34 @@ views:
             train out. A dashboard that says "nothing to show" for the twenty
             hours a day you are not commuting is not worth opening. -#}
         {%- set tracking = states(fav) not in nothing -%}
-        {%- set s = fav if tracking else rows[0] -%}
-        {%- set t = states(s) -%}
+        {#- Falling back to "the next train out" has to mean the next train you
+            could actually board. A cancelled service is still on the board --
+            that is the point of it being there -- so taking row zero blindly
+            put a five-centimetre countdown to a train that was not running at
+            the top of the page, with the word Cancelled underneath it in
+            eight-point type. Observed during a line suspension, which is
+            exactly when someone reads this card hardest.
+
+            Your *favourite* is deliberately not filtered this way: if the
+            train you were going to catch is cancelled, that is the single most
+            important thing the card can tell you. -#}
+        {%- set pick = namespace(row=none) -%}
+        {%- for row in rows if pick.row is none -%}
+        {%- if states(row) not in nothing
+               and state_attr(row, 'status') != 'cancelled' -%}
+        {%- set pick.row = row -%}
+        {%- endif -%}
+        {%- endfor -%}
+        {%- set s = fav if tracking else pick.row -%}
+        {%- set t = states(s) if s else 'unknown' -%}
         {%- if t in nothing -%}
         ### Nothing on the board
 
+        {% if pick.row is none and states(rows[0]) not in nothing -%}
+        Every upcoming departure is cancelled.
+        {%- else -%}
         No departures in the next couple of hours.
+        {%- endif -%}
         {%- else -%}
         {%- set mins = ((as_timestamp(t) - as_timestamp(now())) / 60) | round(0) | int -%}
         {%- set track = state_attr(s, 'track') -%}
