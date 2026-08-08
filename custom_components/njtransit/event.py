@@ -48,19 +48,22 @@ KNOCK_ON_LEAD = timedelta(minutes=30)
 #
 # Measured, and then re-measured. Over 236 New York Penn assignments NJ
 # Transit posts a track a median of 8.8 minutes before departure, Q1 7.9,
-# Q3 9.7 -- an interquartile range of 1.9 minutes. An early 125-observation
-# sample read 0.2 minutes and that was simply wrong.
+# Q3 9.7 -- an interquartile range of 1.9 minutes.
 #
-# **This threshold is therefore miscalibrated.** Eight minutes was chosen to
-# sit below the first quartile and fire for roughly the slowest tenth; at the
-# real spread, 26% of assignments land inside it. The p10 is 5.7 minutes, so
-# 6 is the value that does what 8 was meant to do. Left at 8 pending a
-# decision, because changing when a shipped event fires is not a silent fix.
+# Six minutes, not eight. Eight came from an early 125-observation sample that
+# read the spread as 0.2 minutes; against that it looked like the slowest
+# tenth, and against the real distribution it is the slowest *quarter* --
+# frequent enough to stop being news. The p10 is 5.7 minutes, so six is where
+# one-in-ten actually sits.
+#
+# The cost is asymmetric, which is worth remembering before tightening it
+# again: too generous and the event cries wolf until it is ignored, too tight
+# and it fires so rarely nobody learns to trust it.
 #
 # Amtrak is excluded from those figures and would wreck this threshold: it
 # announces at a median of 13 minutes but leaves 16% until the departure
 # minute itself, against 1% for NJ Transit.
-TRACK_OVERDUE_LEAD = timedelta(minutes=8)
+TRACK_OVERDUE_LEAD = timedelta(minutes=6)
 
 
 async def async_setup_entry(

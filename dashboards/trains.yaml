@@ -43,7 +43,7 @@
 # The track line is the part worth understanding. New York Penn posts NJ
 # Transit tracks a median of 8.8 minutes before departure with an
 # interquartile range of 1.9 minutes (n=236). So a
-# missing track inside 8 minutes is not "not yet", it is a deviation, and the
+# missing track inside 6 minutes is not "not yet", it is a deviation, and the
 # card says so in red. It only says so when *other* trains on the board have
 # their tracks, which is the same test the integration's `track_overdue` event
 # uses: a station that posts nothing tells you nothing.
@@ -128,8 +128,8 @@ views:
            and weld the first pill onto the end of the heading. -#}
         {% if track %}`Track {{ track }}`
         {%- elif not posting %}*`Track not posted`*
-        {%- elif mins <= 8 %}**`⚠️ Track overdue`**
-        {%- elif mins <= 11 %}*`Track due any minute`*
+        {%- elif mins <= 6 %}**`⚠️ Track overdue`**
+        {%- elif mins <= 10 %}*`Track due any minute`*
         {%- elif mins <= 25 %}*`Track due in ~{{ mins - 9 }} min`*
         {%- else %}*`Track not posted yet`*{% endif -%}
         {%- if status %}
@@ -293,7 +293,7 @@ views:
                         ~ (' ⭐' if state_attr(row, 'favorite') else '') -%}
         {%- if track -%}
         {%- set cell = '`' ~ track ~ '`' -%}
-        {%- elif posting and mins <= 8 -%}
+        {%- elif posting and mins <= 6 -%}
         {%- set cell = '**`⚠️`**' -%}
         {%- else -%}
         {%- set cell = '*`—`*' -%}
@@ -509,8 +509,8 @@ views:
            and weld the first pill onto the end of the heading. -#}
         {% if track %}`Track {{ track }}`
         {%- elif not posting %}*`Track not posted`*
-        {%- elif mins <= 8 %}**`⚠️ Track overdue`**
-        {%- elif mins <= 11 %}*`Track due any minute`*
+        {%- elif mins <= 6 %}**`⚠️ Track overdue`**
+        {%- elif mins <= 10 %}*`Track due any minute`*
         {%- elif mins <= 25 %}*`Track due in ~{{ mins - 9 }} min`*
         {%- else %}*`Track not posted yet`*{% endif -%}
         {%- if status %}
@@ -674,7 +674,7 @@ views:
                         ~ (' ⭐' if state_attr(row, 'favorite') else '') -%}
         {%- if track -%}
         {%- set cell = '`' ~ track ~ '`' -%}
-        {%- elif posting and mins <= 8 -%}
+        {%- elif posting and mins <= 6 -%}
         {%- set cell = '**`⚠️`**' -%}
         {%- else -%}
         {%- set cell = '*`—`*' -%}

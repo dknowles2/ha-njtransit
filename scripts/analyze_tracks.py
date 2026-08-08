@@ -34,9 +34,10 @@ from typing import NamedTuple
 BAR = 0.60
 
 # Below this many seconds before departure, an assignment counts as late.
-# NJ Transit's first quartile at New York Penn is 8.9 minutes, so this is
-# roughly the slowest tenth. Mirrors TRACK_OVERDUE_LEAD in event.py.
-LATE_ASSIGNMENT = 8 * 60
+# The measured p10 at New York Penn is 5.7 minutes (n=236), so six is roughly
+# the slowest tenth. Mirrors TRACK_OVERDUE_LEAD in event.py and has to move
+# with it, or the analysis grades a threshold the integration is not using.
+LATE_ASSIGNMENT = 6 * 60
 
 # How close two departures have to be for one's track to rule out the other's.
 # Deliberately generous: a wrong exclusion costs more than a missing one.

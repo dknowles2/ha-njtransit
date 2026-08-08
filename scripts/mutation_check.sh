@@ -61,9 +61,9 @@ run "track_overdue fires for cancelled trains" \
   custom_components/njtransit/event.py \
   "and not cancelled" "and True"
 
-run "track_overdue window 8min -> 60min" \
+run "track_overdue window 6min -> 60min" \
   custom_components/njtransit/event.py \
-  "TRACK_OVERDUE_LEAD = timedelta(minutes=8)" \
+  "TRACK_OVERDUE_LEAD = timedelta(minutes=6)" \
   "TRACK_OVERDUE_LEAD = timedelta(minutes=60)"
 
 run "knock-on window 30min -> 300min" \

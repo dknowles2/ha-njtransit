@@ -402,10 +402,15 @@ async def test_a_track_that_never_arrives_fires(
 ) -> None:
     """The signal a regular traveller reads before anything is announced.
 
-    New York Penn posts NJ Transit tracks a median of 9.0 minutes before
-    departure, with a quartile range of 0.2 minutes. A train still without one
-    inside eight minutes is in the slowest tenth, and nothing else on the board
-    says so.
+    New York Penn posts NJ Transit tracks a median of 8.8 minutes before
+    departure, with an interquartile range of 1.9 minutes and a p10 of 5.7
+    (n=236). A train still without one inside six minutes is in the slowest
+    tenth, and nothing else on the board says so.
+
+    The asserted `expected_by_minutes` is the threshold itself, so this test
+    fails deliberately if it moves. That is the point: the number is what the
+    event means, and changing it silently would change what every automation
+    built on it is reacting to.
     """
     install_api_mock(aioclient_mock, {"TrainDepartureScreens": board_with()})
     await setup_entry(hass, make_entry())
@@ -434,7 +439,7 @@ async def test_a_track_that_never_arrives_fires(
 
     target._fire_changes(departure, early, overdue)
     assert [event for event, _ in fired] == [EVENT_TRACK_OVERDUE]
-    assert fired[0][1]["expected_by_minutes"] == 8
+    assert fired[0][1]["expected_by_minutes"] == 6
     assert fired[0][1]["track"] is None
 
     # Still overdue on the next poll is not a second piece of news.

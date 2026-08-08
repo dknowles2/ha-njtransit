@@ -499,10 +499,10 @@ New York Penn, split by operator:
 
 NJ Transit's interquartile range is **1.9 minutes** (Q1 7.9, median 8.8, Q3 9.7, n=236).
 An early 125-observation sample put it at 0.2 minutes; that figure was wrong and is
-corrected here rather than quietly refined. **26% of assignments land inside 8 minutes**,
-which matters because `TRACK_OVERDUE_LEAD` was set to 8 on the belief it would fire for
-roughly the slowest tenth. It fires for a quarter. The p10 is 5.7 minutes, so 6 would be
-the threshold that does what 8 was meant to do.
+corrected here rather than quietly refined. 26% of assignments land inside 8 minutes, which is
+why `TRACK_OVERDUE_LEAD` moved from 8 to **6**: eight was chosen to fire for roughly the
+slowest tenth, and against the real spread it fired for the slowest quarter. The p10 is
+5.7 minutes, so six is where one-in-ten actually sits.
 
 It is still a regular process, not a
 tendency, and it is what makes a deviation from it meaningful — see §7.3. Amtrak is a
@@ -892,9 +892,11 @@ the ten those three slots ever saw — so a uniform guess is nearer 6% than 10%,
 are half again as many candidates to choose between.
 
 The same day measured what the feature would actually be worth, over 164 timed
-assignments: the board publishes a track a **median of 9.0 minutes** before departure.
-That is the number a prediction has to beat, and it holds the single 60-second-poll
-observation in §3.8 at a sample size worth trusting.
+assignments: the board publishes a track a median of 9.0 minutes before departure. At
+n=236 that settled at a **median of 8.8 minutes** (§3.8). That is the number a prediction
+has to beat — and it is a demanding one, because it is not merely an average wait but a
+tight one, so a prediction has to be right *and* more than about nine minutes early to be
+worth anything at all.
 
 One further observation, from 164 assignments: exactly **one** was later changed. Track
 reassignment at Penn is rare, so a prediction made at T-30 would not be undermined by
@@ -933,7 +935,7 @@ unobservable through this API — every candidate signal is a proxy for a hidden
 60-second poll, against a process whose quartile range is 1.9 minutes (n=236).
 
 `event.py` fires `track_overdue` when one of your trains is inside `TRACK_OVERDUE_LEAD`
-(8 minutes, below NJ Transit's first quartile) with no track published. Two guards matter:
+(6 minutes, near the measured p10 of 5.7) with no track published. Two guards matter:
 
 - **Cancelled trains are excluded.** They were never getting a track, and the cancellation
   already said the worse thing.
