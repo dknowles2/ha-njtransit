@@ -221,7 +221,7 @@ carries `previous_track` alongside the new one.
 Penn, NJ Transit publishes a track a median of **9.0 minutes** before
 departure, and the middle half of departures fall between 8.9 and 9.1 — a
 scheduled process rather than a tendency, which is exactly why a deviation from
-it is felt. A train still without a track inside eight minutes is in the
+it is felt. A train still without a track inside six minutes is in the
 slowest tenth, and nothing else on the board says so yet.
 
 Two things it will not do. It stays quiet for cancelled trains, which were
