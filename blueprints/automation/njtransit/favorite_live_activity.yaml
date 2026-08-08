@@ -533,8 +533,21 @@ variables:
   activity_title: "{{ ride_headline if riding else headline }}"
   # The countdown target. Departure while waiting, arrival once aboard -- the
   # switch is the whole point, and it is one field.
+  #
+  # Both defaults are load-bearing. Variables are rendered on every trigger,
+  # whatever branch the actions then take, so this has to survive there being
+  # no train at all -- not merely the case where an activity is being shown.
+  # `scheduled` is `unknown` for most of the day, and for the whole of a line
+  # suspension, and `as_timestamp` raises on that rather than returning
+  # nothing:
+  #
+  #   as_timestamp got invalid input 'unknown' ... but no default was specified
+  #
+  # The zero is never sent. It exists so the render succeeds; the branch that
+  # would use it cannot run, because `showing` is false whenever `scheduled` is
+  # unknown.
   activity_when: >-
-    {{ (as_timestamp(eta) if riding else as_timestamp(scheduled)) | int }}
+    {{ (as_timestamp(eta, 0) if riding else as_timestamp(scheduled, 0)) | int }}
   activity_message: >-
     {%- if riding -%}
     {{ ('next ' ~ ride_next) if ride_next else 'Arriving' }}
