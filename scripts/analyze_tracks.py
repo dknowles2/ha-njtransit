@@ -444,16 +444,38 @@ MODELS = {
 }
 
 
-def evaluate(observations: list[Observation]) -> None:
-    """Score every model leave-one-day-out and print the table."""
+class Score(NamedTuple):
+    """How one model did over every held-out day."""
+
+    hits: int
+    """Correct top-1 predictions."""
+
+    top3: int
+    """Targets whose track appeared anywhere in the first three."""
+
+    answered: int
+    """Targets the model was willing to answer at all."""
+
+    total: int
+    """Targets it was asked about, answered or not."""
+
+
+def score(observations: list[Observation]) -> dict[str, Score] | None:
+    """Score every model leave-one-day-out.
+
+    Separated from printing so the split can be tested. It is the part worth
+    testing: an early version handed each model the day it was being scored
+    on, and `m2 by train+weekday` came back at 100% top-1 -- a perfect number,
+    produced entirely by reading the answer, and indistinguishable from
+    success on the printed table.
+
+    ``None`` when there is not yet a day to hold out.
+    """
     days = sorted({observation.day for observation in observations})
     if len(days) < 2:
-        print("\n  not enough days to hold one out yet\n")
-        return
+        return None
 
-    print(f"\n  {'model':<22}{'top-1':>8}{'top-3':>8}{'answered':>10}")
-    print(f"  {'-' * 46}")
-
+    scores: dict[str, Score] = {}
     for name, model in MODELS.items():
         hits = top3 = answered = total = 0
         for held_out in days:
@@ -472,11 +494,27 @@ def evaluate(observations: list[Observation]) -> None:
                     hits += 1
                 if target.track in ranked[:3]:
                     top3 += 1
+        scores[name] = Score(hits=hits, top3=top3, answered=answered, total=total)
+    return scores
 
-        flag = "  <-- clears bar" if total and hits / total >= BAR else ""
+
+def evaluate(observations: list[Observation]) -> None:
+    """Score every model leave-one-day-out and print the table."""
+    scores = score(observations)
+    if scores is None:
+        print("\n  not enough days to hold one out yet\n")
+        return
+
+    print(f"\n  {'model':<22}{'top-1':>8}{'top-3':>8}{'answered':>10}")
+    print(f"  {'-' * 46}")
+
+    for name, result in scores.items():
+        cleared = result.total and result.hits / result.total >= BAR
+        flag = "  <-- clears bar" if cleared else ""
         print(
-            f"  {name:<22}{_pct(hits, total):>8}{_pct(top3, total):>8}"
-            f"{_pct(answered, total):>10}{flag}"
+            f"  {name:<22}{_pct(result.hits, result.total):>8}"
+            f"{_pct(result.top3, result.total):>8}"
+            f"{_pct(result.answered, result.total):>10}{flag}"
         )
 
     print(

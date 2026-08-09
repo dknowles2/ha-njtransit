@@ -260,6 +260,19 @@ timer rather than a leak. And filter `clear_notification` out of the recorded
 calls before asserting nothing was sent -- it fires on every quiet poll, so
 counting it makes "sent nothing" unassertable.
 
+**The analysis tool is tested too.** `tests/test_analysis_models.py` covers the
+models and, more importantly, `score()` -- which was split out of `evaluate()`
+precisely so the leave-one-day-out split could be asserted rather than trusted.
+Its failure mode is not a crash but a number that looks like a result: an early
+version handed each model the day it was being scored on and `m2 by
+train+weekday` reported 100% top-1, which is indistinguishable from success on
+the printed table.
+
+Note the shape a leakage test needs. m4 falls back to its unfiltered ranking
+when exclusion empties the list, so a fixture where the train has one candidate
+track cannot tell a leak from correct behaviour -- the fallback rescues both.
+Give it two.
+
 **Never write `\d` in a Jinja regex.** Jinja decodes string literals with
 `unicode-escape`, so `'(\d+)'` raises "invalid escape sequence ... will not
 work in the future". The disruption blueprint carried that for weeks: its
