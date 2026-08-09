@@ -149,6 +149,26 @@ run "disruption: an unset window blocks everything" \
   "{{ windows | count == 0" \
   "{{ false"
 
+# The analysis tool decides whether the whole track-prediction feature ships.
+# Its failure mode is a number that looks like a result.
+
+run "analysis: the held-out day leaks into history" \
+  scripts/analyze_tracks.py \
+  "history = [o for o in observations if o.day != held_out]" \
+  "history = list(observations)"
+
+run "analysis: the target stays in its own day's context" \
+  scripts/analyze_tracks.py \
+  "context = [o for o in day if o.train_id != target.train_id]" \
+  "context = list(day)"
+
+run "analysis: an unanswered target counts as answered" \
+  scripts/analyze_tracks.py \
+  "                if not ranked:
+                    continue" \
+  "                if False:
+                    continue"
+
 run "status_text drops the delay" \
   custom_components/njtransit/api/models.py \
   'return f"{self.delay_minutes} min late"' 'return "late"'
