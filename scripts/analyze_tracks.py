@@ -133,7 +133,12 @@ def load(paths: list[Path]) -> list[Observation]:
                         station=station,
                         day=day,
                         train_id=record["train_id"],
-                        track=record["track"],
+                        # `.get`, unlike the two keys above it: a row with
+                        # no track is the normal case for most of a terminal's
+                        # board, and an older record may predate the field
+                        # entirely. A train id and a time are what make a
+                        # record mean anything, so those stay required.
+                        track=record.get("track"),
                         scheduled=datetime.combine(day, datetime.min.time()).replace(
                             hour=int(hour), minute=int(minute)
                         ),
@@ -296,7 +301,11 @@ def lateness_vs_outcome(observations: list[Observation]) -> None:
     def rate(rows: list[Observation], label: str) -> None:
         known = [o for o in rows if o.outcome_known]
         if not known:
-            print(f"    {label:<34}   --        ({len(rows)} unknown)")
+            # "(0 unknown)" reads as rows existing whose outcome could not be
+            # seen, which is a different and more interesting statement than
+            # there being no rows in this bucket at all.
+            note = f"        ({len(rows)} unknown)" if rows else ""
+            print(f"    {label:<34}   --{note}")
             return
         bad = sum(1 for o in known if o.went_wrong)
         blind = len(rows) - len(known)
@@ -315,14 +324,19 @@ def lateness_vs_outcome(observations: list[Observation]) -> None:
         )
 
     on_time_at_assignment = [o for o in timed if o.delay_at_assignment in (0, None)]
+    # Built from the constant rather than written out. These labels read "8
+    # min" for a while after the threshold moved to 6, so the report described
+    # a cut it was not making -- and the number in a label is the only thing
+    # telling a reader what the two rows above and below actually divide.
+    cutoff = LATE_ASSIGNMENT // 60
     print("    all trains:")
     rate(
         [o for o in timed if (o.assigned_at or 0) >= LATE_ASSIGNMENT],
-        "assigned normally (>= 8 min)",
+        f"assigned normally (>= {cutoff} min)",
     )
     rate(
         [o for o in timed if (o.assigned_at or 0) < LATE_ASSIGNMENT],
-        "assigned late (< 8 min)",
+        f"assigned late (< {cutoff} min)",
     )
     rate(never, "never assigned a track")
 

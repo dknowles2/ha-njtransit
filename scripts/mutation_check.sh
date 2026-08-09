@@ -169,6 +169,25 @@ run "analysis: an unanswered target counts as answered" \
   "                if False:
                     continue"
 
+run "analysis: the station filter runs before the join" \
+  scripts/analyze_tracks.py \
+  "    direct = sum(1 for o in observations if o.outcome_known)
+    observations = join_outcomes(observations)" \
+  "    direct = sum(1 for o in observations if o.outcome_known)
+    if args.station:
+        observations = [o for o in observations if o.station == args.station]
+    observations = join_outcomes(observations)"
+
+run "analysis: an absence is reported as a rate again" \
+  scripts/analyze_tracks.py \
+  "if not any(o.outcome_known for o in njt):" \
+  "if not any(o.final_status is not None for o in njt):"
+
+run "analysis: the cut label stops following the constant" \
+  scripts/analyze_tracks.py \
+  'f"assigned late (< {cutoff} min)",' \
+  '"assigned late (< 8 min)",'
+
 run "status_text drops the delay" \
   custom_components/njtransit/api/models.py \
   'return f"{self.delay_minutes} min late"' 'return "late"'
