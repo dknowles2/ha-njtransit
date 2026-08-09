@@ -245,19 +245,27 @@ far was a fully covered line sitting under a test that could not fail:
 was asserted only as "some trains resolved". A SKIP means a pattern went stale
 and the entry needs rewriting.
 
-**Blueprints are tested too, and they have to be.** `tests/test_blueprint_live_activity.py`
-copies the real blueprint into the test config, builds an automation from it
-and drives it, asserting on what reaches a mocked `notify.mobile_app_*`. Every
+**Blueprints are tested too, and they have to be.**
+`tests/test_blueprint_live_activity.py` and `tests/test_blueprint_disruption.py`
+copy the real blueprint into the test config, build an automation from it and
+drive it, asserting on what reaches a mocked notify service. Every
 blueprint bug this repository has had was invisible to the Python suite and
 visible on a phone -- a countdown to a cancelled train, a notification on a day
 off, `as_timestamp` raising on `unknown`. None of that is logic the integration
 owns, so no amount of testing the integration would have found it.
 
 Two things that harness needs. Set an `expected_lingering_timers` fixture,
-because the blueprint's five-minute refresh is a real registered timer rather
-than a leak. And filter `clear_notification` out of the recorded calls before
-asserting nothing was sent -- it fires on every quiet poll, so counting it
-makes "sent nothing" unassertable.
+because the Live Activity blueprint's five-minute refresh is a real registered
+timer rather than a leak. And filter `clear_notification` out of the recorded
+calls before asserting nothing was sent -- it fires on every quiet poll, so
+counting it makes "sent nothing" unassertable.
+
+**Never write `\d` in a Jinja regex.** Jinja decodes string literals with
+`unicode-escape`, so `'(\d+)'` raises "invalid escape sequence ... will not
+work in the future". The disruption blueprint carried that for weeks: its
+lateness debouncing would have quietly stopped matching on some future Python
+and gone back to announcing on every poll. Use `[0-9]`, which needs no escape.
+Running `uv run pytest -W error::DeprecationWarning` is what surfaces this.
 
 `uv run pytest` alone is fine for quick iteration, but run the coverage
 variant before finishing — CI enforces the gate, and new code without tests

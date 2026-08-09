@@ -114,6 +114,13 @@ variables:
   #
   # The *message* still uses the untouched reason, so it reads "is 7 minutes
   # late" -- only the decision to speak is debounced, not the wording.
+  #
+  # `[0-9]` rather than `\d`, and not as a style choice. Jinja decodes string
+  # literals with `unicode-escape`, so `'\d'` raises a DeprecationWarning
+  # reading "invalid escape sequence ... will not work in the future" -- this
+  # blueprint's diffing would have stopped matching on some future Python and
+  # gone back to announcing every poll, silently. A character class needs no
+  # escape at all.
   # Lateness is tracked per train as a five-minute band, and only an *increase*
   # counts. Comparing bands for equality would announce a train recovering from
   # 12 minutes late to 6 -- news, but not bad news, and not what an alert is
@@ -122,18 +129,18 @@ variables:
   fresh_reasons: >-
     {%- set ns = namespace(trains=[], bands=[], plain=[], out=[]) -%}
     {%- for r in previous -%}
-    {%- set m = r | regex_findall('(\d+) minutes late') -%}
+    {%- set m = r | regex_findall('([0-9]+) minutes late') -%}
     {%- if m -%}
-    {%- set ns.trains = ns.trains + [r | regex_replace(' is \d+ minutes late', '')] -%}
+    {%- set ns.trains = ns.trains + [r | regex_replace(' is [0-9]+ minutes late', '')] -%}
     {%- set ns.bands = ns.bands + [m[0] | int // 5] -%}
     {%- else -%}
     {%- set ns.plain = ns.plain + [r] -%}
     {%- endif -%}
     {%- endfor -%}
     {%- for r in current -%}
-    {%- set m = r | regex_findall('(\d+) minutes late') -%}
+    {%- set m = r | regex_findall('([0-9]+) minutes late') -%}
     {%- if m -%}
-    {%- set who = r | regex_replace(' is \d+ minutes late', '') -%}
+    {%- set who = r | regex_replace(' is [0-9]+ minutes late', '') -%}
     {%- set was = ns.bands[ns.trains.index(who)] if who in ns.trains else -1 -%}
     {%- if (m[0] | int // 5) > was -%}
     {%- set ns.out = ns.out + [r] -%}
