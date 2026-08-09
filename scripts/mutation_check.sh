@@ -188,6 +188,25 @@ run "analysis: the cut label stops following the constant" \
   'f"assigned late (< {cutoff} min)",' \
   '"assigned late (< 8 min)",'
 
+# The example dashboard. Not shipped code, but it is the surface a commuter
+# actually reads, and every bug it has had was visible only on a screen.
+
+run "dashboard: the hero falls back to a cancelled train" \
+  dashboards/trains.yaml \
+  "        {%- if states(row) not in nothing
+               and state_attr(row, 'status') != 'cancelled' -%}" \
+  "        {%- if states(row) not in nothing -%}"
+
+run "dashboard: overdue claimed where no track is posted" \
+  dashboards/trains.yaml \
+  "        {%- elif not posting %}*\`Track not posted\`*" \
+  "        {%- elif false %}*\`Track not posted\`*"
+
+run "dashboard: the crowding hint fires when nothing differs" \
+  dashboards/trains.yaml \
+  "{%- if ns.best and ns.high > ns.low %}" \
+  "{%- if ns.best %}"
+
 run "status_text drops the delay" \
   custom_components/njtransit/api/models.py \
   'return f"{self.delay_minutes} min late"' 'return "late"'

@@ -273,6 +273,19 @@ when exclusion empties the list, so a fixture where the train has one candidate
 track cannot tell a leak from correct behaviour -- the fallback rescues both.
 Give it two.
 
+**The example dashboard is tested too.** Lovelace has no load-and-drive path,
+so `tests/test_dashboard.py` lifts each card out of the YAML and puts it
+through Home Assistant's own template engine against states set by hand. These
+cards are pure rendering and every bug they have had was a rendering bug, so
+that is enough.
+
+Cards are found by a signature in their content rather than by index, so
+reordering the dashboard cannot silently point a test at a different card. One
+test asserts the two views are identical apart from the commute prefix, because
+nothing else makes a fix land in both -- and one asserts the dashboard's overdue
+threshold still matches `TRACK_OVERDUE_LEAD`, because nothing else links those
+two numbers and the constant has moved once already.
+
 **Never write `\d` in a Jinja regex.** Jinja decodes string literals with
 `unicode-escape`, so `'(\d+)'` raises "invalid escape sequence ... will not
 work in the future". The disruption blueprint carried that for weeks: its
