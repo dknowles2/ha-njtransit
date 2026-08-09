@@ -134,6 +134,21 @@ run "blueprint: an unset helper breaks config validation" \
   '              entity_id: !input boarded_helper
           - action: "{{ notify_action }}"'
 
+run "disruption: bands compared for equality, not increase" \
+  blueprints/automation/njtransit/commute_disruption.yaml \
+  "{%- if (m[0] | int // 5) > was -%}" \
+  "{%- if (m[0] | int // 5) != was -%}"
+
+run "disruption: lateness diffed on raw text again" \
+  blueprints/automation/njtransit/commute_disruption.yaml \
+  "{%- set ns.bands = ns.bands + [m[0] | int // 5] -%}" \
+  "{%- set ns.bands = ns.bands + [m[0] | int] -%}"
+
+run "disruption: an unset window blocks everything" \
+  blueprints/automation/njtransit/commute_disruption.yaml \
+  "{{ windows | count == 0" \
+  "{{ false"
+
 run "status_text drops the delay" \
   custom_components/njtransit/api/models.py \
   'return f"{self.delay_minutes} min late"' 'return "late"'
