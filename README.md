@@ -617,6 +617,13 @@ Two differences worth knowing about:
 - **Rows open.** Tapping the hero or any row on the board opens that
   departure's more-info dialog.
 
+**The card is tinted by the worst thing on it** — a wash across the top-left
+corner, green normally, amber for a delay, red for a cancellation or an
+overdue track. This is for reading at arm's length on a platform, where a pill
+is too small to resolve. It follows the train the card is actually showing, so
+a cancellation the card has already routed around does not turn it red; that
+would be crying wolf on every evening something on the board is off.
+
 The accent colour is `#00953b`, which is what the board itself sends as the
 Morristown Line's colour. Override it for another line without touching
 anything else:
@@ -626,6 +633,11 @@ card_mod:
   style: |
     ha-card { --njtransit-accent: #faa634; }
 ```
+
+Everything else derives from your theme's own variables — the pill text is
+mixed with `--primary-text-color`, so one stylesheet stays legible in a light
+theme and a dark one. Those mixes are set from measured contrast rather than
+picked by eye; all of them clear WCAG AA in both.
 
 ### The Trains dashboard
 

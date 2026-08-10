@@ -206,6 +206,92 @@ describe("the pills", () => {
   });
 });
 
+describe("the card's tint", () => {
+  const mood = (card: NJTransitDeparturesCard): string =>
+    card.shadowRoot?.querySelector("ha-card")?.className.trim() ?? "";
+
+  it("goes red when the train being shown is cancelled", async () => {
+    // The card is read at arm's length on a platform, where a pill is too
+    // small to resolve and the surface is the only thing that carries.
+    //
+    // It has to be the *favourite* that is cancelled. A cancelled train the
+    // card has already skipped past is not the reader's problem, and tinting
+    // the whole card for it would be crying wolf on the twenty other evenings
+    // something on the board is off.
+    const card = await mount(
+      fakeHass([
+        departure(`${PREFIX}_next_departure`, IN_31_MINUTES, {
+          train_id: "6611",
+        }),
+        departure(`${PREFIX}_next_favorite`, IN_51_MINUTES, {
+          train_id: "6615",
+          status: "cancelled",
+          status_text: "Cancelled",
+        }),
+      ]),
+    );
+
+    expect(mood(card)).toBe("bad");
+  });
+
+  it("stays calm about a cancellation it has already routed around", async () => {
+    const card = await mount(
+      fakeHass([
+        departure(`${PREFIX}_next_departure`, IN_31_MINUTES, {
+          status: "cancelled",
+          status_text: "Cancelled",
+        }),
+        departure(`${PREFIX}_departure_2`, IN_51_MINUTES, {
+          train_id: "6615",
+          track: "7",
+        }),
+      ]),
+    );
+
+    expect(mood(card)).toBe("accent");
+  });
+
+  it("goes amber for a delay", async () => {
+    const card = await mount(
+      fakeHass([
+        departure(`${PREFIX}_next_departure`, IN_31_MINUTES, {
+          status_text: "12 min late",
+          delay_minutes: 12,
+        }),
+      ]),
+    );
+
+    expect(mood(card)).toBe("warn");
+  });
+
+  it("stays calm on an ordinary evening", async () => {
+    const card = await mount(
+      fakeHass([
+        departure(`${PREFIX}_next_departure`, IN_31_MINUTES, { track: "4" }),
+      ]),
+    );
+
+    expect(mood(card)).toBe("accent");
+  });
+
+  it("reads a suspended line as bad, not as quiet", async () => {
+    // Nothing left to run and nothing scheduled look identical in the hero
+    // text, and one of them is an emergency.
+    const suspended = await mount(
+      fakeHass([
+        departure(`${PREFIX}_next_departure`, IN_31_MINUTES, {
+          status: "cancelled",
+        }),
+      ]),
+    );
+    expect(mood(suspended)).toBe("bad");
+
+    document.body.replaceChildren();
+    const quiet = await mount(fakeHass([empty(`${PREFIX}_next_departure`)]));
+    expect(mood(quiet)).toBe("muted");
+  });
+});
+
 describe("following a favourite", () => {
   const withFavorite = () =>
     fakeHass([

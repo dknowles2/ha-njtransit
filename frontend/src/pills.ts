@@ -113,6 +113,30 @@ export function crowdingPill(departure: Departure): Pill | null {
   return null;
 }
 
+/** How loudly each tone reads, for picking the worst thing on the card. */
+const SEVERITY: Record<Tone, number> = { muted: 0, accent: 1, warn: 2, bad: 3 };
+
+/**
+ * The one colour the whole card is tinted with.
+ *
+ * The card is meant to be read at arm's length on a platform, and at that
+ * distance a pill is too small to resolve -- so the surface itself carries
+ * the worst thing on it. Derived from the pills rather than from the status
+ * directly, which means the tint can never disagree with what the pills say.
+ *
+ * `muted` never wins: "no track posted" is the ordinary state of a board for
+ * most of the day and is not news.
+ */
+export function cardMood(pills: (Pill | null)[]): Tone {
+  let worst: Tone = "accent";
+  for (const pill of pills) {
+    if (pill && SEVERITY[pill.tone] > SEVERITY[worst]) {
+      worst = pill.tone;
+    }
+  }
+  return worst;
+}
+
 const RANK: Record<string, number> = { light: 0, moderate: 1, heavy: 2 };
 
 /**

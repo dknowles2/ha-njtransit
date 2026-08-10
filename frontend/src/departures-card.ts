@@ -12,6 +12,7 @@ import {
 } from "./commute.js";
 import { countdown, formatClock, formatShortClock, minutesUntil } from "./format.js";
 import {
+  cardMood,
   crowdingPill,
   emptiestCars,
   statusPill,
@@ -90,14 +91,17 @@ export class NJTransitDeparturesCard extends LitElement {
       : null;
     const { departure, tracking, allCancelled } = pickHero(favorite, board);
     const posting = isPostingTracks(board);
+    const pills = departure ? this._pillsFor(departure, posting) : [];
+    // An empty board is not calm, it is a line suspension.
+    const mood = departure ? cardMood(pills) : allCancelled ? "bad" : "muted";
 
     return html`
-      <ha-card>
+      <ha-card class=${classMap({ [mood]: true })}>
         ${this._config.title
           ? html`<h1 class="card-header">${this._config.title}</h1>`
           : nothing}
         ${departure
-          ? this._renderHero(departure, {
+          ? this._renderHero(departure, pills, {
               tracking,
               posting,
               progress: commute.progress,
@@ -107,6 +111,16 @@ export class NJTransitDeparturesCard extends LitElement {
         ${board.length ? this._renderBoard(board, posting) : nothing}
       </ha-card>
     `;
+  }
+
+  /** Everything the hero has to say about this train, in reading order. */
+  private _pillsFor(departure: Departure, posting: boolean): Pill[] {
+    const minutes = minutesUntil(departure.scheduled, this._now);
+    return [
+      trackPill(departure, minutes, posting),
+      statusPill(departure),
+      crowdingPill(departure),
+    ].filter((pill): pill is Pill => pill !== null);
   }
 
   private _renderEmpty(allCancelled: boolean): TemplateResult {
@@ -124,6 +138,7 @@ export class NJTransitDeparturesCard extends LitElement {
 
   private _renderHero(
     departure: Departure,
+    pills: Pill[],
     context: {
       tracking: boolean;
       posting: boolean;
@@ -131,14 +146,9 @@ export class NJTransitDeparturesCard extends LitElement {
       favoriteEntity: string | null;
     },
   ): TemplateResult {
-    const { tracking, posting, progress, favoriteEntity } = context;
+    const { tracking, progress, favoriteEntity } = context;
     const minutes = minutesUntil(departure.scheduled, this._now);
     const { value, unit } = countdown(minutes);
-    const pills = [
-      trackPill(departure, minutes, posting),
-      statusPill(departure),
-      crowdingPill(departure),
-    ].filter((pill): pill is Pill => pill !== null);
     const emptiest = emptiestCars(departure.cars);
 
     return html`
@@ -158,8 +168,10 @@ export class NJTransitDeparturesCard extends LitElement {
           ${value}${unit ? html`<span class="unit">min</span>` : nothing}
         </div>
         <h2>
-          ${formatClock(departure.scheduled)}
-          ${departure.trainId ? html`· Train ${departure.trainId}` : nothing}
+          <span class="clock">${formatClock(departure.scheduled)}</span>
+          ${departure.trainId
+            ? html`<span class="train">Train ${departure.trainId}</span>`
+            : nothing}
         </h2>
         <div class="pills">${pills.map((pill) => this._renderPill(pill))}</div>
         ${emptiest
@@ -278,93 +290,208 @@ export class NJTransitDeparturesCard extends LitElement {
          cancellations, so it is not a dependable line identity and the
          integration does not expose it -- override this to match yours. */
       --njtransit-accent: #00953b;
+
+      /* Set per card by the worst thing on it, and used for the surface tint,
+         the hairline and the row highlight. See cardMood in pills.ts. */
+      --mood: var(--njtransit-accent);
+
+      --njt-radius: 18px;
+      --njt-gutter: 18px;
+      display: block;
+      container-type: inline-size;
+    }
+
+    /* Every tinted surface in here is these three expressions, mixed in oklab
+       so the result keeps its lightness whatever hue it is given. Mixing the
+       foreground with the *theme's* text colour is what makes one stylesheet
+       work in both: against a light theme it darkens toward black and against
+       a dark one it lifts toward white, so a dark green that would be
+       unreadable on near-black never has to be special-cased.
+
+       --ink is how much of the tone survives into the text, and it is
+       measured rather than chosen. At a straight 70% the amber pill came out
+       at 3.33:1 against its own tint in a light theme -- failing WCAG AA for
+       text this size -- while green and red sat at 4.2 in a dark one. Amber
+       needs far more of the text colour than the others, because a light hue
+       can only be darkened by borrowing from it. */
+    .pill,
+    blockquote {
+      --ink: 58%;
+      background: color-mix(in oklab, var(--tone) 14%, transparent);
+      color: color-mix(
+        in oklab,
+        var(--tone) var(--ink),
+        var(--primary-text-color)
+      );
+      box-shadow: inset 0 0 0 1px
+        color-mix(in oklab, var(--tone) 28%, transparent);
     }
 
     ha-card {
+      position: relative;
       border: none;
-      border-top: 3px solid var(--njtransit-accent);
-      border-radius: 16px;
+      border-radius: var(--njt-radius);
       overflow: hidden;
+      background: var(--card-background-color);
+    }
+
+    ha-card.warn {
+      --mood: var(--warning-color);
+    }
+
+    ha-card.bad {
+      --mood: var(--error-color);
+    }
+
+    ha-card.muted {
+      --mood: var(--secondary-text-color);
+    }
+
+    /* The tint, as a corner wash rather than a border. A 3px rule across the
+       top reads as a status bar on a 2015 dashboard; this reads as the card
+       being lit from somewhere. */
+    ha-card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: radial-gradient(
+        95% 65% at 0% 0%,
+        color-mix(in oklab, var(--mood) 13%, transparent),
+        transparent 68%
+      );
+      transition: background 600ms ease;
+    }
+
+    /* What is left of the top border: a hairline that fades out rather than
+       stopping, so it reads as an edge lit by the same source. */
+    ha-card::after {
+      content: "";
+      position: absolute;
+      inset: 0 0 auto;
+      height: 2px;
+      pointer-events: none;
       background: linear-gradient(
-        168deg,
-        color-mix(in srgb, var(--njtransit-accent) 10%, var(--card-background-color))
-          0%,
-        var(--card-background-color) 62%
+        90deg,
+        var(--mood),
+        color-mix(in oklab, var(--mood) 20%, transparent) 55%,
+        transparent
       );
     }
 
     .card-header {
+      position: relative;
       margin: 0;
-      padding: 14px 16px 0;
-      font-size: 1.1rem;
+      padding: 16px var(--njt-gutter) 0;
+      font-size: 1.05rem;
       font-weight: 600;
+      letter-spacing: -0.01em;
     }
 
     .hero {
-      padding: 16px 16px 18px;
+      position: relative;
+      padding: 18px var(--njt-gutter) 20px;
       cursor: pointer;
-    }
-
-    .hero:focus-visible {
-      outline: 2px solid var(--njtransit-accent);
-      outline-offset: -2px;
+      -webkit-tap-highlight-color: transparent;
     }
 
     .hero.empty {
       cursor: default;
     }
 
+    .hero:focus-visible {
+      outline: 2px solid var(--mood);
+      outline-offset: -3px;
+      border-radius: var(--njt-radius);
+    }
+
     .countdown {
-      font-size: 3.5rem;
-      font-weight: 800;
-      line-height: 0.95;
-      letter-spacing: -0.035em;
+      display: flex;
+      align-items: baseline;
+      gap: 0.12em;
+      font-size: clamp(3rem, 17cqi, 4rem);
+      font-weight: 750;
+      line-height: 0.92;
+      letter-spacing: -0.045em;
       font-variant-numeric: tabular-nums;
+      /* Not the mood colour: a delayed train is still the number you are
+         reading, and tinting it amber makes the one thing this card exists
+         to show harder to read, not easier. */
       color: var(--primary-text-color);
-      margin-bottom: 2px;
+      margin-bottom: 6px;
     }
 
     /* The unit, kept small so the number carries the card. */
     .unit {
-      font-size: 0.28em;
-      font-weight: 600;
-      letter-spacing: 0.1em;
+      font-size: 0.26em;
+      font-weight: 650;
+      letter-spacing: 0.08em;
       text-transform: uppercase;
       color: var(--secondary-text-color);
-      margin-left: 0.3em;
-      vertical-align: 0.6em;
+      transform: translateY(-0.55em);
     }
 
     h2 {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 0 8px;
       margin: 0 0 14px;
-      font-size: 0.78rem;
-      font-weight: 600;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
+      font-size: 0.9rem;
+      font-weight: 500;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .clock {
+      color: var(--primary-text-color);
+      font-weight: 650;
+    }
+
+    .train {
       color: var(--secondary-text-color);
+    }
+
+    /* Separator between the two, drawn rather than typed, so it never lands
+       on its own line when the card is narrow. */
+    .train::before {
+      content: "";
+      display: inline-block;
+      width: 3px;
+      height: 3px;
+      margin-right: 8px;
+      border-radius: 50%;
+      background: currentColor;
+      vertical-align: 0.22em;
+      opacity: 0.55;
     }
 
     h3 {
       margin: 0 0 6px;
       font-size: 1.15rem;
-      font-weight: 600;
+      font-weight: 650;
+      letter-spacing: -0.01em;
     }
 
     p {
       margin: 0;
-      line-height: 1.6;
+      line-height: 1.55;
     }
 
     .hint {
-      margin-top: 10px;
+      margin-top: 12px;
       color: var(--secondary-text-color);
-      font-style: italic;
+      font-size: 0.9rem;
     }
 
     hr {
       border: none;
-      border-top: 1px solid var(--divider-color);
-      margin: 14px 0 12px;
+      border-top: 1px solid
+        color-mix(in oklab, var(--divider-color) 60%, transparent);
+      margin: 16px 0 12px;
+    }
+
+    .progress {
+      font-size: 0.95rem;
     }
 
     .pills {
@@ -374,46 +501,41 @@ export class NJTransitDeparturesCard extends LitElement {
     }
 
     .pill {
-      font-size: 0.8rem;
-      font-weight: 700;
-      letter-spacing: 0.015em;
+      --tone: var(--njtransit-accent);
+      font-size: 0.78rem;
+      font-weight: 650;
+      letter-spacing: 0.005em;
       white-space: nowrap;
-      padding: 4px 10px;
+      padding: 4px 11px;
       border-radius: 999px;
-      border: 1px solid transparent;
-      background: var(--njtransit-accent);
-      color: #fff;
     }
 
     .pill.bad {
-      background: var(--error-color);
-      color: #fff;
+      --tone: var(--error-color);
     }
 
     .pill.warn {
-      background: var(--warning-color);
-      color: #111;
+      --tone: var(--warning-color);
+      --ink: 34%;
     }
 
     .pill.muted {
-      background: transparent;
-      color: var(--secondary-text-color);
-      border-color: var(--divider-color);
+      --tone: var(--secondary-text-color);
       font-weight: 600;
     }
 
     blockquote {
-      margin: 12px 0 0;
-      padding: 9px 12px;
-      border-left: 3px solid var(--error-color);
-      border-radius: 0 8px 8px 0;
-      background: color-mix(in srgb, var(--error-color) 10%, transparent);
+      --tone: var(--error-color);
+      margin: 14px 0 0;
+      padding: 10px 13px;
+      border-radius: 10px;
       font-size: 0.9rem;
       line-height: 1.5;
     }
 
     .board {
-      padding: 0 16px 14px;
+      position: relative;
+      padding: 0 var(--njt-gutter) 8px;
     }
 
     table {
@@ -423,26 +545,43 @@ export class NJTransitDeparturesCard extends LitElement {
     }
 
     th {
-      padding: 0 4px 8px 0;
-      border-bottom: 1px solid var(--divider-color);
+      padding: 0 6px 8px 0;
+      border-bottom: 1px solid
+        color-mix(in oklab, var(--divider-color) 70%, transparent);
       text-align: left;
-      font-size: 0.65rem;
+      font-size: 0.63rem;
       font-weight: 700;
-      letter-spacing: 0.12em;
+      letter-spacing: 0.14em;
       text-transform: uppercase;
       color: var(--secondary-text-color);
     }
 
     td {
-      padding: 10px 4px 10px 0;
+      padding: 11px 6px 11px 0;
       border-bottom: 1px solid
-        color-mix(in srgb, var(--divider-color) 45%, transparent);
-      font-size: 0.98rem;
+        color-mix(in oklab, var(--divider-color) 35%, transparent);
+      font-size: 0.96rem;
       white-space: nowrap;
     }
 
+    /* The row is the tap target, so the highlight has to reach the card edge
+       rather than stopping at the table's padding. */
     tbody tr {
       cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      box-shadow: 0 0 0 0 transparent;
+      transition:
+        background-color 120ms ease,
+        box-shadow 120ms ease;
+    }
+
+    tbody tr:hover,
+    tbody tr:active {
+      background: color-mix(in oklab, var(--mood) 8%, transparent);
+      box-shadow:
+        calc(var(--njt-gutter) * -1) 0 0 0
+          color-mix(in oklab, var(--mood) 8%, transparent),
+        var(--njt-gutter) 0 0 0 color-mix(in oklab, var(--mood) 8%, transparent);
     }
 
     tbody tr:last-child td {
@@ -452,12 +591,48 @@ export class NJTransitDeparturesCard extends LitElement {
     .relative {
       font-size: 0.8rem;
       color: var(--secondary-text-color);
-      margin-left: 4px;
+      margin-left: 5px;
     }
 
     .board .pill {
-      font-size: 0.75rem;
+      font-size: 0.74rem;
       padding: 3px 9px;
+    }
+
+    /* Anything worth a red pill is worth finding without reading. Slow and
+       shallow: this sits next to a number someone is trying to read. */
+    @media (prefers-reduced-motion: no-preference) {
+      .pills .pill.bad {
+        animation: attention 2.6s ease-in-out infinite;
+      }
+    }
+
+    @keyframes attention {
+      0%,
+      100% {
+        box-shadow: inset 0 0 0 1px
+          color-mix(in oklab, var(--tone) 28%, transparent);
+      }
+      50% {
+        box-shadow: inset 0 0 0 1px
+          color-mix(in oklab, var(--tone) 70%, transparent);
+      }
+    }
+
+    /* Narrow columns, and the phone this is really for. */
+    @container (max-width: 330px) {
+      :host {
+        --njt-gutter: 14px;
+      }
+
+      td,
+      th {
+        font-size: 0.9rem;
+      }
+
+      .relative {
+        display: none;
+      }
     }
   `;
 }
