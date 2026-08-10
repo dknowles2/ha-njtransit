@@ -239,7 +239,9 @@ line-length reflow with everything else green.
 `./scripts/mutation_check.sh` breaks one real behaviour at a time and checks
 the suite notices. It is not part of CI and is not a routine step -- run it
 after changing behaviour in `event.py`, `coordinator.py`, `binary_sensor.py`,
-`track_history.py`, or the Live Activity blueprint. Every gap it has found so
+`track_history.py`, the Live Activity blueprint, or the card. Card mutations
+are judged by vitest rather than pytest, via `run_card`; running the wrong
+suite against a broken card passes and reads as a gap in the Python tests. Every gap it has found so
 far was a fully covered line sitting under a test that could not fail:
 `pick_favorite` never once matched a favourite, and the direct-only trip filter
 was asserted only as "some trains resolved". A SKIP means a pattern went stale
@@ -285,6 +287,35 @@ test asserts the two views are identical apart from the commute prefix, because
 nothing else makes a fix land in both -- and one asserts the dashboard's overdue
 threshold still matches `TRACK_OVERDUE_LEAD`, because nothing else links those
 two numbers and the constant has moved once already.
+
+**The Lovelace card is a second toolchain.** `frontend/` holds TypeScript and
+Lit; `custom_components/njtransit/frontend/njtransit-card.js` is the built
+bundle, and it is **committed**, because HACS copies files and runs nothing.
+
+```sh
+cd frontend
+npm ci
+npm run typecheck
+npm test          # vitest, jsdom
+npm run build     # rewrites the committed bundle
+```
+
+Edit the card and forget the build and you ship the old behaviour with no
+Python consequence at all, so CI rebuilds and fails on a diff. Run
+`npm run build` and commit the result in the same change as the source.
+
+The card is served by `frontend.py` rather than published as a separate HACS
+plugin repository. HACS installs one category per repository, so a plugin
+would be a second thing to install, a second thing to update, and a version
+that can silently disagree with the entity attributes it reads. That choice is
+why the manifest declares `frontend` and `http`, and why `requirements.txt`
+pins `home-assistant-frontend` — `pytest_homeassistant_custom_component`
+leaves it out, and without it every test that sets up an entry fails on `No
+module named 'hass_frontend'`.
+
+`TRACK_OVERDUE_MINUTES` in `frontend/src/pills.ts` must equal the
+integration's `TRACK_OVERDUE_LEAD`; `tests/test_frontend.py` reads the
+TypeScript source and fails if they drift.
 
 **Never write `\d` in a Jinja regex.** Jinja decodes string literals with
 `unicode-escape`, so `'(\d+)'` raises "invalid escape sequence ... will not

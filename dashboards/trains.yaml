@@ -1,5 +1,15 @@
 # A phone-shaped dashboard for the Live Activity to open.
 #
+# THERE IS NOW A CARD. The integration serves `custom:njtransit-departures`,
+# which does everything the first two cards of each view below do, needs no
+# card-mod, counts down in real time rather than at the poll interval, and
+# finds a commute's entities through its device instead of by rebuilding
+# entity ids from a pasted prefix. See the README.
+#
+# This file is kept because it needs no custom element, because it is easy to
+# cut apart, and because the third card -- service notices -- has no card
+# equivalent yet.
+#
 # This is an *example*, not something the integration installs. Tapping a Live
 # Activity can only open a dashboard that already exists, so the blueprint's
 # "Open when tapped" input is empty by default and this file is what fills the

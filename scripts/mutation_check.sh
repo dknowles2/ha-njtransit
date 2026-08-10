@@ -21,8 +21,13 @@ cd "$(dirname "$0")/.." || exit 1
 
 failures=0
 
-run() {
-  local desc=$1 file=$2 from=$3 to=$4
+# Break one thing, run one suite, put the file back.
+#
+# `suite` is the command that should now fail. The card is TypeScript with its
+# own runner, so a mutation there has to be judged by vitest -- running pytest
+# against a broken card would pass and read as a gap in the Python tests.
+mutate() {
+  local desc=$1 file=$2 from=$3 to=$4 suite=$5
   cp "$file" /tmp/njt_mutation_backup
   .venv/bin/python - "$file" "$from" "$to" <<'PY'
 import sys, pathlib
@@ -41,7 +46,7 @@ PY
 
   # Exit code, not output text: `-x` changes which line the summary lands on,
   # and grepping for "failed" misses the uppercase "FAILED" that `-x` prints.
-  uv run pytest -q -x >/dev/null 2>&1
+  eval "$suite" >/dev/null 2>&1
   local code=$?
   cp /tmp/njt_mutation_backup "$file"
 
@@ -51,6 +56,16 @@ PY
     echo "  SURVIVED $desc"
     failures=$((failures + 1))
   fi
+}
+
+run() {
+  mutate "$1" "$2" "$3" "$4" "uv run pytest -q -x"
+}
+
+# The card is not rebuilt here. vitest reads `frontend/src` directly, so the
+# committed bundle is irrelevant to whether a mutation is caught.
+run_card() {
+  mutate "$1" "$2" "$3" "$4" "npm --prefix frontend test"
 }
 
 run "delay threshold >= becomes >" \
@@ -210,6 +225,44 @@ run "dashboard: the crowding hint fires when nothing differs" \
 run "status_text drops the delay" \
   custom_components/njtransit/api/models.py \
   'return f"{self.delay_minutes} min late"' 'return "late"'
+
+# The Lovelace card. Same failures as the dashboard it replaces, plus the two
+# it can have that a markdown card could not: a countdown that stops counting,
+# and a timer that outlives the card.
+
+run_card "card: the hero falls back to a cancelled train" \
+  frontend/src/commute.ts \
+  'board.find((departure) => departure.status !== "cancelled")' \
+  'board.find(() => true)'
+
+run_card "card: overdue claimed where no track is posted" \
+  frontend/src/commute.ts \
+  'return board.some((departure) => departure.track !== null);' \
+  'return true;'
+
+run_card "card: the crowding hint fires when nothing differs" \
+  frontend/src/pills.ts \
+  'return best !== null && high > low ? best : null;' \
+  'return best;'
+
+run_card "card: the tenth departure sorts as text" \
+  frontend/src/commute.ts \
+  '(a, b) => trailingIndex(a) - trailingIndex(b),' \
+  '(a, b) => a.localeCompare(b),'
+
+run_card "card: the countdown stops recomputing" \
+  frontend/src/departures-card.ts \
+  'this._timer = setInterval(() => {
+      this._now = new Date();
+    }, TICK_MS);' \
+  'this._timer = undefined;'
+
+run_card "card: the tick timer outlives the card" \
+  frontend/src/departures-card.ts \
+  'if (this._timer) {
+      clearInterval(this._timer);' \
+  'if (false) {
+      clearInterval(this._timer);'
 
 echo
 if [ $failures -eq 0 ]; then

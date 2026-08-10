@@ -5,6 +5,10 @@
     "@dknowles2"
   ],
   "config_flow": true,
+  "dependencies": [
+    "frontend",
+    "http"
+  ],
   "documentation": "https://github.com/dknowles2/ha-njtransit",
   "integration_type": "service",
   "iot_class": "cloud_polling",

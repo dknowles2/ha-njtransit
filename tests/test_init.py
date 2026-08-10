@@ -18,6 +18,7 @@ from freezegun.api import FrozenDateTimeFactory
 from homeassistant.config_entries import ConfigEntryState, current_entry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from pytest_homeassistant_custom_component.test_util.aiohttp import (
     AiohttpClientMocker,
@@ -230,6 +231,13 @@ class TestCoordinatorSharing:
         # the same reason: the store is what this is about.
         outbound.add_to_hass(hass)
         inbound.add_to_hass(hass)
+
+        # Setup serves the Lovelace card, so it needs what the manifest
+        # declares. Calling the module directly skips the dependency
+        # machinery that would otherwise have set these up -- and registering
+        # the card is itself raced here, which is the point: the second entry
+        # through must not try to claim the same static path.
+        assert await async_setup_component(hass, "frontend", {})
 
         async def no_platforms(*args: Any, **kwargs: Any) -> None:
             return None
