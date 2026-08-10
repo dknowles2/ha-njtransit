@@ -68,6 +68,24 @@ run_card() {
   mutate "$1" "$2" "$3" "$4" "npm --prefix frontend test"
 }
 
+# Restores the exact ordering shipped in 2026.8.11, which broke the second
+# commute of anyone running two.
+run "the card is claimed after an await instead of before" \
+  custom_components/njtransit/frontend.py \
+  "    hass.data[_REGISTERED] = True
+
+    # After the claim, deliberately. A missing bundle leaves the flag set, so
+    # the entries behind this one skip rather than each re-checking a file
+    # that cannot appear while Home Assistant is running.
+    path = bundle_path()
+    if not await hass.async_add_executor_job(path.is_file):
+        return" \
+  "    path = bundle_path()
+    if not await hass.async_add_executor_job(path.is_file):
+        return
+
+    hass.data[_REGISTERED] = True"
+
 run "delay threshold >= becomes >" \
   custom_components/njtransit/binary_sensor.py \
   "delay >= self._threshold" "delay > self._threshold"
