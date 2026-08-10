@@ -219,6 +219,14 @@ blueprint:
 
         Its end also resets the dismissed flag. Without a schedule that happens
         at 3am instead.
+
+
+        It gates the arrival countdown too, so set it wide enough to cover the
+        journey — a window closing at 10:00 ends the countdown of a train
+        arriving at 10:15. The alternative was letting the arrival half ignore
+        the window, and that put a countdown on the Lock Screen of someone
+        working from home, because the integration can see that a train left
+        your station but not whether you were on it.
       default: []
       selector:
         entity:
@@ -473,15 +481,31 @@ variables:
   # destination still ahead. There is no way to know you actually boarded --
   # Home Assistant cannot see which platform you are on -- so this follows the
   # train you were waiting for and Dismiss remains the answer if you let it go.
+  #
   # Deliberately not gated on location. Being aboard is itself the answer to
   # "could you catch this train", and the zones that make sense for waiting --
   # home, or the office -- are exactly the places you are *not* while riding.
-  # Applying the gate here would kill the arrival countdown the moment it
+  # Applying that gate here would kill the arrival countdown the moment it
   # became the useful half.
+  #
+  # `in_window` IS applied, and the reasoning that once excluded it was wrong.
+  # It ran: a window ending at 10:00 must not take the arrival countdown of a
+  # train arriving at 10:30 with it. True, but it rested on `on_board` meaning
+  # "you are on this train" -- and it does not. It means the train has passed
+  # your station, which happens every weekday whether or not you were on it.
+  # So on a day off the favourite ran, left Short Hills, flipped `on_board`,
+  # and put an arrival countdown on the Lock Screen of someone who had not
+  # left the house. Observed twice.
+  #
+  # The cost is real but bounded and visible: if your window closes before
+  # your train arrives, the last of the countdown goes with it. Widen the
+  # window. That is a setting someone can find, and a silent notification on a
+  # day off is not.
   riding: >-
     {{ state_attr(progress_entity, 'on_board') | default(false, true)
        and eta not in [none, 'unknown', 'unavailable', '']
-       and not is_state(boarded, 'on') }}
+       and not is_state(boarded, 'on')
+       and in_window }}
   showing: "{{ waiting or riding }}"
   ride_train: "{{ state_attr(progress_entity, 'train_id') or '' }}"
   ride_stops: "{{ state_attr(progress_entity, 'stops_to_destination') }}"
