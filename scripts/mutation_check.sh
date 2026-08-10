@@ -136,6 +136,12 @@ run "blueprint: fallback stops skipping cancelled trains" \
   "and state_attr(row, 'status') != 'cancelled' -%}" \
   "-%}"
 
+run "blueprint: the arrival countdown ignores the window" \
+  blueprints/automation/njtransit/favorite_live_activity.yaml \
+  "       and not is_state(boarded, 'on')
+       and in_window }}" \
+  "       and not is_state(boarded, 'on') }}"
+
 run "blueprint: the commute window stops gating" \
   blueprints/automation/njtransit/favorite_live_activity.yaml \
   "and not is_state(boarded, 'on') and nearby | bool(false)

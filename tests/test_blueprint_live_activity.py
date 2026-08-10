@@ -74,6 +74,27 @@ def departure(
     )
 
 
+def riding(hass: HomeAssistant) -> None:
+    """Put a journey on the progress sensor, as the integration would.
+
+    `on_board` is the integration's reading of the *train* -- origin behind
+    it, destination still ahead. It says nothing about where the phone is,
+    which is the whole reason the window has to gate this.
+    """
+    hass.states.async_set(
+        PROGRESS,
+        "unknown",
+        {
+            "train_id": "6320",
+            "on_board": True,
+            "eta_at_destination": (MORNING + timedelta(minutes=40)).isoformat(),
+            "stops_to_destination": 4,
+            "next_stop": "Millburn",
+            "minutes_late": 0,
+        },
+    )
+
+
 def set_board(hass: HomeAssistant, rows: list[tuple[str, dict[str, Any]]]) -> None:
     """Put a board on the numbered departure sensors."""
     for entity, (state, attributes) in zip(ROWS, rows, strict=False):
@@ -211,6 +232,63 @@ async def test_nothing_is_sent_outside_the_commute_window(
     await hass.async_block_till_done()
 
     assert pushes(notifications) == []
+
+
+async def test_the_arrival_countdown_is_gated_by_the_window_too(
+    hass: HomeAssistant,
+    notifications: list[ServiceCall],
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """The second time a day off got a notification, and the harder half.
+
+    The departure countdown was gated and the arrival countdown was not, on
+    the reasoning that a window closing at 10:00 must not cut off a train
+    arriving at 10:30. That rested on `on_board` meaning "you are on this
+    train". It does not -- it means the train has passed your station, which
+    happens every weekday whether or not you were aboard.
+
+    So the favourite ran on a Monday off, left Short Hills, flipped
+    `on_board`, and put an arrival countdown on a Lock Screen at 07:35. The
+    only reason it stopped was the owner reaching for Dismiss.
+    """
+    freezer.move_to(MORNING)
+    hass.states.async_set("schedule.commute", "off")
+    await install(hass, commute_window=["schedule.commute"])
+
+    # The board has dropped this train: it has left. Nothing here is about
+    # where the phone is, which is the whole problem.
+    riding(hass)
+    # The favourite is a trigger and the progress sensor is not, so the
+    # journey has to be in place before this line or nothing re-evaluates.
+    hass.states.async_set(FAVORITE, "unknown", {"favorites": ["6320"]})
+    await hass.async_block_till_done()
+
+    assert pushes(notifications) == []
+
+
+async def test_the_arrival_countdown_still_runs_inside_the_window(
+    hass: HomeAssistant,
+    notifications: list[ServiceCall],
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """The gate must not silence the half that is actually useful.
+
+    Gating on the window and gating on location are different decisions: the
+    zones that make sense for waiting are exactly the places you are not once
+    the train is moving, so `riding` stays ungated on presence.
+    """
+    freezer.move_to(MORNING)
+    hass.states.async_set("schedule.commute", "on")
+    await install(hass, commute_window=["schedule.commute"])
+
+    riding(hass)
+    # The favourite is a trigger and the progress sensor is not, so the
+    # journey has to be in place before this line or nothing re-evaluates.
+    hass.states.async_set(FAVORITE, "unknown", {"favorites": ["6320"]})
+    await hass.async_block_till_done()
+
+    [sent] = pushes(notifications)
+    assert "Millburn" in str(sent)
 
 
 async def test_a_cancelled_board_is_not_counted_down_to(
