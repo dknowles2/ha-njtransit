@@ -68,7 +68,10 @@ jobs:
           test "$(python3 -c "import json;print(json.load(open('../../hacs.json'))['filename'])")" = njtransit.zip
 
           unzip -l njtransit.zip
-          for required in manifest.json __init__.py brand/icon.png translations/en.json; do
+          # The card bundle is committed rather than built here, so the only
+          # thing standing between a stale checkout and a release with no
+          # card is this line.
+          for required in manifest.json __init__.py brand/icon.png translations/en.json frontend/njtransit-card.js; do
             unzip -l njtransit.zip | grep -q " $required\$" || {
               echo "::error::njtransit.zip is missing $required"
               exit 1

@@ -1,0 +1,22 @@
+{
+  "name": "njtransit-card",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Lovelace card for the NJ Transit integration",
+  "scripts": {
+    "build": "vite build",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "lit": "3.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.1",
+    "jsdom": "27.0.0",
+    "typescript": "5.9.3",
+    "vite": "7.1.9",
+    "vitest": "3.2.4"
+  }
+}

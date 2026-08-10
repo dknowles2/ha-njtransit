@@ -38,6 +38,7 @@ from .coordinator import (
     store_for,
 )
 from .entity import normalize_train_ids, usable_departures
+from .frontend import async_register_card
 from .track_history import TrackHistory
 
 # Guards construction of the shared store against concurrent entry setup.
@@ -69,6 +70,8 @@ def _interval(entry: NJTransitConfigEntry, key: str, default: int) -> timedelta:
 
 async def async_setup_entry(hass: HomeAssistant, entry: NJTransitConfigEntry) -> bool:
     """Set up a commute from a config entry."""
+    await async_register_card(hass)
+
     session = async_get_clientsession(hass)
     client = NJTransitClient(session)
 

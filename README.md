@@ -19,6 +19,7 @@ scoped to a commute you actually take.
 - [Options](#options)
 - [Entities](#entities)
 - [Automation examples](#automation-examples)
+- [The departures card](#the-departures-card)
 - [Dashboard notes](#dashboard-notes)
 - [Reliability](#reliability)
 - [Troubleshooting](#troubleshooting)
@@ -589,10 +590,48 @@ proximity search is a separate operation that takes a point and answers in
 feet, and it does **not** sort — a reply recorded standing on the Short Hills
 platform lists Millburn first. See SPEC 3.9.
 
+### The departures card
+
+The integration ships a Lovelace card. There is nothing to install for it —
+no HACS entry, no resource to add — because the integration serves it itself,
+which also means it can never be a version out of step with the entities it
+reads. It appears in **Add card** as *NJ Transit departures*.
+
+```yaml
+type: custom:njtransit-departures
+entity: sensor.short_hills_station_to_new_york_penn_station_next_departure
+```
+
+That is the only setting. Point it at any one of a commute's departure
+sensors and it finds the rest through the device — so renaming an entity does
+not quietly empty it, which is the failure the YAML dashboard below has.
+
+It shows the same things the dashboard does: how many minutes until your
+train in the largest type on the page, its track, status and busyness
+underneath, how far away it is and its next stop, then the board behind it.
+Two differences worth knowing about:
+
+- **The countdown counts.** A markdown card only re-renders when an entity
+  changes, so its number was stale for as long as the poll interval. This one
+  recomputes every ten seconds.
+- **Rows open.** Tapping the hero or any row on the board opens that
+  departure's more-info dialog.
+
+The accent colour is `#00953b`, which is what the board itself sends as the
+Morristown Line's colour. Override it for another line without touching
+anything else:
+
+```yaml
+card_mod:
+  style: |
+    ha-card { --njtransit-accent: #faa634; }
+```
+
 ### The Trains dashboard
 
-An example phone-shaped dashboard, built to be read one-handed on a platform
-rather than to be comprehensive:
+An example phone-shaped dashboard, predating the card and kept because it
+needs no custom element and is easy to cut apart. Built to be read one-handed
+on a platform rather than to be comprehensive:
 
 - why your commute is broken, at the top, and nothing at all when it is not
 - how many minutes until your train, in the largest type on the page
@@ -605,9 +644,9 @@ rather than to be comprehensive:
 Two things it does that a list of entities would not. It falls back to the next
 departure when your favourite is not on the board, so it is worth opening at
 any hour rather than being a wall of apology for the twenty hours a day you are
-not commuting. And it reports a missing track as *overdue* inside eight
-minutes, rather than as "not yet" — New York Penn posts tracks a median of nine
-minutes out with an interquartile range of 1.9 minutes, so a track that has not
+not commuting. And it reports a missing track as *overdue* inside six minutes,
+rather than as "not yet" — New York Penn posts tracks a median of 8.8 minutes
+out with an interquartile range of 1.9 minutes, so a track that has not
 appeared by then is a deviation from a schedule, not a wait. It only says so
 when other trains on the board have their tracks, which is the same test the
 `track_overdue` event uses.

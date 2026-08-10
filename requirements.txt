@@ -1,4 +1,10 @@
 coverage==7.14.1
+# Home Assistant's own dependency, but `pytest_homeassistant_custom_component`
+# leaves it out to stay small. The integration serves a Lovelace card, so it
+# declares `frontend` in its manifest, and without this every test that sets
+# up an entry fails on `No module named 'hass_frontend'`. Pinned to what
+# `homeassistant` below asks for.
+home-assistant-frontend==20260624.6
 homeassistant==2026.7.4
 mypy==2.3.0
 pillow==12.2.0
