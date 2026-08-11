@@ -317,6 +317,23 @@ module named 'hass_frontend'`.
 integration's `TRACK_OVERDUE_LEAD`; `tests/test_frontend.py` reads the
 TypeScript source and fails if they drift.
 
+**vitest cannot see the styling, so check it in a browser.** jsdom does not
+compute `color-mix`, so nothing in the suite can tell you a pill is
+unreadable. Render the card against hand-built states in a real page —
+serve the built bundle, stub `ha-card` with `display: block` and a background
+(page CSS cannot reach into the card's shadow root), and put a light and a
+dark wrapper side by side. Both bugs the card has had were found this way and
+by nothing else: a cancelled train being told its track was "not posted yet",
+and an amber pill at 3.33:1.
+
+Contrast is measurable from the page and worth measuring rather than eyeing.
+Computed styles come back as `oklab(...)` once the sheet mixes in oklab, so a
+naive `rgb()` parser silently returns the same number for every element —
+which reads as "all fine". Convert oklab to linear sRGB, composite the
+translucent tint over the card background, and take the ratio there. The
+`--ink` percentages in the stylesheet are the output of doing that, not
+preferences.
+
 **Never write `\d` in a Jinja regex.** Jinja decodes string literals with
 `unicode-escape`, so `'(\d+)'` raises "invalid escape sequence ... will not
 work in the future". The disruption blueprint carried that for weeks: its

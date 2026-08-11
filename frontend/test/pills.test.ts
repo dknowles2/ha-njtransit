@@ -10,12 +10,14 @@ import { describe, expect, it } from "vitest";
 
 import {
   TRACK_OVERDUE_MINUTES,
+  cardMood,
   crowdingPill,
   emptiestCars,
   statusPill,
   trackCell,
   trackPill,
 } from "../src/pills.js";
+import type { Pill } from "../src/pills.js";
 import type { Departure } from "../src/types.js";
 
 function train(overrides: Partial<Departure> = {}): Departure {
@@ -158,6 +160,45 @@ describe("the crowding pill", () => {
     expect(crowdingPill(train({ crowding: "moderate" }))?.text).toBe(
       "Filling up",
     );
+  });
+});
+
+describe("the colour the whole card is tinted with", () => {
+  it("takes the worst thing on the card", () => {
+    const pills: Pill[] = [
+      { text: "Track 4", tone: "accent" },
+      { text: "Cancelled", tone: "bad" },
+      { text: "Filling up", tone: "muted" },
+    ];
+
+    expect(cardMood(pills)).toBe("bad");
+  });
+
+  it("is calm when nothing is wrong", () => {
+    expect(cardMood([{ text: "Track 4", tone: "accent" }])).toBe("accent");
+  });
+
+  it("does not treat an unposted track as news", () => {
+    // Muted is the ordinary state of a board for most of the day. Letting it
+    // win would tint the card grey every evening before the tracks go up.
+    expect(cardMood([{ text: "Track not posted", tone: "muted" }])).toBe(
+      "accent",
+    );
+  });
+
+  it("ignores the pills that were not shown", () => {
+    expect(cardMood([null, { text: "12 min late", tone: "warn" }])).toBe("warn");
+  });
+
+  it("cannot contradict the pills it is derived from", () => {
+    // The point of deriving it rather than reading the status again: a card
+    // tinted red with nothing red on it is worse than no tint at all.
+    const late = train({ statusText: "12 min late", delayMinutes: 12 });
+    const pills = [trackPill(late, 20, true), statusPill(late)];
+
+    const mood = cardMood(pills);
+
+    expect(pills.some((pill) => pill?.tone === mood)).toBe(true);
   });
 });
 

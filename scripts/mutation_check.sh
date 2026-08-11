@@ -281,6 +281,16 @@ run_card "card: the countdown stops recomputing" \
     }, TICK_MS);' \
   'this._timer = undefined;'
 
+run_card "card: an unposted track tints the whole card" \
+  frontend/src/pills.ts \
+  'let worst: Tone = "accent";' \
+  'let worst: Tone = "muted";'
+
+run_card "card: the tint stops following the pills" \
+  frontend/src/pills.ts \
+  'if (pill && SEVERITY[pill.tone] > SEVERITY[worst]) {' \
+  'if (false) {'
+
 run_card "card: the tick timer outlives the card" \
   frontend/src/departures-card.ts \
   'if (this._timer) {
