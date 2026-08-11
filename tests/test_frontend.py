@@ -9,19 +9,26 @@ this registers per entry.
 
 from __future__ import annotations
 
+import asyncio
 import re
 from pathlib import Path
+from typing import Any
 
 import pytest
 from homeassistant.components.frontend import DATA_EXTRA_MODULE_URL
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
+from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.test_util.aiohttp import (
     AiohttpClientMocker,
 )
 
 from custom_components.njtransit.event import TRACK_OVERDUE_LEAD
-from custom_components.njtransit.frontend import URL, bundle_path
+from custom_components.njtransit.frontend import (
+    URL,
+    async_register_card,
+    bundle_path,
+)
 
 from .conftest import install_api_mock
 from .test_init import NY_PENN, SHORT_HILLS, make_entry, setup_entry
@@ -61,6 +68,56 @@ async def test_a_second_commute_does_not_register_it_again(
     await setup_entry(hass, inbound)
 
     assert inbound.state is ConfigEntryState.LOADED, "the second commute failed"
+    assert URL in hass.data[DATA_EXTRA_MODULE_URL].urls
+
+
+async def test_two_commutes_racing_claim_the_card_once(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The bug this file already had a test for, and did not catch.
+
+    `test_a_second_commute_does_not_register_it_again` sets its entries up one
+    after another, so it never exercised the only case that fails. Home
+    Assistant sets a domain's entries up *concurrently*, and the guard checked
+    the claim, awaited a file stat, and only then set it -- both commutes read
+    no claim, both registered, and the second raised
+
+        RuntimeError: Added route will never be executed, method GET is
+        already registered
+
+    taking the whole second commute down over a card. It shipped that way in
+    2026.8.11 and broke the evening commute for anyone running two.
+
+    This calls the function directly rather than driving two entries, because
+    two concurrent calls are exactly what two entries produce and nothing
+    about the coordinators is involved in the failure.
+    """
+    assert await async_setup_component(hass, "frontend", {})
+
+    # Forcing a suspension is what makes this able to fail at all, and the
+    # first version of this test did not: the harness runs executor jobs
+    # inline, so awaiting one never yields, a plain gather runs the first call
+    # start to finish, and the second finds the claim already set. It passed
+    # against the shipped bug. A real filesystem stat suspends.
+    #
+    # `test_concurrent_setup_still_shares_one_store` needs the same trick for
+    # the same reason, and says so. Reading it first would have saved a
+    # release.
+    original = hass.async_add_executor_job
+
+    async def yielding(target: Any, *args: Any) -> Any:
+        await asyncio.sleep(0)
+        return await original(target, *args)
+
+    monkeypatch.setattr(hass, "async_add_executor_job", yielding)
+
+    outcomes = await asyncio.gather(
+        async_register_card(hass),
+        async_register_card(hass),
+        return_exceptions=True,
+    )
+
+    assert [o for o in outcomes if isinstance(o, Exception)] == []
     assert URL in hass.data[DATA_EXTRA_MODULE_URL].urls
 
 

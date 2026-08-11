@@ -48,14 +48,29 @@ async def async_register_card(hass: HomeAssistant) -> None:
     without a build has an integration that works and a card that does not,
     which is a better failure than no sensors at all.
     """
+    # Claimed here, before anything awaits, and that placement is the whole
+    # correctness argument. Entries for one domain are set up concurrently,
+    # so with even one await between the test and the set, both commutes read
+    # no claim, both proceed, and the second call to
+    # `async_register_static_paths` raises `Added route will never be
+    # executed` -- taking the entire second commute down over a card. Shipped
+    # exactly that way in 2026.8.11: the evening commute failed to set up for
+    # everyone with two of them.
+    #
+    # `dict.get` and `dict.__setitem__` do not yield, so this pair cannot be
+    # interleaved. It is the same race the shared store takes `_SETUP_LOCK`
+    # for, and a lock would work here too -- but a lock around a claim that
+    # needs no awaits is a lock protecting nothing.
     if hass.data.get(_REGISTERED):
         return
+    hass.data[_REGISTERED] = True
 
+    # After the claim, deliberately. A missing bundle leaves the flag set, so
+    # the entries behind this one skip rather than each re-checking a file
+    # that cannot appear while Home Assistant is running.
     path = bundle_path()
     if not await hass.async_add_executor_job(path.is_file):
         return
-
-    hass.data[_REGISTERED] = True
 
     await hass.http.async_register_static_paths(
         # No cache headers: the URL carries no content hash, so a cached copy
