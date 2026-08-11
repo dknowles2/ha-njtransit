@@ -54,8 +54,15 @@ def departure(
     status: str = "on_time",
     status_text: str = "On time",
     delay: int | None = 0,
+    status_raw: str = "in 23 Min",
 ) -> tuple[str, dict[str, Any]]:
-    """Return the state and attributes of one departure sensor."""
+    """Return the state and attributes of one departure sensor.
+
+    `status_raw` is the board's own wording, passed through untouched, and it
+    is a live countdown -- so it changes every minute of every wait. It is a
+    default here rather than a detail of one test because its presence is what
+    makes a bare state trigger fire once a minute.
+    """
     return (
         when.isoformat() if when else "unknown",
         {
@@ -64,6 +71,7 @@ def departure(
             "track": track,
             "status": status,
             "status_text": status_text,
+            "status_raw": status_raw,
             "delay_minutes": delay,
             "destination": "New York",
             "crowding": "unknown",
@@ -354,3 +362,81 @@ async def test_the_fallback_skips_past_a_cancelled_first_row(
     assert sent, "a boardable train was available and nothing was sent"
     assert "6920" in sent[-1]["title"]
     assert sent[-1]["data"]["when"] == int(boardable.timestamp())
+
+
+async def test_an_update_does_not_interrupt(
+    hass: HomeAssistant,
+    notifications: list[ServiceCall],
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """The activity replaces what is on screen; it does not announce itself.
+
+    Reusing the `tag` is what stops these stacking, and it was mistaken for
+    what stops them making a sound. It is not: without an interruption level
+    iOS alerts on every push, so a train whose track appeared and whose status
+    slipped buzzed the wrist for each. The companion notification has always
+    set this; the activity, which is sent far more often, did not.
+    """
+    freezer.move_to(MORNING)
+    await install(hass)
+
+    hass.states.async_set(FAVORITE, *departure(MORNING + timedelta(minutes=12)))
+    await hass.async_block_till_done()
+
+    [activity] = pushes(notifications)
+    assert activity["data"]["push"]["interruption-level"] == "passive"
+
+
+async def test_the_boards_own_countdown_is_not_news(
+    hass: HomeAssistant,
+    notifications: list[ServiceCall],
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """A minute passing is not a change worth a push.
+
+    `status_raw` ticks from "in 23 Min" to "in 22 Min" once a minute and a
+    bare state trigger fires on any attribute, so the phone was handed a fresh
+    copy of an unchanged activity every minute of the wait. The chronometer on
+    the phone is what is supposed to be counting down between updates -- that
+    is the whole reason the blueprint claims not to push once a minute.
+    """
+    freezer.move_to(MORNING)
+    leaves = MORNING + timedelta(minutes=23)
+    await install(hass)
+
+    hass.states.async_set(FAVORITE, *departure(leaves))
+    await hass.async_block_till_done()
+    assert len(pushes(notifications)) == 1, "the first activity did not go out"
+
+    hass.states.async_set(FAVORITE, *departure(leaves, status_raw="in 22 Min"))
+    await hass.async_block_till_done()
+
+    assert len(pushes(notifications)) == 1, "a minute of the countdown woke the phone"
+
+
+async def test_a_track_appearing_is_news(
+    hass: HomeAssistant,
+    notifications: list[ServiceCall],
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """The other half of the same guard, and the reason it lists fields.
+
+    Suppressing the minute tick is only safe if everything a commuter reads
+    still gets through. A track appearing is the one people are waiting on --
+    it is why they are looking at the Lock Screen at all.
+    """
+    freezer.move_to(MORNING)
+    leaves = MORNING + timedelta(minutes=23)
+    await install(hass)
+
+    hass.states.async_set(FAVORITE, *departure(leaves, track=None))
+    await hass.async_block_till_done()
+
+    hass.states.async_set(
+        FAVORITE, *departure(leaves, track="4", status_raw="in 22 Min")
+    )
+    await hass.async_block_till_done()
+
+    sent = pushes(notifications)
+    assert len(sent) == 2, "the track was posted and the activity did not say so"
+    assert "Track 4" in sent[-1]["title"]
