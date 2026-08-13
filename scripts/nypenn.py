@@ -160,47 +160,54 @@ class Departure(NamedTuple):
         return standing
 
 
-def load(path: Path) -> tuple[list[Departure], list[datetime]]:
-    """Replay a change log into departures, and return the poll times too.
+def load(*paths: Path) -> tuple[list[Departure], list[datetime]]:
+    """Replay change logs into departures, and return the poll times too.
 
     The polls are not decoration. They are what separates "they said nothing"
     from "nobody was listening", and every accuracy number below is restricted
     to instants that were actually observed.
+
+    More than one log because collection has moved hosts once already and will
+    again. Merging them here rather than concatenating the files keeps the
+    collected data immutable -- an append-only log that something rewrote is
+    no longer evidence of anything. Overlapping logs are safe: a repeated
+    state is the same step in the same place.
     """
     rows: dict[tuple[str, int], list[Snapshot]] = defaultdict(list)
     meta: dict[tuple[str, int], tuple[str, str]] = {}
     polls: list[datetime] = []
 
-    with path.open(encoding="utf-8") as file:
-        for line in file:
-            line = line.strip()
-            if not line:
-                continue
-            record = json.loads(line)
-            kind = record.get("type")
-            if kind == "poll":
-                polls.append(datetime.fromtimestamp(record["t"], TZ))
-                continue
-            if kind != "change":
-                continue
+    for path in paths:
+        with path.open(encoding="utf-8") as file:
+            for line in file:
+                line = line.strip()
+                if not line:
+                    continue
+                record = json.loads(line)
+                kind = record.get("type")
+                if kind == "poll":
+                    polls.append(datetime.fromtimestamp(record["t"], TZ))
+                    continue
+                if kind != "change":
+                    continue
 
-            identity = (str(record["train_id"]), int(record["departure_time"]))
-            top3 = tuple(
-                (str(entry["track"]), int(entry["pct"]))
-                for entry in record.get("top3") or []
-            )
-            rows[identity].append(
-                Snapshot(
-                    at=datetime.fromtimestamp(record["t"], TZ),
-                    track=record.get("track"),
-                    source=record.get("track_source"),
-                    top3=top3,
+                identity = (str(record["train_id"]), int(record["departure_time"]))
+                top3 = tuple(
+                    (str(entry["track"]), int(entry["pct"]))
+                    for entry in record.get("top3") or []
                 )
-            )
-            meta[identity] = (
-                record.get("line") or "",
-                record.get("destination") or "",
-            )
+                rows[identity].append(
+                    Snapshot(
+                        at=datetime.fromtimestamp(record["t"], TZ),
+                        track=record.get("track"),
+                        source=record.get("track_source"),
+                        top3=top3,
+                    )
+                )
+                meta[identity] = (
+                    record.get("line") or "",
+                    record.get("destination") or "",
+                )
 
     departures = []
     for (train_id, departure_time), history in rows.items():
@@ -391,14 +398,18 @@ def report(departures: list[Departure], polls: list[datetime]) -> None:
 def main() -> int:
     """Score a collected change log."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("log", type=Path, help="change log from collect_nypenn.py")
+    parser.add_argument(
+        "logs", nargs="+", type=Path, help="change logs from collect_nypenn.py"
+    )
     args = parser.parse_args()
 
-    if not args.log.is_file():
-        print(f"{args.log}: no such file", file=sys.stderr)
+    missing = [path for path in args.logs if not path.is_file()]
+    if missing:
+        for path in missing:
+            print(f"{path}: no such file", file=sys.stderr)
         return 2
 
-    departures, polls = load(args.log)
+    departures, polls = load(*args.logs)
     if not departures:
         print("nothing recorded yet", file=sys.stderr)
         return 1
