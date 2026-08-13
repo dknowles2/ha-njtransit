@@ -26,12 +26,18 @@ import json
 import statistics
 import sys
 from collections import Counter, defaultdict
+from collections.abc import Callable
 from datetime import date, datetime, timedelta
 from itertools import pairwise
 from pathlib import Path
 from typing import NamedTuple
 
 BAR = 0.60
+
+# nypenn.live covers this station and no other, so its predictions are only
+# ever offered against these rows -- scoring them against Short Hills would
+# credit them with silence about a station they never claimed to cover.
+NY_PENN = "New York Penn Station"
 
 # Below this many seconds before departure, an assignment counts as late.
 # The measured p10 at New York Penn is 5.7 minutes (n=236), so six is roughly
@@ -449,7 +455,12 @@ def m4_by_train_minus_conflicts(
     return [track for track in ranked if track not in busy] or ranked
 
 
-MODELS = {
+# A model is asked three things: every day but the one being scored, the rest
+# of that day's board, and the departure in question. It answers with tracks
+# best first, or with nothing when it has no opinion.
+Model = Callable[[list[Observation], list[Observation], Observation], list[str]]
+
+MODELS: dict[str, Model] = {
     "m0 global mode": m0_global_mode,
     "m1 by train": m1_by_train,
     "m2 by train+weekday": m2_by_train_and_weekday,
@@ -474,7 +485,35 @@ class Score(NamedTuple):
     """Targets it was asked about, answered or not."""
 
 
-def score(observations: list[Observation]) -> dict[str, Score] | None:
+def nypenn_model(
+    answers: dict[tuple[date, str], list[str]],
+) -> Callable[[list[Observation], list[Observation], Observation], list[str]]:
+    """Return a model that answers with what nypenn.live predicted.
+
+    A lookup wearing a model's signature. Their prediction was made from their
+    own data at the time, so `history` and `same_day` are ignored -- and
+    because it does not vary with what is held out, the leave-one-day-out loop
+    scores it identically on every pass. That is the point: it is graded by
+    the same harness, on the same departures, against the same bar, rather
+    than by a second scoreboard whose rules would have to be trusted.
+
+    A missing key is a departure they said nothing about, which is an empty
+    ranking -- the harness already counts that as unanswered rather than
+    wrong, and the `answered` column is where staying quiet shows up.
+    """
+
+    def model(
+        history: list[Observation], same_day: list[Observation], target: Observation
+    ) -> list[str]:
+        return answers.get((target.day, target.train_id), [])
+
+    return model
+
+
+def score(
+    observations: list[Observation],
+    models: dict[str, Model] | None = None,
+) -> dict[str, Score] | None:
     """Score every model leave-one-day-out.
 
     Separated from printing so the split can be tested. It is the part worth
@@ -490,7 +529,7 @@ def score(observations: list[Observation]) -> dict[str, Score] | None:
         return None
 
     scores: dict[str, Score] = {}
-    for name, model in MODELS.items():
+    for name, model in (models or MODELS).items():
         hits = top3 = answered = total = 0
         for held_out in days:
             history = [o for o in observations if o.day != held_out]
@@ -512,9 +551,11 @@ def score(observations: list[Observation]) -> dict[str, Score] | None:
     return scores
 
 
-def evaluate(observations: list[Observation]) -> None:
+def evaluate(
+    observations: list[Observation], models: dict[str, Model] | None = None
+) -> None:
     """Score every model leave-one-day-out and print the table."""
-    scores = score(observations)
+    scores = score(observations, models)
     if scores is None:
         print("\n  not enough days to hold one out yet\n")
         return
@@ -565,6 +606,25 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("paths", nargs="+", type=Path, help="diagnostics JSON files")
     parser.add_argument("--station", help="only this station")
+    parser.add_argument(
+        "--weekdays-only",
+        action="store_true",
+        help="drop Saturday/Sunday departures (fewer trains run, weaker signal)",
+    )
+    parser.add_argument(
+        "--nypenn",
+        type=Path,
+        help="change log from collect_nypenn.py, scored alongside our models",
+    )
+    parser.add_argument(
+        "--nypenn-lead",
+        type=int,
+        default=15,
+        help=(
+            "how many minutes before departure to take their prediction "
+            "(default: 15, which is before Penn posts anything)"
+        ),
+    )
     args = parser.parse_args()
 
     observations = load(args.paths)
@@ -586,13 +646,43 @@ def main() -> int:
     if args.station:
         observations = [o for o in observations if o.station == args.station]
 
+    if args.weekdays_only:
+        dropped = sum(1 for o in observations if o.weekday >= 5)
+        observations = [o for o in observations if o.weekday < 5]
+        print(f"\nweekdays-only: dropped {dropped} Saturday/Sunday observations")
+
+    models = MODELS
+    if args.nypenn:
+        # Imported here rather than at the top so the tool still runs with no
+        # nypenn log to hand, which is the normal case.
+        import nypenn
+
+        theirs, _ = nypenn.load(args.nypenn)
+        answers = nypenn.lookup(theirs, args.nypenn_lead)
+        models = {
+            **MODELS,
+            f"n1 nypenn.live T-{args.nypenn_lead}": nypenn_model(answers),
+        }
+        overlap = {
+            (o.day, o.train_id) for o in observations if o.station == NY_PENN
+        } & set(answers)
+        print(
+            f"\nnypenn.live: {len(answers)} predictions at T-{args.nypenn_lead}, "
+            f"{len(overlap)} of them on departures we also recorded"
+        )
+        if not overlap:
+            print(
+                "  nothing to compare on yet -- their log and our diagnostics\n"
+                "  have to cover the same days at New York Penn"
+            )
+
     stations = sorted({observation.station for observation in observations})
     for station in stations:
         subset = [o for o in observations if o.station == station]
         print(f"\n{station}")
         describe(subset)
         lateness_vs_outcome(subset)
-        evaluate(subset)
+        evaluate(subset, models if station == NY_PENN else MODELS)
 
     return 0
 

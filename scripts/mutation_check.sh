@@ -191,6 +191,24 @@ run "disruption: an unset window blocks everything" \
 # The analysis tool decides whether the whole track-prediction feature ships.
 # Its failure mode is a number that looks like a result.
 
+# The nypenn.live comparison. Both of these produce a *better* looking number,
+# which is the direction that gets believed.
+
+run "nypenn: the board's own answer is scored as their prediction" \
+  scripts/nypenn.py \
+  "        if standing is None or standing.source not in TIERS or not standing.track:" \
+  "        if standing is None or not standing.track:"
+
+run "nypenn: an hour nobody watched counts as an hour they said nothing" \
+  scripts/nypenn.py \
+  "    return any(abs(poll - when) <= OBSERVED_WITHIN for poll in polls)" \
+  "    return True"
+
+run "nypenn: a single confident guess is padded into a top-3" \
+  scripts/nypenn.py \
+  "        return [self.track] if self.track else []" \
+  "        return [self.track, self.track, self.track] if self.track else []"
+
 run "analysis: the held-out day leaks into history" \
   scripts/analyze_tracks.py \
   "history = [o for o in observations if o.day != held_out]" \
