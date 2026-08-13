@@ -209,6 +209,11 @@ run "nypenn: a single confident guess is padded into a top-3" \
   "        return [self.track] if self.track else []" \
   "        return [self.track, self.track, self.track] if self.track else []"
 
+run "analysis: elimination reads tracks the board has not posted yet" \
+  scripts/analyze_tracks.py \
+  "        and o.scheduled - timedelta(seconds=o.assigned_at) <= cutoff" \
+  "        and True"
+
 run "analysis: the held-out day leaks into history" \
   scripts/analyze_tracks.py \
   "history = [o for o in observations if o.day != held_out]" \

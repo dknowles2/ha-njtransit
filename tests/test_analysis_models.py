@@ -28,6 +28,7 @@ from analyze_tracks import (
     m1_by_train,
     m3_by_time_slot,
     m4_by_train_minus_conflicts,
+    m5_free_track,
     score,
 )
 
@@ -294,4 +295,71 @@ def test_every_model_is_scored() -> None:
         "m2 by train+weekday",
         "m3 by time slot",
         "m4 m1 - conflicts",
+        "m5 free track",
     }
+
+
+class TestFreeTrack:
+    """m5, the elimination model, and the timing that decides whether it can work.
+
+    Elimination is the obvious idea at a terminal: sixteen tracks, most of them
+    occupied, so rule those out. The measurement that matters is not whether
+    the rule is right but whether the facts it needs exist yet -- at New York
+    Penn a track is posted a median of 9.2 minutes before departure, and a
+    prediction is only worth making around thirty.
+    """
+
+    def test_a_track_posted_in_time_is_ruled_out(self) -> None:
+        """The rule itself, given a board that has published something."""
+        target = observation("6613", "3", at=(18, 30))
+        # Posted an hour before its own departure, so it is public well
+        # before the moment the target has to be predicted.
+        neighbour = observation("3889", "3", at=(18, 25))._replace(assigned_at=3600)
+        history = [
+            observation("6613", "3", day=date(2026, 8, 4)),
+            observation("6613", "3", day=date(2026, 8, 3)),
+            observation("9999", "7", day=date(2026, 8, 4)),
+        ]
+
+        ranked = m5_free_track(history, [neighbour], target)
+
+        assert "3" not in ranked, "a track with a train already on it was offered"
+
+    def test_a_track_posted_too_late_is_not_ruled_out(self) -> None:
+        """The flaw in m4, and the reason m5 exists.
+
+        A conflicting departure ten minutes either side of the target has its
+        own track posted about nine minutes before *it* leaves -- which is
+        long after the half hour at which this prediction has to be made.
+        Excluding it is reading a board that is still blank, and it is why m4
+        scores better than the same idea honestly implemented.
+        """
+        target = observation("6613", "3", at=(18, 30))
+        neighbour = observation("3889", "3", at=(18, 25))
+        history = [
+            observation("6613", "3", day=date(2026, 8, 4)),
+            observation("6613", "3", day=date(2026, 8, 3)),
+            observation("6613", "7", day=date(2026, 8, 2)),
+        ]
+
+        assert m5_free_track(history, [neighbour], target)[0] == "3"
+        assert m4_by_train_minus_conflicts(history, [neighbour], target)[0] == "7"
+
+    def test_a_track_that_just_emptied_ranks_below_one_that_is_cold(self) -> None:
+        """Turning a track takes time, and the measured p10 is 31 minutes.
+
+        A penalty rather than a veto: three minutes is the fastest reuse in the
+        data, so it happens. It is the ordering that should move.
+        """
+        target = observation("6613", None, at=(18, 30))
+        history = [
+            observation("6613", "3", day=date(2026, 8, 4)),
+            observation("6613", "3", day=date(2026, 8, 3)),
+            observation("6613", "7", day=date(2026, 8, 2)),
+        ]
+        # Left five minutes ago from the track history likes best, and posted
+        # early enough that the board had said so.
+        just_left = observation("3889", "3", at=(18, 25))._replace(assigned_at=3600)
+
+        assert m5_free_track(history, [], target)[0] == "3"
+        assert m5_free_track(history, [just_left], target)[0] == "7"

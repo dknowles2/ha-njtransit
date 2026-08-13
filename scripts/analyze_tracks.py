@@ -49,6 +49,17 @@ LATE_ASSIGNMENT = 6 * 60
 # Deliberately generous: a wrong exclusion costs more than a missing one.
 CONFLICT_WINDOW = timedelta(minutes=10)
 
+# How far ahead a prediction has to be made to be worth making. Penn posts at
+# a median of 9.2 minutes, so anything later than this is telling someone what
+# the board is about to tell them anyway. It is also the lead nypenn.live is
+# scored at, so the two sides answer at the same moment.
+PREDICT_LEAD = 30 * 60
+
+# The measured p10 of the gap between two departures reusing one track at New
+# York Penn (n=1020). A track that emptied more recently than this can still
+# host the next train, but rarely does, so it is a penalty and not a veto.
+REUSE_GAP_P10 = 31 * 60
+
 
 class Observation(NamedTuple):
     """One recorded departure, and what became of it."""
@@ -455,6 +466,88 @@ def m4_by_train_minus_conflicts(
     return [track for track in ranked if track not in busy] or ranked
 
 
+def _known_by(
+    same_day: list[Observation], target: Observation, lead: int
+) -> list[Observation]:
+    """Return the day's departures whose track was already public at `lead`.
+
+    m4 does not do this, and that is a real flaw in it: it excludes tracks
+    used by departures either side of the target, including ones whose track
+    is posted after the moment we would have had to predict. It was written
+    before there was anything to compare against and its number is in the
+    pre-registered table, so it is left alone rather than quietly improved --
+    but it is optimistic, and m5 is the honest version of the same idea.
+
+    `assigned_at` is how many seconds before its own departure that row's
+    track went up. A row that never got one cannot have been read off a board
+    at any time, so it is not evidence here.
+    """
+    cutoff = target.scheduled - timedelta(seconds=lead)
+    return [
+        o
+        for o in same_day
+        if o.track
+        and o.assigned_at is not None
+        and o.scheduled - timedelta(seconds=o.assigned_at) <= cutoff
+    ]
+
+
+def m5_free_track(
+    history: list[Observation], same_day: list[Observation], target: Observation
+) -> list[str]:
+    """What is plausible for this line, minus what the board says is taken.
+
+    The idea the nypenn.live comparison points at. Their confident tier is a
+    sighting of the set on the platform, which no public feed gives us, but
+    their unconfident tier is a model working from the same public facts we
+    have -- and elimination is the strongest of those facts. A terminal has
+    sixteen tracks, a train has to be on one of the few its line uses, and any
+    track with a train already sitting on it is out.
+
+    Three ingredients, in order of how much they contribute:
+
+    * a prior over tracks this line uses around this time of day;
+    * a hard exclusion of tracks occupied by a departure close enough to
+      conflict, which is m4's insight but restricted to tracks whose
+      assignment was actually public by then;
+    * a soft penalty on tracks vacated too recently to be turned around, from
+      the measured reuse gap -- the p10 is 31 minutes, so a track that emptied
+      five minutes ago is possible and unlikely rather than impossible.
+    """
+    prior = Counter(
+        o.track
+        for o in history
+        if o.track
+        and o.line == target.line
+        and abs(_minutes(o.scheduled) - _minutes(target.scheduled)) <= 60
+    )
+    if not prior:
+        prior = Counter(o.track for o in history if o.track)
+    if not prior:
+        return []
+
+    known = _known_by(same_day, target, PREDICT_LEAD)
+    busy = {
+        o.track for o in known if abs(o.scheduled - target.scheduled) <= CONFLICT_WINDOW
+    }
+
+    scored: list[tuple[float, str]] = []
+    for track, count in prior.items():
+        if track in busy:
+            continue
+        gaps = [
+            (target.scheduled - o.scheduled).total_seconds()
+            for o in known
+            if o.track == track and o.scheduled < target.scheduled
+        ]
+        recent = min(gaps) if gaps else None
+        penalty = 1.0 if recent is None else min(1.0, recent / REUSE_GAP_P10)
+        scored.append((count * penalty, track))
+
+    scored.sort(key=lambda pair: (-pair[0], _track_order(pair[1])))
+    return [track for weight, track in scored if weight > 0]
+
+
 # A model is asked three things: every day but the one being scored, the rest
 # of that day's board, and the departure in question. It answers with tracks
 # best first, or with nothing when it has no opinion.
@@ -466,6 +559,7 @@ MODELS: dict[str, Model] = {
     "m2 by train+weekday": m2_by_train_and_weekday,
     "m3 by time slot": m3_by_time_slot,
     "m4 m1 - conflicts": m4_by_train_minus_conflicts,
+    "m5 free track": m5_free_track,
 }
 
 
