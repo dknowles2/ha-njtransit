@@ -29,6 +29,8 @@ from analyze_tracks import (
     m3_by_time_slot,
     m4_by_train_minus_conflicts,
     m5_free_track,
+    m6_last_track_used,
+    m7_combined,
     score,
 )
 
@@ -296,7 +298,74 @@ def test_every_model_is_scored() -> None:
         "m3 by time slot",
         "m4 m1 - conflicts",
         "m5 free track",
+        "m6 last track used",
+        "m7 combined",
     }
+
+
+class TestRecency:
+    """m6 and m7, which read history in date order -- and so can read forwards.
+
+    Every other model here is symmetric in time: a mode does not care which
+    day an observation came from. These two do, and the harness hands them
+    every day except the one being scored, which includes days *after* the
+    target. A recency model reading those is looking at the answer's future,
+    and the resulting number would sit on the same table as the honest ones
+    looking exactly as plausible.
+    """
+
+    def test_the_most_recent_track_leads(self) -> None:
+        history = [
+            observation("6613", "3", day=date(2026, 8, 1)),
+            observation("6613", "3", day=date(2026, 8, 2)),
+            observation("6613", "11", day=date(2026, 8, 4)),
+        ]
+        target = observation("6613", None, day=date(2026, 8, 5))
+
+        assert m6_last_track_used(history, [], target)[0] == "11"
+
+    def test_a_later_day_is_not_evidence(self) -> None:
+        """The leak. Tomorrow's track is not available today."""
+        history = [
+            observation("6613", "3", day=date(2026, 8, 4)),
+            observation("6613", "11", day=date(2026, 8, 6)),
+        ]
+        target = observation("6613", None, day=date(2026, 8, 5))
+
+        assert m6_last_track_used(history, [], target) == ["3"]
+
+    def test_a_train_never_seen_before_gets_no_answer(self) -> None:
+        """Silence, not a guess. The harness counts it as unanswered, which is
+        what makes m6's coverage visible next to its accuracy."""
+        history = [observation("3889", "7", day=date(2026, 8, 4))]
+        target = observation("6613", None, day=date(2026, 8, 5))
+
+        assert m6_last_track_used(history, [], target) == []
+
+    def test_the_combination_falls_back_to_the_line(self) -> None:
+        """m7 answers everything, which is the point of combining.
+
+        A train with no record of its own is the common case early in a
+        collection, and m6 alone says nothing about it. The line's habit
+        around that hour is weak evidence but it is evidence.
+        """
+        history = [
+            observation("3889", "7", day=date(2026, 8, 3), at=(18, 20)),
+            observation("3891", "7", day=date(2026, 8, 4), at=(18, 40)),
+        ]
+        target = observation("6613", None, day=date(2026, 8, 5))
+
+        assert m7_combined(history, [], target)[0] == "7"
+
+    def test_the_combination_does_not_read_forwards_either(self) -> None:
+        history = [
+            observation("6613", "3", day=date(2026, 8, 4)),
+            observation("6613", "11", day=date(2026, 8, 6)),
+            observation("6613", "11", day=date(2026, 8, 7)),
+        ]
+        target = observation("6613", None, day=date(2026, 8, 5))
+
+        assert m7_combined(history, [], target)[0] == "3"
 
 
 class TestFreeTrack:

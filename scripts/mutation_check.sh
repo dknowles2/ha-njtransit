@@ -214,6 +214,16 @@ run "analysis: elimination reads tracks the board has not posted yet" \
   "        and o.scheduled - timedelta(seconds=o.assigned_at) <= cutoff" \
   "        and True"
 
+run "analysis: the recency model reads days after the target" \
+  scripts/analyze_tracks.py \
+  "        if o.track and o.train_id == target.train_id and o.day < target.day" \
+  "        if o.track and o.train_id == target.train_id"
+
+run "analysis: the combination reads days after the target" \
+  scripts/analyze_tracks.py \
+  "        if not o.track or o.day >= target.day:" \
+  "        if not o.track:"
+
 run "analysis: the held-out day leaks into history" \
   scripts/analyze_tracks.py \
   "history = [o for o in observations if o.day != held_out]" \

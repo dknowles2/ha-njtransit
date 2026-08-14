@@ -60,6 +60,18 @@ PREDICT_LEAD = 30 * 60
 # host the next train, but rarely does, so it is a penalty and not a veto.
 REUSE_GAP_P10 = 31 * 60
 
+# How fast an old observation stops mattering in m7. A week, so that last
+# Thursday still counts for half and a month ago barely registers -- chosen
+# because the timetable itself runs on a weekly cycle, not because it scored
+# well. Nothing below was tuned after the fact.
+RECENCY_HALF_LIFE = 7.0
+
+# What a track used by *this train* is worth against one merely used by the
+# same line around the same time. Six to one, following the gap between
+# `m1 by train` and `m3 by time slot`.
+TRAIN_WEIGHT = 6.0
+LINE_WEIGHT = 1.0
+
 
 class Observation(NamedTuple):
     """One recorded departure, and what became of it."""
@@ -548,6 +560,96 @@ def m5_free_track(
     return [track for weight, track in scored if weight > 0]
 
 
+def m6_last_track_used(
+    history: list[Observation], same_day: list[Observation], target: Observation
+) -> list[str]:
+    """The track this train used the last time it ran.
+
+    m1 asks what a train usually does, which buries a track that has moved:
+    six weeks on track 3 and the last four days on track 11 still says 3. This
+    asks what it did most recently, and then falls back through the rest in
+    order of how recently they were used.
+
+    Only days strictly *before* the target. The leave-one-day-out harness
+    hands every model the whole of history minus the day being scored, which
+    for a model built on the mode is harmless -- but "the last time it ran"
+    reading a day that has not happened yet is the same class of bug as the
+    100% that started this file, and it would look just as plausible.
+    """
+    prior = [
+        o
+        for o in history
+        if o.track and o.train_id == target.train_id and o.day < target.day
+    ]
+    ranked: list[str] = []
+    for observation in sorted(prior, key=lambda o: o.day, reverse=True):
+        if observation.track and observation.track not in ranked:
+            ranked.append(observation.track)
+    return ranked
+
+
+def m7_combined(
+    history: list[Observation], same_day: list[Observation], target: Observation
+) -> list[str]:
+    """Every signal we have, weighted, in one ranking.
+
+    m1 and m6 are the same evidence read two ways -- all of a train's history
+    versus only its latest day -- and the decay here is what puts them on a
+    continuum: an observation counts for half as much every `RECENCY_HALF_LIFE`
+    days, so a week-old track still speaks and a month-old one barely does.
+    m1 is this with an infinite half-life and m6 with one of zero.
+
+    Where a train has no history of its own, the line's habit around this time
+    of day carries the ranking instead -- weighted far below the train's own
+    record, because `m3 by time slot` scores well below `m1 by train`.
+
+    The availability penalty from m5 is applied last. It contributes almost
+    nothing at a thirty-minute lead, for the reason m5 measured: there is
+    nothing posted yet to eliminate. It is here because it costs nothing and
+    becomes real if this is ever asked closer in.
+
+    Both the half-life and the weights were fixed before this was scored, and
+    neither was tuned afterwards. The alternative -- trying values until the
+    table improves -- is how ten days of data produces a model that describes
+    ten days of data.
+    """
+    weights: dict[str, float] = defaultdict(float)
+    for o in history:
+        if not o.track or o.day >= target.day:
+            continue
+        decay = 0.5 ** ((target.day - o.day).days / RECENCY_HALF_LIFE)
+        if o.train_id == target.train_id:
+            weights[o.track] += TRAIN_WEIGHT * decay
+        elif (
+            o.line == target.line
+            and abs(_minutes(o.scheduled) - _minutes(target.scheduled)) <= 60
+        ):
+            weights[o.track] += LINE_WEIGHT * decay
+
+    if not weights:
+        return m0_global_mode(history, same_day, target)
+
+    known = _known_by(same_day, target, PREDICT_LEAD)
+    busy = {
+        o.track for o in known if abs(o.scheduled - target.scheduled) <= CONFLICT_WINDOW
+    }
+    scored = []
+    for track, weight in weights.items():
+        if track in busy:
+            continue
+        gaps = [
+            (target.scheduled - o.scheduled).total_seconds()
+            for o in known
+            if o.track == track and o.scheduled < target.scheduled
+        ]
+        recent = min(gaps) if gaps else None
+        penalty = 1.0 if recent is None else min(1.0, recent / REUSE_GAP_P10)
+        scored.append((weight * penalty, track))
+
+    scored.sort(key=lambda pair: (-pair[0], _track_order(pair[1])))
+    return [track for weight, track in scored if weight > 0]
+
+
 # A model is asked three things: every day but the one being scored, the rest
 # of that day's board, and the departure in question. It answers with tracks
 # best first, or with nothing when it has no opinion.
@@ -560,6 +662,8 @@ MODELS: dict[str, Model] = {
     "m3 by time slot": m3_by_time_slot,
     "m4 m1 - conflicts": m4_by_train_minus_conflicts,
     "m5 free track": m5_free_track,
+    "m6 last track used": m6_last_track_used,
+    "m7 combined": m7_combined,
 }
 
 
