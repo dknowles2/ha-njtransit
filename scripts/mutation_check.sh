@@ -224,6 +224,19 @@ run "analysis: the combination reads days after the target" \
   "        if not o.track or o.day >= target.day:" \
   "        if not o.track:"
 
+# The fitted ranker. A leak here is worse than in a hand-written model: the
+# weights reorganise around whatever leaked and produce an explanation for the
+# number as well as the number.
+run "ml: the ranker's features read days after the target" \
+  scripts/learn_tracks.py \
+  "    prior = [o for o in history if o.track and o.day < target.day]" \
+  "    prior = [o for o in history if o.track]"
+
+run "ml: the vacancy feature reads assignments that were still secret" \
+  scripts/learn_tracks.py \
+  "    known = _known_by(same_day, target, PREDICT_LEAD)" \
+  "    known = [o for o in same_day if o.track]"
+
 run "analysis: the held-out day leaks into history" \
   scripts/analyze_tracks.py \
   "history = [o for o in observations if o.day != held_out]" \
