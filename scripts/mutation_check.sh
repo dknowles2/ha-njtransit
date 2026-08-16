@@ -173,6 +173,20 @@ run "blueprint: an unset helper breaks config validation" \
   '              entity_id: !input boarded_helper
           - action: "{{ notify_action }}"'
 
+run "blueprint: the activity interrupts on every update again" \
+  blueprints/automation/njtransit/favorite_live_activity.yaml \
+  "                push:
+                  interruption-level: passive" \
+  "                push:
+                  interruption-level: active"
+
+run "blueprint: the board's own countdown pushes again" \
+  blueprints/automation/njtransit/favorite_live_activity.yaml \
+  "  changed: >-
+    {{ riding" \
+  "  changed: >-
+    {{ true or riding"
+
 run "disruption: bands compared for equality, not increase" \
   blueprints/automation/njtransit/commute_disruption.yaml \
   "{%- if (m[0] | int // 5) > was -%}" \
