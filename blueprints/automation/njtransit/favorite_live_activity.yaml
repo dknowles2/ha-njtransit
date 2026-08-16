@@ -374,6 +374,30 @@ variables:
     {{ radius | float(0) if radius | float(0) > 0
        else ([2.0, home_to_origin | float(0) / 2] | max
              if home_to_origin is not none else 0) }}
+  # Whether you are at the station this train leaves from.
+  #
+  # Standing on the platform is the least ambiguous "yes" there is, and until
+  # this existed the zone branch below could not say it: with zones configured
+  # it only ever asked whether you were inside one of them, and a station you
+  # walk to is not inside the home zone. Measured on the live instance, the
+  # morning commute had the person 36 m from the origin and 638 m from a home
+  # zone with a 100 m radius -- so the activity was cleared on the walk to the
+  # train, every morning, and the countdown vanished a few minutes before the
+  # train it was counting down to arrived.
+  #
+  # `effective_radius` was already the right number and was simply unreachable
+  # from that branch. At the near end its floor of 2 km covers the station and
+  # the house you left. At the far end it is half the distance home, which
+  # cannot reach home by construction, so this does not weaken the gate that
+  # keeps an evening commute quiet on a day worked from home.
+  at_origin: >-
+    {%- if not presence or origin_lat is none or origin_lon is none
+          or effective_radius | float(0) <= 0 -%}
+    false
+    {%- else -%}
+    {%- set away = distance(presence, origin_lat | float(0), origin_lon | float(0)) -%}
+    {{ away is not none and away <= effective_radius | float(0) }}
+    {%- endif -%}
   # Whether you are somewhere this train could still be caught from.
   #
   # Measured with `distance` against each zone's own radius rather than by
@@ -415,7 +439,7 @@ variables:
         and without this line that reads as "you are nowhere near any of them"
         and silences the commute permanently. Measured-and-outside and
         could-not-measure are different answers. -#}
-    {{ ns.near or not ns.measured }}
+    {{ ns.near or at_origin | bool(false) or not ns.measured }}
     {%- endif -%}
   in_window: >-
     {{ not windows or windows | select('is_state', 'on') | list | count > 0 }}

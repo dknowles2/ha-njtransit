@@ -55,6 +55,7 @@ def departure(
     status_text: str = "On time",
     delay: int | None = 0,
     status_raw: str = "in 23 Min",
+    origin: tuple[float, float] | None = None,
 ) -> tuple[str, dict[str, Any]]:
     """Return the state and attributes of one departure sensor.
 
@@ -78,6 +79,11 @@ def departure(
             "cars": [],
             "alerts": [],
             "favorites": ["6320"],
+            **(
+                {"origin_latitude": origin[0], "origin_longitude": origin[1]}
+                if origin
+                else {}
+            ),
         },
     )
 
@@ -440,3 +446,97 @@ async def test_a_track_appearing_is_news(
     sent = pushes(notifications)
     assert len(sent) == 2, "the track was posted and the activity did not say so"
     assert "Track 4" in sent[-1]["title"]
+
+
+# A house, and the station a six-hundred-metre walk from it. The numbers are
+# not the real ones but the geometry is: the station is far outside a home
+# zone's radius, which is the whole of the bug below.
+HOME = (40.7300, -74.3200)
+STATION = (40.7250, -74.3240)
+FAR_AWAY = (41.5000, -75.5000)
+PERSON = "person.test_commuter"
+
+
+def place(hass: HomeAssistant, where: tuple[float, float]) -> None:
+    """Put the commuter somewhere, and put home where home is."""
+    hass.config.latitude, hass.config.longitude = HOME
+    hass.states.async_set(
+        "zone.home",
+        "0",
+        {"latitude": HOME[0], "longitude": HOME[1], "radius": 100, "passive": False},
+    )
+    hass.states.async_set(
+        PERSON, "not_home", {"latitude": where[0], "longitude": where[1]}
+    )
+
+
+async def test_standing_on_the_platform_counts_as_being_near_the_train(
+    hass: HomeAssistant,
+    notifications: list[ServiceCall],
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """The bug, measured off the live instance three mornings running.
+
+    With zones configured the location gate only ever asked whether the phone
+    was inside one of them, and a station you walk to is not inside the home
+    zone. So the activity appeared at home and was cleared on the walk -- the
+    countdown vanishing a few minutes before the train it was counting down
+    to arrived, which is exactly when it was wanted.
+
+    36 m from the origin and 638 m from a 100 m home zone were the real
+    measurements. The geometry here is the same shape.
+    """
+    freezer.move_to(MORNING)
+    leaves = MORNING + timedelta(minutes=12)
+    place(hass, STATION)
+    await install(hass, presence_entity=PERSON, presence_zones=["zone.home"])
+
+    hass.states.async_set(FAVORITE, *departure(leaves, origin=STATION))
+    await hass.async_block_till_done()
+
+    assert pushes(notifications), "the activity was cleared while at the station"
+
+
+async def test_a_different_town_is_still_too_far(
+    hass: HomeAssistant,
+    notifications: list[ServiceCall],
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """The gate still has to gate.
+
+    Reaching for the station radius must not become "always near". Somewhere
+    an hour away is neither in a zone nor at the origin, and a Lock Screen
+    counting down to a train from a station you are nowhere near is the thing
+    this input exists to prevent.
+    """
+    freezer.move_to(MORNING)
+    leaves = MORNING + timedelta(minutes=12)
+    place(hass, FAR_AWAY)
+    await install(hass, presence_entity=PERSON, presence_zones=["zone.home"])
+
+    hass.states.async_set(FAVORITE, *departure(leaves, origin=STATION))
+    await hass.async_block_till_done()
+
+    assert pushes(notifications) == [], "a train an hour away reached the phone"
+
+
+async def test_being_in_a_named_zone_still_counts(
+    hass: HomeAssistant,
+    notifications: list[ServiceCall],
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """The original behaviour, which the station radius is added alongside.
+
+    The evening commute is configured this way round -- an office zone at the
+    far end, nowhere near the origin's own radius -- so a zone match has to
+    keep working on its own.
+    """
+    freezer.move_to(MORNING)
+    leaves = MORNING + timedelta(minutes=12)
+    place(hass, HOME)
+    await install(hass, presence_entity=PERSON, presence_zones=["zone.home"])
+
+    hass.states.async_set(FAVORITE, *departure(leaves, origin=FAR_AWAY))
+    await hass.async_block_till_done()
+
+    assert pushes(notifications), "being at home in the home zone was not enough"
