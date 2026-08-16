@@ -219,6 +219,52 @@ run "disruption: an unset window blocks everything" \
 # The analysis tool decides whether the whole track-prediction feature ships.
 # Its failure mode is a number that looks like a result.
 
+# The nypenn.live comparison. Both of these produce a *better* looking number,
+# which is the direction that gets believed.
+
+run "nypenn: the board's own answer is scored as their prediction" \
+  scripts/nypenn.py \
+  "        if standing is None or standing.source not in TIERS or not standing.track:" \
+  "        if standing is None or not standing.track:"
+
+run "nypenn: an hour nobody watched counts as an hour they said nothing" \
+  scripts/nypenn.py \
+  "    return any(abs(poll - when) <= OBSERVED_WITHIN for poll in polls)" \
+  "    return True"
+
+run "nypenn: a single confident guess is padded into a top-3" \
+  scripts/nypenn.py \
+  "        return [self.track] if self.track else []" \
+  "        return [self.track, self.track, self.track] if self.track else []"
+
+run "analysis: elimination reads tracks the board has not posted yet" \
+  scripts/analyze_tracks.py \
+  "        and o.scheduled - timedelta(seconds=o.assigned_at) <= cutoff" \
+  "        and True"
+
+run "analysis: the recency model reads days after the target" \
+  scripts/analyze_tracks.py \
+  "        if o.track and o.train_id == target.train_id and o.day < target.day" \
+  "        if o.track and o.train_id == target.train_id"
+
+run "analysis: the combination reads days after the target" \
+  scripts/analyze_tracks.py \
+  "        if not o.track or o.day >= target.day:" \
+  "        if not o.track:"
+
+# The fitted ranker. A leak here is worse than in a hand-written model: the
+# weights reorganise around whatever leaked and produce an explanation for the
+# number as well as the number.
+run "ml: the ranker's features read days after the target" \
+  scripts/learn_tracks.py \
+  "    prior = [o for o in history if o.track and o.day < target.day]" \
+  "    prior = [o for o in history if o.track]"
+
+run "ml: the vacancy feature reads assignments that were still secret" \
+  scripts/learn_tracks.py \
+  "    known = _known_by(same_day, target, PREDICT_LEAD)" \
+  "    known = [o for o in same_day if o.track]"
+
 run "analysis: the held-out day leaks into history" \
   scripts/analyze_tracks.py \
   "history = [o for o in observations if o.day != held_out]" \
