@@ -25,18 +25,21 @@ table it is meant to join.
 Usage:
     python scripts/learn_tracks.py njtransit-*.json
 
-Requires numpy, which Home Assistant already depends on, so it is present in
-the dev environment. This is an analysis tool, not shipped code.
+Stdlib only, like the rest of `scripts/`. Seven weights over sixteen
+candidates does not need a linear algebra library, and the pure-Python version
+runs on any box with a python3 on it -- including the one that hosts the
+weekly report, where installing anything needs a root password nobody should
+have to type for this.
 """
 
 from __future__ import annotations
 
 import argparse
+import math
+import statistics
 import sys
 from pathlib import Path
 from typing import NamedTuple
-
-import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -47,6 +50,7 @@ from analyze_tracks import (
     Observation,
     _known_by,
     _minutes,
+    _track_order,
     load,
 )
 
@@ -78,7 +82,7 @@ RECENT_DAYS = 3.0
 
 def candidates(
     history: list[Observation], same_day: list[Observation], target: Observation
-) -> np.ndarray:
+) -> list[list[float]]:
     """Return one feature row per track, in `TRACKS` order.
 
     Deliberately the same evidence the hand-written models read, so that a
@@ -122,31 +126,61 @@ def candidates(
                 0.0 if any(o.track == track for o in mine) else 1.0,
             ]
         )
-    return np.asarray(rows, dtype=float)
+    return rows
 
 
-def fit(examples: list[tuple[np.ndarray, int]]) -> np.ndarray:
+def _score_rows(features: list[list[float]], weights: list[float]) -> list[float]:
+    """Return the score of each candidate row."""
+    return [sum(f * w for f, w in zip(row, weights, strict=True)) for row in features]
+
+
+def _softmax(scores: list[float]) -> list[float]:
+    """Return the scores as probabilities.
+
+    The maximum is subtracted first. Without it `exp` overflows once the
+    weights grow, and the overflow arrives as a nan that quietly poisons every
+    weight from then on rather than as an error.
+    """
+    top = max(scores)
+    weighted = [math.exp(s - top) for s in scores]
+    total = sum(weighted)
+    return [w / total for w in weighted]
+
+
+def fit(examples: list[tuple[list[list[float]], int]]) -> list[float]:
     """Fit the ranker by gradient descent on the softmax likelihood."""
-    width = examples[0][0].shape[1]
-    weights = np.zeros(width)
+    width = len(examples[0][0][0])
+    weights = [0.0] * width
     for _ in range(EPOCHS):
-        gradient = np.zeros(width)
+        gradient = [0.0] * width
         for features, answer in examples:
-            scores = features @ weights
-            scores -= scores.max()
-            probability = np.exp(scores)
-            probability /= probability.sum()
-            # The gradient of the log-likelihood: push up the chosen row,
-            # push down every row in proportion to how much it was believed.
-            gradient += features[answer] - probability @ features
-        weights += STEP * (gradient / len(examples) - L2 * weights)
+            probability = _softmax(_score_rows(features, weights))
+            # The gradient of the log-likelihood: push up the chosen row, push
+            # down every row in proportion to how much it was believed.
+            for index in range(width):
+                expected = sum(
+                    p * row[index] for p, row in zip(probability, features, strict=True)
+                )
+                gradient[index] += features[answer][index] - expected
+        weights = [
+            w + STEP * (g / len(examples) - L2 * w)
+            for w, g in zip(weights, gradient, strict=True)
+        ]
     return weights
 
 
-def rank(weights: np.ndarray, features: np.ndarray) -> list[str]:
-    """Return the tracks best first."""
-    order = np.argsort(-(features @ weights))
-    return [TRACKS[i] for i in order]
+def rank(weights: list[float], features: list[list[float]]) -> list[str]:
+    """Return the tracks best first.
+
+    Ties break on track order rather than arbitrarily, so two runs over the
+    same data cannot disagree about which of two equally scored platforms is
+    named first.
+    """
+    scored = sorted(
+        zip(_score_rows(features, weights), TRACKS, strict=True),
+        key=lambda pair: (-pair[0], _track_order(pair[1])),
+    )
+    return [track for _, track in scored]
 
 
 class Learned(NamedTuple):
@@ -155,7 +189,7 @@ class Learned(NamedTuple):
     hits: int
     top3: int
     total: int
-    weights: list[np.ndarray]
+    weights: list[list[float]]
     """One set of weights per fold, kept so their spread can be reported.
 
     A weight that swings between folds is the model disagreeing with itself,
@@ -235,8 +269,10 @@ def evaluate(observations: list[Observation]) -> None:
     )
 
     print("\n  what it learned (mean weight across folds, larger is stronger)")
-    mean = np.mean(learned, axis=0)
-    spread = np.std(learned, axis=0)
+    mean = [statistics.fmean(fold[i] for fold in learned) for i in range(len(FEATURES))]
+    spread = [
+        statistics.pstdev([fold[i] for fold in learned]) for i in range(len(FEATURES))
+    ]
     for name, value, deviation in sorted(
         zip(FEATURES, mean, spread, strict=True), key=lambda t: -abs(t[1])
     ):

@@ -17,8 +17,6 @@ import sys
 from datetime import date, datetime
 from pathlib import Path
 
-import numpy as np
-
 from custom_components.njtransit.api.parsing import TZ
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
@@ -55,9 +53,9 @@ def observation(
     )
 
 
-def feature(rows: np.ndarray, track: str, name: str) -> float:
+def feature(rows: list[list[float]], track: str, name: str) -> float:
     """Return one feature of one candidate track, by name."""
-    return float(rows[TRACKS.index(track)][FEATURES.index(name)])
+    return rows[TRACKS.index(track)][FEATURES.index(name)]
 
 
 class TestItCannotSeeTheAnswer:
@@ -178,7 +176,8 @@ class TestTheFeatures:
         """
         rows = candidates([observation("6613", "3")], [], observation("6613", None))
 
-        assert rows.shape == (16, len(FEATURES))
+        assert len(rows) == len(TRACKS)
+        assert all(len(row) == len(FEATURES) for row in rows)
 
 
 class TestFitting:
@@ -189,7 +188,7 @@ class TestFitting:
         examples = []
         for index in range(8):
             answer = index % len(TRACKS)
-            rows = np.zeros((len(TRACKS), 2))
+            rows = [[0.0, 0.0] for _ in TRACKS]
             rows[answer][0] = 1.0
             rows[(answer + 1) % len(TRACKS)][1] = 1.0
             examples.append((rows, answer))
@@ -199,11 +198,11 @@ class TestFitting:
         assert weights[0] > weights[1], "the predictive feature was not preferred"
 
     def test_the_ranking_is_ordered_by_score(self) -> None:
-        rows = np.zeros((len(TRACKS), 1))
+        rows = [[0.0] for _ in TRACKS]
         rows[TRACKS.index("9")][0] = 2.0
         rows[TRACKS.index("4")][0] = 1.0
 
-        ranked = rank(np.array([1.0]), rows)
+        ranked = rank([1.0], rows)
 
         assert ranked[0] == "9"
         assert ranked[1] == "4"
