@@ -14,7 +14,9 @@ blueprint:
     its status or track changes, and — if you are still following it when it
     leaves — switches to counting down to your arrival instead, showing how
     many stops are left and the next station. It clears when you get there.
-    Updates reuse the same `tag`, so they are silent — no banner, no sound.
+    Updates are sent `passive` and reuse the same `tag`, so they replace what
+    is on screen without a banner or a sound — and one is only sent when
+    something you can read on the activity has actually changed.
 
 
     The arrival half needs the commute's **Stops away** sensor, which is
@@ -372,6 +374,30 @@ variables:
     {{ radius | float(0) if radius | float(0) > 0
        else ([2.0, home_to_origin | float(0) / 2] | max
              if home_to_origin is not none else 0) }}
+  # Whether you are at the station this train leaves from.
+  #
+  # Standing on the platform is the least ambiguous "yes" there is, and until
+  # this existed the zone branch below could not say it: with zones configured
+  # it only ever asked whether you were inside one of them, and a station you
+  # walk to is not inside the home zone. Measured on the live instance, the
+  # morning commute had the person 36 m from the origin and 638 m from a home
+  # zone with a 100 m radius -- so the activity was cleared on the walk to the
+  # train, every morning, and the countdown vanished a few minutes before the
+  # train it was counting down to arrived.
+  #
+  # `effective_radius` was already the right number and was simply unreachable
+  # from that branch. At the near end its floor of 2 km covers the station and
+  # the house you left. At the far end it is half the distance home, which
+  # cannot reach home by construction, so this does not weaken the gate that
+  # keeps an evening commute quiet on a day worked from home.
+  at_origin: >-
+    {%- if not presence or origin_lat is none or origin_lon is none
+          or effective_radius | float(0) <= 0 -%}
+    false
+    {%- else -%}
+    {%- set away = distance(presence, origin_lat | float(0), origin_lon | float(0)) -%}
+    {{ away is not none and away <= effective_radius | float(0) }}
+    {%- endif -%}
   # Whether you are somewhere this train could still be caught from.
   #
   # Measured with `distance` against each zone's own radius rather than by
@@ -413,7 +439,7 @@ variables:
         and without this line that reads as "you are nowhere near any of them"
         and silences the commute permanently. Measured-and-outside and
         could-not-measure are different answers. -#}
-    {{ ns.near or not ns.measured }}
+    {{ ns.near or at_origin | bool(false) or not ns.measured }}
     {%- endif -%}
   in_window: >-
     {{ not windows or windows | select('is_state', 'on') | list | count > 0 }}
@@ -507,6 +533,41 @@ variables:
        and not is_state(boarded, 'on')
        and in_window }}
   showing: "{{ waiting or riding }}"
+  # Whether this refresh has anything new to say.
+  #
+  # The favourite sensor carries `status_raw`, which is the board's own
+  # countdown -- "in 23 Min" -- so it changes every single minute, and a bare
+  # state trigger fires on any attribute. Nothing on the activity renders it:
+  # the chronometer counts down on the phone, which is the entire reason this
+  # is not supposed to push once a minute. So the phone was handed a push
+  # carrying a face identical to the one already on screen, every minute, for
+  # the whole lead window.
+  #
+  # Compared against the trigger's own `from_state` rather than a remembered
+  # copy, which would need a helper the user has to create. The fields are the
+  # ones that reach the screen: anything not listed here can change freely
+  # without waking the phone.
+  #
+  # Three cases deliberately pass straight through:
+  #   * a time-pattern refresh, which has no `from_state` -- it is what shows
+  #     the activity in the first place and what ends it;
+  #   * a trigger on some entity other than the one being rendered, which
+  #     happens when the favourite is unknown and the fallback row is showing;
+  #   * riding, where the face is built from the progress sensor and changes
+  #     on its own schedule while the favourite sits still.
+  shown_fields: >-
+    {{ [states(source), state_attr(source, 'train_id'),
+        state_attr(source, 'track'), state_attr(source, 'status_text'),
+        state_attr(source, 'crowding')] }}
+  changed: >-
+    {{ riding
+       or trigger.from_state is not defined or trigger.from_state is none
+       or trigger.entity_id != source
+       or [trigger.from_state.state,
+           trigger.from_state.attributes.get('train_id'),
+           trigger.from_state.attributes.get('track'),
+           trigger.from_state.attributes.get('status_text'),
+           trigger.from_state.attributes.get('crowding')] != shown_fields }}
   ride_train: "{{ state_attr(progress_entity, 'train_id') or '' }}"
   ride_stops: "{{ state_attr(progress_entity, 'stops_to_destination') }}"
   ride_next: "{{ state_attr(progress_entity, 'next_stop') or '' }}"
@@ -627,6 +688,19 @@ actions:
             target:
               entity_id: "{{ boarded }}"
 
+      # Ahead of the branch that shows, and ahead of the branch that clears.
+      # Falling through to either would be wrong: one re-pushes an identical
+      # activity, the other takes a perfectly good activity off the screen
+      # because the train has not changed in a minute.
+      - alias: Nothing about the train changed, so say nothing
+        conditions:
+          - condition: trigger
+            id: refresh
+          - condition: template
+            value_template: "{{ showing and not changed }}"
+        sequence:
+          - stop: The activity already on the phone is current
+
       - alias: Show or refresh the activity
         conditions:
           - condition: trigger
@@ -654,6 +728,20 @@ actions:
                 when: "{{ activity_when }}"
                 notification_icon: !input icon
                 group: njtransit
+                # The same tag replaces the notification rather than stacking
+                # it, and that was mistaken here for the update being silent.
+                # It is not: iOS still alerts on every push at the default
+                # interruption level, so a refreshing activity buzzed the
+                # wrist each time. `passive` is what actually means "update
+                # what is on screen, do not interrupt" -- the companion
+                # notification below has always set it, which is why that one
+                # never made a sound and this one did.
+                #
+                # A `url` key alongside these broke the activity outright (see
+                # below), so this was added on its own and its effect on the
+                # activity checked before anything else changed.
+                push:
+                  interruption-level: passive
                 # Deliberately no `url` here. Adding one stopped the activity
                 # rendering at all -- the payload was verified to reach the
                 # notify service as a correct dict with `live_update` and

@@ -160,6 +160,20 @@ run "blueprint: the arrival countdown ignores the window" \
        and in_window }}" \
   "       and not is_state(boarded, 'on') }}"
 
+run "blueprint: standing at the station stops counting as near" \
+  blueprints/automation/njtransit/favorite_live_activity.yaml \
+  "{{ ns.near or at_origin | bool(false) or not ns.measured }}" \
+  "{{ ns.near or not ns.measured }}"
+
+run "blueprint: the origin radius swallows everywhere" \
+  blueprints/automation/njtransit/favorite_live_activity.yaml \
+  "{{ away is not none and away <= effective_radius | float(0) }}
+    {%- endif -%}
+  # Whether you are somewhere this train could still be caught from." \
+  "{{ true }}
+    {%- endif -%}
+  # Whether you are somewhere this train could still be caught from."
+
 run "blueprint: the commute window stops gating" \
   blueprints/automation/njtransit/favorite_live_activity.yaml \
   "and not is_state(boarded, 'on') and nearby | bool(false)
@@ -172,6 +186,20 @@ run "blueprint: an unset helper breaks config validation" \
           - action: "{{ notify_action }}"' \
   '              entity_id: !input boarded_helper
           - action: "{{ notify_action }}"'
+
+run "blueprint: the activity interrupts on every update again" \
+  blueprints/automation/njtransit/favorite_live_activity.yaml \
+  "                push:
+                  interruption-level: passive" \
+  "                push:
+                  interruption-level: active"
+
+run "blueprint: the board's own countdown pushes again" \
+  blueprints/automation/njtransit/favorite_live_activity.yaml \
+  "  changed: >-
+    {{ riding" \
+  "  changed: >-
+    {{ true or riding"
 
 run "disruption: bands compared for equality, not increase" \
   blueprints/automation/njtransit/commute_disruption.yaml \

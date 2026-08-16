@@ -54,8 +54,16 @@ def departure(
     status: str = "on_time",
     status_text: str = "On time",
     delay: int | None = 0,
+    status_raw: str = "in 23 Min",
+    origin: tuple[float, float] | None = None,
 ) -> tuple[str, dict[str, Any]]:
-    """Return the state and attributes of one departure sensor."""
+    """Return the state and attributes of one departure sensor.
+
+    `status_raw` is the board's own wording, passed through untouched, and it
+    is a live countdown -- so it changes every minute of every wait. It is a
+    default here rather than a detail of one test because its presence is what
+    makes a bare state trigger fire once a minute.
+    """
     return (
         when.isoformat() if when else "unknown",
         {
@@ -64,12 +72,18 @@ def departure(
             "track": track,
             "status": status,
             "status_text": status_text,
+            "status_raw": status_raw,
             "delay_minutes": delay,
             "destination": "New York",
             "crowding": "unknown",
             "cars": [],
             "alerts": [],
             "favorites": ["6320"],
+            **(
+                {"origin_latitude": origin[0], "origin_longitude": origin[1]}
+                if origin
+                else {}
+            ),
         },
     )
 
@@ -354,3 +368,175 @@ async def test_the_fallback_skips_past_a_cancelled_first_row(
     assert sent, "a boardable train was available and nothing was sent"
     assert "6920" in sent[-1]["title"]
     assert sent[-1]["data"]["when"] == int(boardable.timestamp())
+
+
+async def test_an_update_does_not_interrupt(
+    hass: HomeAssistant,
+    notifications: list[ServiceCall],
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """The activity replaces what is on screen; it does not announce itself.
+
+    Reusing the `tag` is what stops these stacking, and it was mistaken for
+    what stops them making a sound. It is not: without an interruption level
+    iOS alerts on every push, so a train whose track appeared and whose status
+    slipped buzzed the wrist for each. The companion notification has always
+    set this; the activity, which is sent far more often, did not.
+    """
+    freezer.move_to(MORNING)
+    await install(hass)
+
+    hass.states.async_set(FAVORITE, *departure(MORNING + timedelta(minutes=12)))
+    await hass.async_block_till_done()
+
+    [activity] = pushes(notifications)
+    assert activity["data"]["push"]["interruption-level"] == "passive"
+
+
+async def test_the_boards_own_countdown_is_not_news(
+    hass: HomeAssistant,
+    notifications: list[ServiceCall],
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """A minute passing is not a change worth a push.
+
+    `status_raw` ticks from "in 23 Min" to "in 22 Min" once a minute and a
+    bare state trigger fires on any attribute, so the phone was handed a fresh
+    copy of an unchanged activity every minute of the wait. The chronometer on
+    the phone is what is supposed to be counting down between updates -- that
+    is the whole reason the blueprint claims not to push once a minute.
+    """
+    freezer.move_to(MORNING)
+    leaves = MORNING + timedelta(minutes=23)
+    await install(hass)
+
+    hass.states.async_set(FAVORITE, *departure(leaves))
+    await hass.async_block_till_done()
+    assert len(pushes(notifications)) == 1, "the first activity did not go out"
+
+    hass.states.async_set(FAVORITE, *departure(leaves, status_raw="in 22 Min"))
+    await hass.async_block_till_done()
+
+    assert len(pushes(notifications)) == 1, "a minute of the countdown woke the phone"
+
+
+async def test_a_track_appearing_is_news(
+    hass: HomeAssistant,
+    notifications: list[ServiceCall],
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """The other half of the same guard, and the reason it lists fields.
+
+    Suppressing the minute tick is only safe if everything a commuter reads
+    still gets through. A track appearing is the one people are waiting on --
+    it is why they are looking at the Lock Screen at all.
+    """
+    freezer.move_to(MORNING)
+    leaves = MORNING + timedelta(minutes=23)
+    await install(hass)
+
+    hass.states.async_set(FAVORITE, *departure(leaves, track=None))
+    await hass.async_block_till_done()
+
+    hass.states.async_set(
+        FAVORITE, *departure(leaves, track="4", status_raw="in 22 Min")
+    )
+    await hass.async_block_till_done()
+
+    sent = pushes(notifications)
+    assert len(sent) == 2, "the track was posted and the activity did not say so"
+    assert "Track 4" in sent[-1]["title"]
+
+
+# A house, and the station a six-hundred-metre walk from it. The numbers are
+# not the real ones but the geometry is: the station is far outside a home
+# zone's radius, which is the whole of the bug below.
+HOME = (40.7300, -74.3200)
+STATION = (40.7250, -74.3240)
+FAR_AWAY = (41.5000, -75.5000)
+PERSON = "person.test_commuter"
+
+
+def place(hass: HomeAssistant, where: tuple[float, float]) -> None:
+    """Put the commuter somewhere, and put home where home is."""
+    hass.config.latitude, hass.config.longitude = HOME
+    hass.states.async_set(
+        "zone.home",
+        "0",
+        {"latitude": HOME[0], "longitude": HOME[1], "radius": 100, "passive": False},
+    )
+    hass.states.async_set(
+        PERSON, "not_home", {"latitude": where[0], "longitude": where[1]}
+    )
+
+
+async def test_standing_on_the_platform_counts_as_being_near_the_train(
+    hass: HomeAssistant,
+    notifications: list[ServiceCall],
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """The bug, measured off the live instance three mornings running.
+
+    With zones configured the location gate only ever asked whether the phone
+    was inside one of them, and a station you walk to is not inside the home
+    zone. So the activity appeared at home and was cleared on the walk -- the
+    countdown vanishing a few minutes before the train it was counting down
+    to arrived, which is exactly when it was wanted.
+
+    36 m from the origin and 638 m from a 100 m home zone were the real
+    measurements. The geometry here is the same shape.
+    """
+    freezer.move_to(MORNING)
+    leaves = MORNING + timedelta(minutes=12)
+    place(hass, STATION)
+    await install(hass, presence_entity=PERSON, presence_zones=["zone.home"])
+
+    hass.states.async_set(FAVORITE, *departure(leaves, origin=STATION))
+    await hass.async_block_till_done()
+
+    assert pushes(notifications), "the activity was cleared while at the station"
+
+
+async def test_a_different_town_is_still_too_far(
+    hass: HomeAssistant,
+    notifications: list[ServiceCall],
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """The gate still has to gate.
+
+    Reaching for the station radius must not become "always near". Somewhere
+    an hour away is neither in a zone nor at the origin, and a Lock Screen
+    counting down to a train from a station you are nowhere near is the thing
+    this input exists to prevent.
+    """
+    freezer.move_to(MORNING)
+    leaves = MORNING + timedelta(minutes=12)
+    place(hass, FAR_AWAY)
+    await install(hass, presence_entity=PERSON, presence_zones=["zone.home"])
+
+    hass.states.async_set(FAVORITE, *departure(leaves, origin=STATION))
+    await hass.async_block_till_done()
+
+    assert pushes(notifications) == [], "a train an hour away reached the phone"
+
+
+async def test_being_in_a_named_zone_still_counts(
+    hass: HomeAssistant,
+    notifications: list[ServiceCall],
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """The original behaviour, which the station radius is added alongside.
+
+    The evening commute is configured this way round -- an office zone at the
+    far end, nowhere near the origin's own radius -- so a zone match has to
+    keep working on its own.
+    """
+    freezer.move_to(MORNING)
+    leaves = MORNING + timedelta(minutes=12)
+    place(hass, HOME)
+    await install(hass, presence_entity=PERSON, presence_zones=["zone.home"])
+
+    hass.states.async_set(FAVORITE, *departure(leaves, origin=FAR_AWAY))
+    await hass.async_block_till_done()
+
+    assert pushes(notifications), "being at home in the home zone was not enough"

@@ -48,6 +48,27 @@ PREFIX = "sensor.short_hills_station_to_new_york_penn_station"
 RUN_CAPTURED_AT = datetime(2026, 8, 4, 8, 28, tzinfo=TZ)
 
 
+@pytest.fixture(autouse=True)
+def _read_the_board_when_it_was_captured(freezer: FrozenDateTimeFactory) -> None:
+    """Run every test in this module at the instant the fixture was recorded.
+
+    The board carries bare wall-clock times -- "8:25 AM", no date -- and
+    `resolve_time` decides which day each belongs to by comparing against now,
+    rolling anything more than `_ROLLOVER_GRACE` (three hours) behind it into
+    tomorrow. Left unfrozen, that boundary sweeps through the fixture as the
+    real clock advances, and between about 11:17 and 11:52 Eastern it lands in
+    the middle of this board: the 8:25 train rolls to tomorrow while the 8:52
+    favourite does not, and `test_picks_the_soonest_favorite_not_the_soonest_train`
+    starts asserting that a later train is earlier.
+
+    It failed in CI at 11:35 Eastern having passed for weeks, which is the
+    signature of a test that was reading the wall clock all along. Tests that
+    want a different moment still move the clock themselves; this only sets
+    where they start from.
+    """
+    freezer.move_to(RUN_CAPTURED_AT)
+
+
 def departure(
     train_id: str,
     destination: str = "New York",
