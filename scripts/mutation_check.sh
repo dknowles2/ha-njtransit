@@ -219,6 +219,11 @@ run "disruption: an unset window blocks everything" \
 # The analysis tool decides whether the whole track-prediction feature ships.
 # Its failure mode is a number that looks like a result.
 
+run "report: a frozen collection is reported as current" \
+  scripts/weekly_report.py \
+  "        if behind > STALE_AFTER:" \
+  "        if False:"
+
 # The nypenn.live comparison. Both of these produce a *better* looking number,
 # which is the direction that gets believed.
 

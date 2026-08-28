@@ -37,7 +37,7 @@ import csv
 import json
 import subprocess
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -71,6 +71,19 @@ CSV_COLUMNS = [
     "answered",
 ]
 WEIGHTS_COLUMNS = ["run", "feature", "weight", "spread"]
+
+# How far behind the run the collected logs may fall before the nypenn section
+# says so. Twelve hours rather than a day: the collector polls every minute, so
+# even half a day of silence is thousands of failed attempts and not something
+# that happens quietly.
+#
+# This exists because it already happened. The host lost outbound network for
+# 57 hours in August and the collector -- correctly -- logged the failures and
+# carried on. The weekly report went on printing the same accuracy tables from
+# frozen data, and a stale section reads exactly like a current one. The
+# numbers were not wrong; they were just answering a question about last
+# Tuesday while appearing to answer one about today.
+STALE_AFTER = timedelta(hours=12)
 
 
 def _ssh(host: str, command: str) -> str:
@@ -190,8 +203,12 @@ def weight_section(
     return "\n".join(lines) + "\n", rows
 
 
-def nypenn_section(logs: list[Path]) -> str:
-    """Return how nypenn.live did, from whatever has been collected."""
+def nypenn_section(logs: list[Path], run_at: datetime) -> str:
+    """Return how nypenn.live did, from whatever has been collected.
+
+    `run_at` is passed rather than read from the clock so the staleness check
+    is against the moment the report claims to describe.
+    """
     present = [path for path in logs if path.is_file()]
     if not present:
         return "No nypenn.live logs found.\n"
@@ -205,7 +222,19 @@ def nypenn_section(logs: list[Path]) -> str:
     gaps = sorted(nypenn.head_start(predicted))
     days = sorted({d.day for d in departures})
 
-    lines = [
+    lines = []
+    if polls:
+        behind = run_at - max(polls)
+        if behind > STALE_AFTER:
+            warning = (
+                f"**Stale: collection stops "
+                f"{behind.total_seconds() / 3600:.0f} hours before this run** "
+                f"(last poll {max(polls).strftime('%Y-%m-%d %H:%M %Z')}). "
+                "Everything below describes that earlier period, not this one."
+            )
+            lines += [warning, ""]
+
+    lines += [
         (
             f"{len(departures)} departures over {len(days)} day(s), "
             f"{len(polls)} polls. {len(with_truth)} reached a confirmed track."
@@ -270,7 +299,8 @@ def main() -> int:
     args.out.mkdir(parents=True, exist_ok=True)
     dumps_dir = args.out / "diagnostics"
     dumps_dir.mkdir(exist_ok=True)
-    run = datetime.now(UTC).strftime("%Y-%m-%d")
+    started = datetime.now(UTC)
+    run = started.strftime("%Y-%m-%d")
 
     parts = [f"# Track prediction — {run}", ""]
 
@@ -323,7 +353,7 @@ def main() -> int:
     else:
         parts += ["No observations to model this run.", ""]
 
-    parts += ["## nypenn.live", "", nypenn_section(args.nypenn_log), ""]
+    parts += ["## nypenn.live", "", nypenn_section(args.nypenn_log, started), ""]
 
     report = args.out / f"{run}.md"
     report.write_text("\n".join(parts), encoding="utf-8")
