@@ -240,14 +240,31 @@ def nypenn_section(logs: list[Path], run_at: datetime) -> str:
             f"{len(polls)} polls. {len(with_truth)} reached a confirmed track."
         ),
         "",
-        "| their confidence | top-1 | top-3 | n |",
-        "|---|---|---|---|",
+        "| their confidence | top-1 | top-3 | n | held |",
+        "|---|---|---|---|---|",
     ]
-    for tier, result in nypenn.accuracy_by_tier(departures).items():
+    by_tier = nypenn.accuracy_by_tier(departures)
+    for tier, result in by_tier.items():
         lines.append(
             f"| {tier} | {_pct(result.hits, result.answered)} "
-            f"| {_pct(result.top3, result.answered)} | {result.answered} |"
+            f"| {_pct(result.top3, result.answered)} | {result.answered} "
+            f"| {result.withheld} |"
         )
+    held = sum(result.withheld for result in by_tier.values())
+    if held:
+        # Without this the table is a fair summary of the wrong thing. The
+        # confident tiers empty out, `low` keeps being scored, and a week in
+        # which they predicted perfectly well reads as a week they went quiet.
+        lines += [
+            "",
+            (
+                f"**{held} predictions were withheld behind their paywall** and "
+                "are not in any number above. `high` and `medium` are "
+                "subscriber-only; without a session the feed sends the tier "
+                "with the track stripped out, so the rows scored here are "
+                "very largely their `low` tier."
+            ),
+        ]
     if gaps:
         lines += [
             "",

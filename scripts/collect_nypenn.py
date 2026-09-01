@@ -4,8 +4,8 @@
 nypenn.live publishes a departure board for New York Penn Station with a track
 prediction attached to trains the official board has not posted yet -- the
 thing `scripts/analyze_tracks.py` is trying to decide whether we can do at all.
-Its endpoint is open and unauthenticated, and its own page polls it every five
-seconds; this polls once a minute and identifies itself.
+Its endpoint needs no key and its own page polls it every five seconds; this
+polls once a minute and identifies itself.
 
 What makes it scoreable is that the same feed carries the answer. Each row has
 a `track_source`:
@@ -18,6 +18,18 @@ a `track_source`:
 
 So a train appears first as a prediction and later as the truth about that
 same prediction, and no separate outcome feed is needed.
+
+**Since September 2026 the confident tiers are subscriber-only.** The endpoint
+still answers anyone, but to a caller without a session it withholds the
+prediction itself: `track_source` arrives as `high` or `medium` with `track`
+and `top3` null, which is the same shape their own page reads as the lock. The
+tier and the timing survive; the answer does not. `low` and `confirmed` are
+still sent in full.
+
+That distinction has to be recorded, not inferred later, so every change line
+carries `withheld`. Without it a withheld prediction is indistinguishable from
+a train they declined to predict, and their best tier -- the only one worth
+comparing ourselves against -- reads as a site that says nothing.
 
 Storage is a change log, not a series of snapshots. Polling every minute for a
 day is about 57MB of near-identical boards; writing only what changed is a few
@@ -69,7 +81,14 @@ TIMEOUT = 20
 # again, which is constantly, and it does not change the prediction. It is
 # still written when a line is written, because it is the only visible hint at
 # what their model is actually reading.
+#
+# `withheld` is not in here either, and must not be: it is computed from
+# `track` and `track_source`, so it cannot change without one of them
+# changing, and listing it would only mean comparing the same thing twice.
 WATCHED = ("track", "track_source", "top3")
+
+# The tiers that are their model talking. `confirmed` is the official board.
+TIERS = ("high", "medium", "low")
 
 
 def fetch(url: str) -> list[dict[str, Any]]:
@@ -80,6 +99,18 @@ def fetch(url: str) -> list[dict[str, Any]]:
     if not isinstance(payload, list):
         raise TypeError(f"expected a list of departures, got {type(payload).__name__}")
     return payload
+
+
+def withheld(row: dict[str, Any]) -> bool:
+    """Return whether their paywall took the prediction out of this row.
+
+    A named tier with no track is the lock signal, and it is the shape their
+    own page keys on -- a subscriber gets the same tier with the track filled
+    in. It reads as an ordinary "no prediction" to anything that only looks at
+    `track`, which is precisely why it is recorded rather than left to be
+    worked out from a log some months from now.
+    """
+    return row.get("track_source") in TIERS and not row.get("track")
 
 
 def key(row: dict[str, Any]) -> tuple[str, int]:
@@ -155,6 +186,7 @@ def collect(
                             "line": row.get("line"),
                             "destination": row.get("destination"),
                             "last_seen_on_track": row.get("last_seen_on_track"),
+                            "withheld": withheld(row),
                             **current,
                         }
                     )

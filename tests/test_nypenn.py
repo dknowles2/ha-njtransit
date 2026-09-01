@@ -12,6 +12,13 @@ itself, which comes back near 100% and is meaningless.
 And their predictions are a step function sampled by a poller. Read a gap in
 the polling as a gap in their predictions, and a night the collector was down
 becomes a site that has nothing to say.
+
+Their paywall is the third way, and it arrived after the first two were
+already guarded. A withheld prediction has no track, so everything that reads
+`track` sees a train they declined to predict -- and since only the confident
+tiers are withheld, the site that comes out of that reading is one that goes
+quiet exactly when it is sure. That is a *worse* number for them, which is the
+direction that gets believed rather than checked.
 """
 
 from __future__ import annotations
@@ -27,6 +34,7 @@ from typing import Any
 # a plain script anyone can run.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
+import collect_nypenn
 from analyze_tracks import Observation, nypenn_model, score
 from nypenn import TZ, accuracy_at, accuracy_by_tier, head_start, load, lookup
 
@@ -42,8 +50,13 @@ def change(
     top3: list[dict[str, Any]] | None = None,
     departure: datetime = DEPARTURE,
 ) -> dict[str, Any]:
-    """Return one line of the change log, `minutes_before` the departure."""
-    return {
+    """Return one line of the change log, `minutes_before` the departure.
+
+    The lock flag is computed by the collector's own function rather than
+    written out here, so a test cannot describe a log the collector would
+    never produce, and the two halves cannot drift apart silently.
+    """
+    record = {
         "type": "change",
         "t": int((departure - timedelta(minutes=minutes_before)).timestamp()),
         "train_id": train_id,
@@ -55,6 +68,7 @@ def change(
         "track_source": source,
         "top3": top3,
     }
+    return {**record, "withheld": collect_nypenn.withheld(record)}
 
 
 def poll(minutes_before: float, departure: datetime = DEPARTURE) -> dict[str, Any]:
@@ -163,6 +177,177 @@ def test_a_gap_in_the_polling_is_not_a_silent_site(tmp_path: Path) -> None:
     assert watched.asked == 1
     assert watched.answered == 1
     assert watched.hits == 0, "they said 9, the board posted 4"
+
+
+def test_a_withheld_prediction_is_not_a_silent_site(tmp_path: Path) -> None:
+    """Their paywall is not their model going quiet.
+
+    Since September 2026 `high` and `medium` reach a caller without a session
+    as the tier with the track stripped out. There is nothing to score, but
+    counting it as a departure they declined to answer charges their answer
+    rate for our lack of a subscription -- and because only the confident
+    tiers are withheld, it is their best work that disappears.
+    """
+    log = write(
+        tmp_path,
+        [
+            poll(30),
+            change(30, None, "high"),
+            poll(6),
+            change(6, "12", "confirmed"),
+            poll(5),
+        ],
+    )
+
+    departures, polls = load(log)
+    [departure] = departures
+
+    assert departure.first_prediction is None, "there was no readable prediction"
+    claim = departure.first_claim
+    assert claim is not None, "they did predict this train, and said so at T-30"
+    assert claim.withheld is True
+
+    scored = accuracy_at(departures, polls, 30)
+    assert scored.asked == 0, "a prediction we cannot read was counted as a refusal"
+    assert scored.answered == 0
+    assert scored.withheld == 1
+
+    by_tier = accuracy_by_tier(departures)
+    assert by_tier["high"].answered == 0
+    assert by_tier["high"].withheld == 1, "the withheld prediction vanished entirely"
+
+
+def test_the_lock_survives_a_log_written_before_it_existed(tmp_path: Path) -> None:
+    """Logs collected before the paywall have no flag, and needed none.
+
+    Read by the same rule -- a tier with no track -- they say exactly what
+    they always said, because that shape did not occur while every tier was
+    still sent in full. A reader that treated the missing field as "withheld"
+    or refused to read the file at all would rewrite months of collection.
+    """
+    departure = int(DEPARTURE.timestamp())
+    log = write(
+        tmp_path,
+        [
+            poll(30),
+            {
+                "type": "change",
+                "t": departure - 1800,
+                "train_id": "6675",
+                "departure_time": departure,
+                "line": "M&E",
+                "destination": "Dover - SEC",
+                "last_seen_on_track": None,
+                "track": "9",
+                "track_source": "high",
+                "top3": None,
+            },
+            poll(4),
+            change(4, "9", "confirmed"),
+        ],
+    )
+
+    departures, polls = load(log)
+    [record] = departures
+
+    first = record.first_prediction
+    assert first is not None
+    assert first.withheld is False
+
+    scored = accuracy_at(departures, polls, 30)
+    assert scored == (1, 1, 1, 1, 0), "an old log stopped scoring the way it did"
+
+
+def test_what_the_collector_saw_outranks_what_the_shape_suggests(
+    tmp_path: Path,
+) -> None:
+    """The reason the flag is written down rather than worked out later.
+
+    A lock is something the site does, not a shape its payload has. Today it
+    withholds by sending the tier with no track, so the flag and the shape
+    agree and nothing here depends on which is read. The day they withhold by
+    sending a decoy track instead, the shape says "a prediction they made" and
+    the log still says what the poller actually saw -- and a log that is only
+    believed while it agrees with a rule is not evidence of anything.
+    """
+    departure = int(DEPARTURE.timestamp())
+    log = write(
+        tmp_path,
+        [
+            poll(30),
+            {
+                "type": "change",
+                "t": departure - 1800,
+                "train_id": "6675",
+                "departure_time": departure,
+                "line": "M&E",
+                "destination": "Dover - SEC",
+                "last_seen_on_track": None,
+                "track": "1",
+                "track_source": "high",
+                "top3": None,
+                "withheld": True,
+            },
+            poll(4),
+            change(4, "1", "confirmed"),
+        ],
+    )
+
+    departures, polls = load(log)
+    [record] = departures
+
+    assert record.first_prediction is None, "a track they never showed us was scored"
+    assert record.prediction_at(DEPARTURE - timedelta(minutes=30)) is None
+
+    scored = accuracy_at(departures, polls, 30)
+    assert scored.answered == 0
+    assert scored.hits == 0, "they were credited with a prediction we never saw"
+    assert scored.withheld == 1
+
+
+def test_the_paywall_does_not_erase_the_prediction_it_replaced(
+    tmp_path: Path,
+) -> None:
+    """A train can be readable at T-40 and locked by T-20.
+
+    Watched live on 2026-09-01: train 3511 stood at `low` with a full `top3`,
+    and a minute later the same train was `high` with no track. Their model
+    got more sure, and that is exactly when the answer goes behind the wall.
+
+    So the lock is a state of an instant, not of a departure. What they said
+    while they were still showing us counts, and it counts under the tier they
+    said it at -- and the same departure must not then be counted a second
+    time as one they withheld.
+    """
+    log = write(
+        tmp_path,
+        [
+            poll(40),
+            change(40, "9", "low", top3=[{"track": "9", "pct": 31}]),
+            poll(30),
+            poll(20),
+            change(20, None, "high"),
+            poll(15),
+            poll(4),
+            change(4, "9", "confirmed"),
+        ],
+    )
+
+    departures, polls = load(log)
+
+    early = accuracy_at(departures, polls, 30)
+    assert early.asked == 1
+    assert early.answered == 1
+    assert early.hits == 1, "the prediction they showed us was thrown away"
+    assert early.withheld == 0
+
+    late = accuracy_at(departures, polls, 15)
+    assert late.asked == 0, "the locked state was scored as a refusal"
+    assert late.withheld == 1
+
+    by_tier = accuracy_by_tier(departures)
+    assert by_tier["low"].answered == 1, "their readable guess was not scored"
+    assert by_tier["high"].withheld == 0, "the same departure was counted twice"
 
 
 def test_their_ranking_is_not_padded_out_to_three(tmp_path: Path) -> None:

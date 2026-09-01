@@ -12,6 +12,17 @@ carries both halves: a prediction while `track_source` is `high`, `medium` or
 `low`, and the answer once it turns `confirmed`, which is the official board
 (DepartureVision) rather than anything they worked out.
 
+Only for the half they still show us, though. Since September 2026 `high` and
+`medium` are subscriber-only, and to a caller without a session the feed sends
+the tier with the track stripped out. Everything here counts those departures
+as *withheld* rather than as an answer or as silence, because the difference
+decides what the numbers mean: read as silence, the paywall alone drives their
+answer rate towards zero and leaves the accuracy column describing nothing but
+their `low` tier -- a worse site than the one that is actually there, measured
+by our entitlement instead of their model. So `withheld` is reported beside
+every score rather than folded into it, and a departure whose only prediction
+was withheld is never counted as one they were asked and declined.
+
 **Are they better than us?** Answerable only against our own recorded history,
 which is what `analyze_tracks.py` is for. That tool already scores models
 leave-one-day-out on a pre-registered 60% bar, so rather than build a second
@@ -70,6 +81,12 @@ class Snapshot(NamedTuple):
     track: str | None
     source: str | None
     top3: tuple[tuple[str, int], ...]
+    withheld: bool = False
+    """Their paywall held the prediction back: a tier arrived with no track.
+
+    Defaulted because logs collected before September 2026 have no such field
+    and nothing in them was ever withheld.
+    """
 
     @property
     def ranked(self) -> list[str]:
@@ -127,9 +144,26 @@ class Departure(NamedTuple):
 
     @property
     def first_prediction(self) -> Snapshot | None:
-        """Return their earliest actual prediction, if they ever made one."""
+        """Return their earliest actual prediction, if they ever made one.
+
+        Only predictions we can read. A withheld one has no track, so it is
+        not one of these -- `first_claim` is where it shows up.
+        """
         for snapshot in self.history:
-            if snapshot.source in TIERS and snapshot.track:
+            if snapshot.source in TIERS and snapshot.track and not snapshot.withheld:
+                return snapshot
+        return None
+
+    @property
+    def first_claim(self) -> Snapshot | None:
+        """Return the first time they claimed to know, readable or not.
+
+        The paywall takes the track, not the tier or the timing, so this is
+        the earliest moment they said they had an answer -- which is what
+        separates a withheld prediction from a train they never predicted.
+        """
+        for snapshot in self.history:
+            if snapshot.source in TIERS:
                 return snapshot
         return None
 
@@ -153,11 +187,37 @@ class Departure(NamedTuple):
         scoring it would be scoring DepartureVision against itself. So a
         confirmed state at this instant is not a prediction and returns None,
         even though something was certainly on screen.
+
+        A withheld prediction returns None as well -- there is nothing to
+        score -- but the two are not the same and callers must not treat them
+        alike. `withheld_at` is what tells them apart.
         """
         standing = self.at(when)
         if standing is None or standing.source not in TIERS or not standing.track:
             return None
+        if standing.withheld:
+            # Separate from the line above rather than folded into it.
+            # Today a withheld prediction has no track and either check
+            # catches it; this one is what the poller saw, and the point of
+            # recording that is that it stays right if the lock changes shape.
+            return None
         return standing
+
+
+def was_withheld(record: dict[str, object]) -> bool:
+    """Return whether their paywall held this line's prediction back.
+
+    The collector writes the flag, and where it is present it wins. It is what
+    the feed looked like at the moment of the poll, and a lock is a thing a
+    site does rather than a shape a payload has: theirs happens to be a tier
+    with no track today, and a decoy track or a sentinel value tomorrow would
+    read here as a prediction they made. The rule below is the fallback for
+    logs collected before the flag existed, where that shape did not occur at
+    all -- so reading them this way changes nothing about what they say.
+    """
+    if "withheld" in record:
+        return bool(record["withheld"])
+    return record.get("track_source") in TIERS and not record.get("track")
 
 
 def load(*paths: Path) -> tuple[list[Departure], list[datetime]]:
@@ -202,6 +262,7 @@ def load(*paths: Path) -> tuple[list[Departure], list[datetime]]:
                         track=record.get("track"),
                         source=record.get("track_source"),
                         top3=top3,
+                        withheld=was_withheld(record),
                     )
                 )
                 meta[identity] = (
@@ -237,19 +298,34 @@ class Accuracy(NamedTuple):
     answered: int
     """Departures where a prediction was standing."""
     asked: int
-    """Departures that were observed at all, prediction or not."""
+    """Departures that were observed and whose answer we could have read."""
+    withheld: int = 0
+    """Departures they predicted behind the paywall, which we could not read.
+
+    Deliberately outside `asked`. A withheld prediction is not a question they
+    declined -- they answered it, for someone else -- so counting it there
+    would charge their answer rate for our lack of a subscription.
+    """
 
 
 def accuracy_at(
     departures: list[Departure], polls: list[datetime], lead: int
 ) -> Accuracy:
     """Score what they were saying `lead` minutes before each departure."""
-    hits = top3 = answered = asked = 0
+    hits = top3 = answered = asked = held = 0
     for departure in departures:
         if departure.truth is None:
             continue
         when = departure.scheduled - timedelta(minutes=lead)
         if not observed(polls, when):
+            continue
+        state = departure.at(when)
+        if state is not None and state.withheld:
+            # Excluded from `asked` for the same reason an unobserved instant
+            # is: the question was put and answered, and what is missing is
+            # our sight of the answer. Counted here so the exclusion is
+            # visible rather than a quietly shrinking denominator.
+            held += 1
             continue
         asked += 1
         standing = departure.prediction_at(when)
@@ -261,7 +337,23 @@ def accuracy_at(
             hits += 1
         if departure.truth in ranked[:3]:
             top3 += 1
-    return Accuracy(hits=hits, top3=top3, answered=answered, asked=asked)
+    return Accuracy(hits=hits, top3=top3, answered=answered, asked=asked, withheld=held)
+
+
+def withheld_at(departures: list[Departure], lead: int) -> int:
+    """Return how many departures had a withheld prediction standing at `lead`.
+
+    For callers outside this module -- `analyze_tracks` scores their answers
+    against ours, and a comparison that cannot say how many were behind the
+    paywall is reporting our subscription status as their silence. Counted
+    over the instants `lookup` asks about, so the two numbers line up.
+    """
+    return sum(
+        1
+        for departure in departures
+        if (state := departure.at(departure.scheduled - timedelta(minutes=lead)))
+        and state.withheld
+    )
 
 
 def accuracy_by_tier(departures: list[Departure]) -> dict[str, Accuracy]:
@@ -269,13 +361,27 @@ def accuracy_by_tier(departures: list[Departure]) -> dict[str, Accuracy]:
 
     Their own page colours these differently and hides `low` by default, so a
     single pooled number would describe something no user of that site sees.
+
+    Since the paywall this is also where its shape shows most plainly: `high`
+    and `medium` are the withheld tiers, so their `n` collapses while `low`
+    carries on being scored. The `withheld` count is what stops that reading
+    as a model that went quiet.
     """
     scores: dict[str, list[Departure]] = {tier: [] for tier in TIERS}
+    held: Counter[str] = Counter()
     for departure in departures:
-        first = departure.first_prediction
-        if departure.truth is None or first is None or first.source not in TIERS:
+        if departure.truth is None:
             continue
-        scores[first.source].append(departure)
+        first = departure.first_prediction
+        if first is not None and first.source in TIERS:
+            scores[first.source].append(departure)
+            continue
+        # Nothing readable was ever said about this train. If they did predict
+        # it, the tier of that withheld claim is the whole of what we know,
+        # and it belongs beside the tier's score rather than nowhere.
+        claim = departure.first_claim
+        if claim is not None and claim.source in TIERS:
+            held[claim.source] += 1
 
     results = {}
     for tier, rows in scores.items():
@@ -292,7 +398,11 @@ def accuracy_by_tier(departures: list[Departure]) -> dict[str, Accuracy]:
             if (first := row.first_prediction) and row.truth in first.ranked[:3]
         )
         results[tier] = Accuracy(
-            hits=hits, top3=top3, answered=len(rows), asked=len(rows)
+            hits=hits,
+            top3=top3,
+            answered=len(rows),
+            asked=len(rows),
+            withheld=held[tier],
         )
     return results
 
@@ -352,7 +462,13 @@ def report(departures: list[Departure], polls: list[datetime]) -> None:
         print(f"  {reassigned} of those were moved after posting")
 
     predicted = [d for d in with_truth if d.first_prediction]
-    print(f"  {len(predicted)} were predicted before the board posted\n")
+    print(f"  {len(predicted)} were predicted before the board posted")
+    held = [
+        d for d in with_truth if not d.first_prediction and d.first_claim is not None
+    ]
+    if held:
+        print(f"  {len(held)} were predicted behind their paywall, unreadable here")
+    print()
 
     gaps = head_start(predicted)
     if gaps:
@@ -361,22 +477,28 @@ def report(departures: list[Departure], polls: list[datetime]) -> None:
         print(f"  head start over the official board: median {median:.0f} min")
         print(f"  ({gaps[0]:.0f} min at worst, {gaps[-1]:.0f} min at best)\n")
 
-    print(f"  {'their confidence':<20}{'top-1':>8}{'top-3':>8}{'n':>8}")
-    print(f"  {'-' * 44}")
-    for tier, result in accuracy_by_tier(departures).items():
+    by_tier = accuracy_by_tier(departures)
+    print(f"  {'their confidence':<20}{'top-1':>8}{'top-3':>8}{'n':>8}{'held':>8}")
+    print(f"  {'-' * 52}")
+    for tier, result in by_tier.items():
         print(
             f"  {tier:<20}{_pct(result.hits, result.answered):>8}"
             f"{_pct(result.top3, result.answered):>8}{result.answered:>8}"
+            f"{result.withheld:>8}"
         )
 
-    print(f"\n  {'minutes before':<20}{'top-1':>8}{'top-3':>8}{'spoke':>8}{'n':>8}")
-    print(f"  {'-' * 52}")
-    for lead in LEADS:
-        result = accuracy_at(departures, polls, lead)
+    by_lead = {lead: accuracy_at(departures, polls, lead) for lead in LEADS}
+    print(
+        f"\n  {'minutes before':<20}{'top-1':>8}{'top-3':>8}"
+        f"{'spoke':>8}{'n':>8}{'held':>8}"
+    )
+    print(f"  {'-' * 60}")
+    for lead, result in by_lead.items():
         print(
             f"  T-{lead:<18}{_pct(result.hits, result.answered):>8}"
             f"{_pct(result.top3, result.answered):>8}"
             f"{_pct(result.answered, result.asked):>8}{result.asked:>8}"
+            f"{result.withheld:>8}"
         )
 
     print(
@@ -385,6 +507,17 @@ def report(departures: list[Departure], polls: list[datetime]) -> None:
         "  all. A model can buy accuracy by staying quiet, so the two columns\n"
         "  only mean something together.\n"
     )
+
+    if any(
+        result.withheld for result in list(by_tier.values()) + list(by_lead.values())
+    ):
+        print(
+            "  `held` is their paywall, not their model: a prediction they made\n"
+            "  and a subscriber can see, sent to us as a tier with no track. It\n"
+            "  is outside `n` in both tables, so every number above describes\n"
+            "  only what they still show anonymously -- in practice their `low`\n"
+            "  tier, which is the one their own page hides by default.\n"
+        )
 
     tracks = Counter(d.truth for d in with_truth if d.truth)
     if tracks:

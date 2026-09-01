@@ -1,4 +1,4 @@
-"""The weekly report, and the one way it can lie without being wrong.
+"""The weekly report, and the ways it can lie without being wrong.
 
 Every number it prints is computed by code tested elsewhere. What is left is
 presentation, and presentation has its own failure: a section built from data
@@ -25,7 +25,7 @@ RUN_AT = datetime(2026, 8, 28, 11, 0, tzinfo=UTC)
 DEPARTURE = datetime(2026, 8, 26, 18, 30, tzinfo=UTC)
 
 
-def log(tmp_path: Path, *, last_poll: datetime) -> Path:
+def log(tmp_path: Path, *, last_poll: datetime, withheld: bool = False) -> Path:
     """Write a change log whose most recent poll is `last_poll`."""
     departure = int(DEPARTURE.timestamp())
     records: list[dict[str, Any]] = [
@@ -37,9 +37,10 @@ def log(tmp_path: Path, *, last_poll: datetime) -> Path:
             "line": "M&E",
             "destination": "Dover",
             "last_seen_on_track": None,
-            "track": "9",
+            "track": None if withheld else "9",
             "track_source": "high",
             "top3": None,
+            "withheld": withheld,
         },
         {
             "type": "change",
@@ -82,6 +83,32 @@ def test_a_current_collection_is_not_flagged(tmp_path: Path) -> None:
     fresh = log(tmp_path, last_poll=RUN_AT - timedelta(minutes=3))
 
     assert "Stale" not in nypenn_section([fresh], RUN_AT)
+
+
+def test_a_paywalled_week_does_not_read_as_a_quiet_one(tmp_path: Path) -> None:
+    """The second way this report can lie without printing a wrong number.
+
+    `high` and `medium` are subscriber-only now, so their confident tiers
+    reach the collector with the track stripped out and drop out of every
+    table here. What is left is scored correctly and describes their `low`
+    tier -- a week they predicted well, presented as a week they said almost
+    nothing, unless the section says which it is.
+    """
+    locked = log(tmp_path, last_poll=RUN_AT - timedelta(minutes=3), withheld=True)
+
+    section = nypenn_section([locked], RUN_AT)
+
+    assert "withheld behind their paywall" in section, (
+        "a withheld prediction was reported as a train they did not predict"
+    )
+    assert "| high | - | - | 0 | 1 |" in section
+
+
+def test_a_readable_week_is_not_captioned_as_paywalled(tmp_path: Path) -> None:
+    """The caveat has to describe this week, not the state of the world."""
+    readable = log(tmp_path, last_poll=RUN_AT - timedelta(minutes=3))
+
+    assert "withheld behind their paywall" not in nypenn_section([readable], RUN_AT)
 
 
 def test_a_missing_log_is_not_silently_empty(tmp_path: Path) -> None:
