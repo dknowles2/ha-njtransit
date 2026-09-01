@@ -242,6 +242,36 @@ run "nypenn: a single confident guess is padded into a top-3" \
   "        return [self.track] if self.track else []" \
   "        return [self.track, self.track, self.track] if self.track else []"
 
+# Their paywall, which arrived after the three above were already guarded. These
+# produce a *worse* looking number for them -- a site that goes quiet exactly
+# when it is confident -- and a comparison we win because of it is the one
+# nobody checks.
+
+run "nypenn: a prediction behind their paywall counts as one they refused" \
+  scripts/nypenn.py \
+  "        if state is not None and state.withheld:" \
+  "        if False:"
+
+run "nypenn: a withheld prediction drops out of the tier it was made at" \
+  scripts/nypenn.py \
+  "        if claim is not None and claim.source in TIERS:" \
+  "        if False:"
+
+run "nypenn: the recorded lock is second-guessed from the payload shape" \
+  scripts/nypenn.py \
+  "    if \"withheld\" in record:" \
+  "    if False:"
+
+run "nypenn: a prediction the poller saw was withheld is scored anyway" \
+  scripts/nypenn.py \
+  "        if standing.withheld:" \
+  "        if False:"
+
+run "collect: their lock is not recorded, only its shape" \
+  scripts/collect_nypenn.py \
+  "    return row.get(\"track_source\") in TIERS and not row.get(\"track\")" \
+  "    return False"
+
 run "analysis: elimination reads tracks the board has not posted yet" \
   scripts/analyze_tracks.py \
   "        and o.scheduled - timedelta(seconds=o.assigned_at) <= cutoff" \

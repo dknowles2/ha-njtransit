@@ -698,6 +698,12 @@ def nypenn_model(
     A missing key is a departure they said nothing about, which is an empty
     ranking -- the harness already counts that as unanswered rather than
     wrong, and the `answered` column is where staying quiet shows up.
+
+    Since their paywall it can also be a departure they predicted and we were
+    not shown, which is not the same thing and cannot be told apart from here:
+    both arrive as an absent key. The caller prints the withheld count next to
+    this model's line so the `answered` column is read as what it now is -- a
+    floor on how often they spoke, not a measure of it.
     """
 
     def model(
@@ -868,6 +874,15 @@ def main() -> int:
             f"\nnypenn.live: {len(answers)} predictions at T-{args.nypenn_lead}, "
             f"{len(overlap)} of them on departures we also recorded"
         )
+        held = nypenn.withheld_at(theirs, args.nypenn_lead)
+        if held:
+            # Their model abstains here only in the sense that we cannot read
+            # it. Scored alongside ours it looks like a model that declines,
+            # and the `answered` column is where that would be believed.
+            print(
+                f"  {held} more were withheld behind their paywall at that "
+                f"lead, and\n  read below as departures they did not answer"
+            )
         if not overlap:
             print(
                 "  nothing to compare on yet -- their log and our diagnostics\n"
