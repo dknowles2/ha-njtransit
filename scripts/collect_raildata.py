@@ -123,7 +123,10 @@ def token_for(credentials: Path, cache: Path, clock: Any = time) -> str:
                 "token"
             ):
                 return str(saved["token"])
-        except ValueError, KeyError:
+        # Parenthesised on purpose and pinned: the formatter targets 3.14,
+        # which allows the bare form, and the box this runs on is 3.13,
+        # which does not. It failed to start over exactly this.
+        except (ValueError, KeyError):  # fmt: skip
             pass
     username, password = read_credentials(credentials)
     reply = _post(
