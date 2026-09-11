@@ -294,9 +294,13 @@ def main() -> int:
     parser.add_argument("--once", action="store_true")
     args = parser.parse_args()
 
-    if args.interval < 30:
-        # 40,000 calls a day is the documented limit; sixty seconds is 1,440.
-        print("refusing to poll faster than every 30 seconds", file=sys.stderr)
+    if args.interval < 10:
+        # The feed itself refreshes each train every 10-15 seconds (measured:
+        # median age of LAST_MODIFIED 8-14 s across six fetches), so ten is
+        # where more polling stops yielding more data. It is also 8,640 calls
+        # a day against a documented limit of 40,000. Faster than this is not
+        # a way to see more; it is only a way to be noticed.
+        print("refusing to poll faster than every 10 seconds", file=sys.stderr)
         return 2
     if not args.credentials.is_file():
         print(f"{args.credentials}: not found", file=sys.stderr)
