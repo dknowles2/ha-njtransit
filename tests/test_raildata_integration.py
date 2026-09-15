@@ -396,6 +396,44 @@ class TestSetup:
         flows = hass.config_entries.flow.async_progress_by_handler(DOMAIN)
         assert [flow["context"]["source"] for flow in flows] == ["reauth"]
 
+    async def test_a_rejected_credential_asks_every_commute_on_the_account(
+        self,
+        hass: HomeAssistant,
+        aioclient_mock: AiohttpClientMocker,
+        freezer: FrozenDateTimeFactory,
+    ) -> None:
+        """The board is shared and bound to no entry, so the store reports
+        the failure to each entry using it rather than to whichever one
+        happened to build the coordinator."""
+        install_api_mock(aioclient_mock)
+        install_raildata_mock(aioclient_mock)
+        outbound = make_raildata_entry()
+        inbound = make_raildata_entry(
+            origin="New York Penn Station",
+            origin_id="NY",
+            destination="Short Hills",
+            destination_id="RT",
+        )
+        await setup_entry(hass, outbound)
+        await setup_entry(hass, inbound)
+
+        aioclient_mock.clear_requests()
+        install_api_mock(aioclient_mock)
+        install_raildata_mock(
+            aioclient_mock,
+            {"getStationMSG": {"errorMessage": "Invalid token."}},
+            authenticated=False,
+        )
+        freezer.tick(121)
+        async_fire_time_changed(hass)
+        await hass.async_block_till_done()
+
+        flows = hass.config_entries.flow.async_progress_by_handler(DOMAIN)
+        assert sorted(flow["context"]["entry_id"] for flow in flows) == sorted(
+            [outbound.entry_id, inbound.entry_id]
+        )
+        assert {flow["context"]["source"] for flow in flows} == {"reauth"}
+
     async def test_an_unreachable_api_retries(
         self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
     ) -> None:

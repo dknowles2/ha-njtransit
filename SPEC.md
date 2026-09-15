@@ -984,6 +984,24 @@ Enforce it as a hard minimum in the options flow.
 Separate departure coordinators mean a user tracking both origin and destination boards
 does not have one station's outage mark the other unavailable.
 
+**Shared coordinators are bound to no config entry.** Home Assistant binds a coordinator
+to whichever entry is being set up when it is constructed and registers its shutdown on
+that entry's unload. For a coordinator shared across entries that is exactly wrong: the
+first commute through setup built the alert feed, the reference data and its own board for
+everyone, and reloading it -- an options change, a reconfigure -- shut all three down while
+the other commute's entry still read as loaded and its sensors sat unavailable. Seen live
+on 2026-09-15: one commute reconfigured at night, the other dead until a reload the next
+afternoon. `NJTransitCoordinator(shared=True)` passes `config_entry=None`, and the two
+things binding would have provided are done by hand: the store shuts shared coordinators
+down when the last commute releases it, and a rejected credential is fanned out to every
+entry in the store as a reauth (`CoordinatorStore.adopt`), since they all run on the same
+credentials. `async_config_entry_first_refresh` insists on a bound entry, so shared
+coordinators use `async_first_refresh`, which raises `ConfigEntryNotReady` itself.
+
+The store key an entry was set up against is remembered on its runtime data rather than
+recomputed at unload: a reconfigure rewrites the entry's data *before* reloading it, and
+computing the key from the new data would release the wrong store.
+
 ### 7.2 Track history is recorded but not predicted from
 
 `track_history.py` listens to each board coordinator and persists every track assignment it

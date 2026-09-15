@@ -104,6 +104,28 @@ run "knock-on window 30min -> 300min" \
   "KNOCK_ON_LEAD = timedelta(minutes=30)" \
   "KNOCK_ON_LEAD = timedelta(minutes=300)"
 
+run "a shared board is bound to the entry that built it" \
+  custom_components/njtransit/coordinator.py \
+  '        super().__init__(hass, client, f"departures {station}", interval, shared=True)' \
+  '        super().__init__(hass, client, f"departures {station}", interval)'
+
+run "the shared alert feed is bound to the entry that built it" \
+  custom_components/njtransit/coordinator.py \
+  "        super().__init__(hass, client, name, interval, shared=True)" \
+  "        super().__init__(hass, client, name, interval)"
+
+run "a rejected credential on a shared coordinator tells nobody" \
+  custom_components/njtransit/coordinator.py \
+  "        if self.auth_failed is not None:
+            self.auth_failed()" \
+  "        if False:
+            self.auth_failed()"
+
+run "a reconfigured entry releases the wrong store" \
+  custom_components/njtransit/__init__.py \
+  "    key = entry.runtime_data.store_key" \
+  "    key = store_key(entry)"
+
 run "direct-only filter disabled" \
   custom_components/njtransit/coordinator.py \
   "if not trip.has_transfer" "if True"
@@ -192,7 +214,7 @@ run "a rejected credential retries instead of asking for reauth" \
   custom_components/njtransit/coordinator.py \
   "            return await self.client.departures(self.station)
         except NJTransitAuthError as err:
-            raise ConfigEntryAuthFailed(str(err)) from err" \
+            raise self._reject_credentials(err) from err" \
   "            return await self.client.departures(self.station)"
 
 run "assigned_at measured backwards" \
