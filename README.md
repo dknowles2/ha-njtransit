@@ -456,6 +456,12 @@ It shows the train, its track, its status and how full it is:
 Train 6643 · Track 4 · 12 min late · Filling up
 ```
 
+On the [RailData source](#choosing-a-data-source) at New York Penn the track
+can be known before the board posts it. Until it does, the activity shows the
+signalling system's platform as a likelihood — `Track 4 (likely)` — and drops
+the hedge the moment the board confirms. The board always wins if the two ever
+disagree.
+
 Busyness comes from the per-car crowding the board already carries, so it costs
 nothing extra — but the board only publishes consist data for imminent
 departures, so expect it part way through the countdown rather than at the

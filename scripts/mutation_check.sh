@@ -173,6 +173,21 @@ run "the route refreshes a day after setup rather than in the morning" \
   "        self.update_interval = until_next(ROUTE_REFRESH_AT, now)" \
   "        pass"
 
+run "the Live Activity ignores the signalled track" \
+  blueprints/automation/njtransit/favorite_live_activity.yaml \
+  "       (signalled_track ~ ' (likely)' if signalled_track else none) }}" \
+  "       none }}"
+
+run "the Live Activity shows the signalled track as posted" \
+  blueprints/automation/njtransit/favorite_live_activity.yaml \
+  "       (signalled_track ~ ' (likely)' if signalled_track else none) }}" \
+  "       (signalled_track if signalled_track else none) }}"
+
+run "a signalled track appearing is not news to the Live Activity" \
+  blueprints/automation/njtransit/favorite_live_activity.yaml \
+  "           trigger.from_state.attributes.get('signalled_track')," \
+  "           state_attr(source, 'signalled_track'),"
+
 run "a rejected credential retries instead of asking for reauth" \
   custom_components/njtransit/coordinator.py \
   "            return await self.client.departures(self.station)
