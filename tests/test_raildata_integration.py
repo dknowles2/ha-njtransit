@@ -386,7 +386,10 @@ class TestSetup:
             {"getTrainSchedule19Rec": {"errorMessage": "Invalid token."}},
             authenticated=False,
         )
-        freezer.tick(120)
+        # One board poll, and only that: the status coordinator polls every
+        # two minutes and would raise the same thing, which is fine in life
+        # and useless here, where the point is that the *board* path does.
+        freezer.tick(61)
         async_fire_time_changed(hass)
         await hass.async_block_till_done()
 

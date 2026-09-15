@@ -51,6 +51,7 @@ def departure(
     *,
     train_id: str = "6320",
     track: str | None = "2",
+    signalled_track: str | None = None,
     status: str = "on_time",
     status_text: str = "On time",
     delay: int | None = 0,
@@ -70,6 +71,10 @@ def departure(
             "device_class": "timestamp",
             "train_id": train_id,
             "track": track,
+            "signalled_track": signalled_track,
+            "track_source": "board"
+            if track
+            else ("signalled" if signalled_track else None),
             "status": status,
             "status_text": status_text,
             "status_raw": status_raw,
@@ -446,6 +451,74 @@ async def test_a_track_appearing_is_news(
     sent = pushes(notifications)
     assert len(sent) == 2, "the track was posted and the activity did not say so"
     assert "Track 4" in sent[-1]["title"]
+
+
+async def test_a_signalled_track_is_shown_as_likely(
+    hass: HomeAssistant,
+    notifications: list[ServiceCall],
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Before the board posts, the signalling system's platform stands in,
+    marked as a likelihood."""
+    freezer.move_to(MORNING)
+    leaves = MORNING + timedelta(minutes=20)
+    await install(hass)
+
+    hass.states.async_set(FAVORITE, *departure(leaves, track=None, signalled_track="3"))
+    await hass.async_block_till_done()
+
+    sent = pushes(notifications)
+    assert sent
+    assert "Track 3 (likely)" in sent[-1]["title"]
+
+
+async def test_a_signalled_track_appearing_is_news(
+    hass: HomeAssistant,
+    notifications: list[ServiceCall],
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Same guard as a posted track: it is the field people are waiting on."""
+    freezer.move_to(MORNING)
+    leaves = MORNING + timedelta(minutes=23)
+    await install(hass)
+
+    hass.states.async_set(FAVORITE, *departure(leaves, track=None))
+    await hass.async_block_till_done()
+    hass.states.async_set(
+        FAVORITE,
+        *departure(leaves, track=None, signalled_track="3", status_raw="in 22 Min"),
+    )
+    await hass.async_block_till_done()
+
+    sent = pushes(notifications)
+    assert len(sent) == 2, "the signal arrived and the activity did not say so"
+    assert "Track 3 (likely)" in sent[-1]["title"]
+
+
+async def test_the_board_posting_drops_the_likely(
+    hass: HomeAssistant,
+    notifications: list[ServiceCall],
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Once the board confirms, the hedge goes -- and a board that disagrees
+    with the signal wins outright."""
+    freezer.move_to(MORNING)
+    leaves = MORNING + timedelta(minutes=12)
+    await install(hass)
+
+    hass.states.async_set(FAVORITE, *departure(leaves, track=None, signalled_track="3"))
+    await hass.async_block_till_done()
+    hass.states.async_set(
+        FAVORITE,
+        *departure(leaves, track="4", signalled_track="3", status_raw="in 11 Min"),
+    )
+    await hass.async_block_till_done()
+
+    sent = pushes(notifications)
+    assert len(sent) == 2, "the board posted and the activity did not say so"
+    assert "Track 4" in sent[-1]["title"]
+    assert "likely" not in sent[-1]["title"]
+    assert "3" not in sent[-1]["title"].split("Track", 1)[1]
 
 
 # A house, and the station a six-hundred-metre walk from it. The numbers are
