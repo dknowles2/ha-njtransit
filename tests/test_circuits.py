@@ -14,10 +14,15 @@ class TestPenn:
         ("circuit", "platform"),
         [
             # The AJO series, letter A or B, from both ends of the scale.
+            ("JO-AJO13ATK", "9"),
+            ("JO-AJO11BTK", "11"),
+            ("JO-AJO21ATK", "1"),
+            ("JO-AJO1ATK", "21"),
+            # And without a letter: train 6643 on 2026-09-15, seen here at
+            # 16:23 and posted on track 6 at 16:36.
+            ("JO-AJO16TK", "6"),
+            # The prefix is not part of the rule.
             ("AA-AAJO13ATK", "9"),
-            ("AA-AAJO11BTK", "11"),
-            ("AA-AAJO21ATK", "1"),
-            ("AA-AAJO1ATK", "21"),
             # The A-series, two digits then one more.
             ("AA-A190TK", "3"),
             ("AA-A150TK", "7"),
@@ -32,14 +37,16 @@ class TestPenn:
         "circuit",
         [
             # Route and points indications a train sits on at a signal.
-            "AA-AAJO13AR",
-            "AA-AAJO13AP",
-            "AA-AAJO13AUP",
+            "JO-AJO13AR",
+            "JO-AJO13AP",
+            "JO-AJO13AUP",
             "AA-A190DP",
             # Track circuits that are not platforms: the throat and beyond.
             "AA-A2TK",
-            "AA-AAJO0ATK",
-            "AA-AAJO22ATK",
+            "AA-062TK",
+            "AA-1552TK",
+            "JO-AJO0ATK",
+            "JO-AJO22TK",
             "HO-7022TK",
             "",
         ],
