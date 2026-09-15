@@ -108,6 +108,78 @@ run "direct-only filter disabled" \
   custom_components/njtransit/coordinator.py \
   "if not trip.has_transfer" "if True"
 
+# The RailData source. Each of these is a behaviour the daily limits or the
+# signal's honesty depend on, and each was fully covered before it was
+# asserted.
+run "a stored RailData token is never reused" \
+  custom_components/njtransit/api/raildata.py \
+  "if isinstance(value, str) and value and self._token_usable(issued):" \
+  "if False:"
+
+run "a stale RailData token is presented anyway" \
+  custom_components/njtransit/api/raildata.py \
+  "return issued is not None and now_local() - issued < TOKEN_LIFETIME" \
+  "return issued is not None"
+
+run "an invalid RailData token is not replaced" \
+  custom_components/njtransit/api/raildata.py \
+  'if _error_message(payload) and "invalid token" in _error_message(payload):' \
+  "if False:"
+
+run "a fetched station-day is fetched again" \
+  custom_components/njtransit/api/raildata.py \
+  "            if key not in schedules:" "            if True:"
+
+run "the signal is matched on train number alone" \
+  custom_components/njtransit/api/raildata.py \
+  "sighting.scheduled is None or sighting.scheduled == departure.scheduled" \
+  "True"
+
+run "the signalling feed is read at every station" \
+  custom_components/njtransit/api/raildata.py \
+  "if not has_decoder(code) or not board.departures:" \
+  "if not board.departures:"
+
+run "the signal overrides the board" \
+  custom_components/njtransit/api/models.py \
+  '        if self.track:
+            return "board"' \
+  '        if False:
+            return "board"'
+
+run "a circuit outside the platform range decodes to a platform" \
+  custom_components/njtransit/api/circuits.py \
+  "return str(platform) if platform in _PENN_PLATFORMS else None" \
+  "return str(platform)"
+
+run "the schedule join pairs a train with tomorrow's run" \
+  custom_components/njtransit/api/raildata_parsing.py \
+  "and call.departs < arrival.arrives <= call.departs + _LONGEST_JOURNEY" \
+  "and call.departs < arrival.arrives"
+
+run "a blank RailData status reads as on time" \
+  custom_components/njtransit/api/raildata_parsing.py \
+  "    if not status_raw:
+        return None
+    seconds = _seconds(sec_late)" \
+  "    seconds = _seconds(sec_late)"
+
+run "a new password is vouched for by the old token" \
+  custom_components/njtransit/api/raildata.py \
+  "        if not fresh:" "        if True:"
+
+run "the route refreshes a day after setup rather than in the morning" \
+  custom_components/njtransit/coordinator.py \
+  "        self.update_interval = until_next(ROUTE_REFRESH_AT, now)" \
+  "        pass"
+
+run "a rejected credential retries instead of asking for reauth" \
+  custom_components/njtransit/coordinator.py \
+  "            return await self.client.departures(self.station)
+        except NJTransitAuthError as err:
+            raise ConfigEntryAuthFailed(str(err)) from err" \
+  "            return await self.client.departures(self.station)"
+
 run "assigned_at measured backwards" \
   custom_components/njtransit/track_history.py \
   "_seconds_before(departure.scheduled, now)" \

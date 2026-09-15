@@ -12,15 +12,16 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .api.client import NJTransitClient
 from .api.exceptions import (
+    NJTransitAuthError,
     NJTransitConnectionError,
     NJTransitError,
     NJTransitNotFoundError,
@@ -33,8 +34,9 @@ from .api.models import (
     SystemAlert,
     TrainRun,
 )
-from .api.parsing import now_local
-from .const import DOMAIN, ROUTE_INTERVAL, STATIC_INTERVAL
+from .api.parsing import TZ, now_local
+from .api.source import RailSource
+from .const import DOMAIN, ROUTE_INTERVAL, SOURCE_WEBSITE, STATIC_INTERVAL
 from .track_history import TrackHistory
 
 _LOGGER = logging.getLogger(__name__)
@@ -70,7 +72,7 @@ class NJTransitCoordinator[T](DataUpdateCoordinator[T]):
     def __init__(
         self,
         hass: HomeAssistant,
-        client: NJTransitClient,
+        client: RailSource,
         name: str,
         interval: timedelta,
     ) -> None:
@@ -93,6 +95,8 @@ class SystemStatusCoordinator(NJTransitCoordinator[tuple[SystemAlert, ...]]):
     async def _async_update_data(self) -> tuple[SystemAlert, ...]:
         try:
             return await self.client.system_status()
+        except NJTransitAuthError as err:
+            raise ConfigEntryAuthFailed(str(err)) from err
         except NJTransitConnectionError as err:
             raise UpdateFailed(f"Could not reach NJ Transit: {err}") from err
         except NJTransitError as err:
@@ -110,7 +114,7 @@ class DepartureCoordinator(NJTransitCoordinator[DepartureBoard]):
     def __init__(
         self,
         hass: HomeAssistant,
-        client: NJTransitClient,
+        client: RailSource,
         station: str,
         interval: timedelta,
     ) -> None:
@@ -121,6 +125,8 @@ class DepartureCoordinator(NJTransitCoordinator[DepartureBoard]):
     async def _async_update_data(self) -> DepartureBoard:
         try:
             return await self.client.departures(self.station)
+        except NJTransitAuthError as err:
+            raise ConfigEntryAuthFailed(str(err)) from err
         except NJTransitConnectionError as err:
             raise UpdateFailed(f"Could not reach NJ Transit: {err}") from err
         except NJTransitError as err:
@@ -131,7 +137,7 @@ class DepartureCoordinator(NJTransitCoordinator[DepartureBoard]):
 class StaticCoordinator(NJTransitCoordinator[StaticData]):
     """Fetches the station and line reference data."""
 
-    def __init__(self, hass: HomeAssistant, client: NJTransitClient) -> None:
+    def __init__(self, hass: HomeAssistant, client: RailSource) -> None:
         """Initialize the coordinator."""
         super().__init__(hass, client, "reference data", STATIC_INTERVAL)
 
@@ -141,11 +147,29 @@ class StaticCoordinator(NJTransitCoordinator[StaticData]):
                 stations=await self.client.stations(),
                 lines=await self.client.train_lines(),
             )
+        except NJTransitAuthError as err:
+            raise ConfigEntryAuthFailed(str(err)) from err
         except NJTransitConnectionError as err:
             raise UpdateFailed(f"Could not reach NJ Transit: {err}") from err
         except NJTransitError as err:
             _LOGGER.warning("Reference data request failed: %s", err)
             raise UpdateFailed(str(err)) from err
+
+
+# When the route coordinator re-resolves the day's trains. After the RailData
+# schedule's own "after 1:30 AM would be better" guidance, with a margin.
+ROUTE_REFRESH_AT = time(1, 45)
+
+
+def until_next(at: time, now: datetime) -> timedelta:
+    """Return how long until the next local occurrence of ``at``."""
+    local = now.astimezone(TZ)
+    target = local.replace(
+        hour=at.hour, minute=at.minute, second=at.second, microsecond=0
+    )
+    if target <= local:
+        target += timedelta(days=1)
+    return target - local
 
 
 class RouteCoordinator(NJTransitCoordinator[RouteData]):
@@ -164,7 +188,7 @@ class RouteCoordinator(NJTransitCoordinator[RouteData]):
     def __init__(
         self,
         hass: HomeAssistant,
-        client: NJTransitClient,
+        client: RailSource,
         origin: str,
         destination: str,
     ) -> None:
@@ -176,7 +200,16 @@ class RouteCoordinator(NJTransitCoordinator[RouteData]):
         self.destination = destination
 
     async def _async_update_data(self) -> RouteData:
-        today = now_local().date()
+        # Each refresh lands the next one at the same early-morning moment
+        # rather than a day after whenever setup happened. The RailData
+        # source publishes a day's schedule from that day's midnight and
+        # nothing about tomorrow before it, so a refresh at 15:00 would
+        # leave a commute with yesterday's trains until 15:00 the next day.
+        # The website is indifferent -- it is asked for today and tomorrow
+        # either way -- so the cadence is shared rather than per source.
+        now = now_local()
+        self.update_interval = until_next(ROUTE_REFRESH_AT, now)
+        today = now.date()
         tomorrow = today + timedelta(days=1)
 
         trips: list[ScheduledTrip] = []
@@ -261,6 +294,12 @@ class CoordinatorStore:
     tests; getting one wrong leaks and the other breaks the surviving entry.
     """
 
+    client: RailSource
+    """The one client every coordinator in this store polls through.
+
+    Shared so that entries on the same RailData account share a token and
+    the schedules it has fetched, both of which are rationed per day."""
+
     static: StaticCoordinator
     status: SystemStatusCoordinator
     history: TrackHistory
@@ -290,7 +329,7 @@ class CoordinatorStore:
     async def board_for(
         self,
         hass: HomeAssistant,
-        client: NJTransitClient,
+        client: RailSource,
         station: str,
         interval: timedelta,
         entry_id: str,
@@ -336,10 +375,42 @@ class CoordinatorStore:
             await coordinator.async_shutdown()
 
 
-def store_for(hass: HomeAssistant) -> CoordinatorStore | None:
-    """Return the shared store, if one exists."""
-    store = hass.data.get(DOMAIN)
+def store_for(
+    hass: HomeAssistant, key: str = SOURCE_WEBSITE
+) -> CoordinatorStore | None:
+    """Return the shared store for one data source, if one exists.
+
+    Stores are per source rather than per domain because the two sources
+    are different feeds: a board polled from the website and one polled from
+    RailData are not the same board, and the RailData client is bound to an
+    account. ``key`` is the source name, suffixed with the account for
+    RailData -- see :func:`~.store_key`.
+    """
+    stores = hass.data.get(DOMAIN)
+    if not isinstance(stores, dict):
+        return None
+    store = stores.get(key)
     return store if isinstance(store, CoordinatorStore) else None
+
+
+def register_store(hass: HomeAssistant, key: str, store: CoordinatorStore) -> None:
+    """Make ``store`` the shared store for a data source."""
+    hass.data.setdefault(DOMAIN, {})[key] = store
+
+
+def store_count(hass: HomeAssistant) -> int:
+    """Return how many data sources currently have a store."""
+    stores = hass.data.get(DOMAIN)
+    return len(stores) if isinstance(stores, dict) else 0
+
+
+def forget_store(hass: HomeAssistant, key: str) -> None:
+    """Drop a data source's store once nothing uses it."""
+    stores = hass.data.get(DOMAIN)
+    if isinstance(stores, dict):
+        stores.pop(key, None)
+        if not stores:
+            hass.data.pop(DOMAIN, None)
 
 
 class ProgressCoordinator(NJTransitCoordinator[TrainRun | None]):
@@ -361,7 +432,7 @@ class ProgressCoordinator(NJTransitCoordinator[TrainRun | None]):
     def __init__(
         self,
         hass: HomeAssistant,
-        client: NJTransitClient,
+        client: RailSource,
         pick: Callable[[TrainRun | None], str | None],
         interval: timedelta,
     ) -> None:
@@ -392,7 +463,7 @@ class ProgressCoordinator(NJTransitCoordinator[TrainRun | None]):
 class EntryRuntime:
     """Everything one config entry needs at runtime."""
 
-    client: NJTransitClient
+    client: RailSource
     static: StaticCoordinator
     status: SystemStatusCoordinator
     board: DepartureCoordinator

@@ -45,3 +45,21 @@ class NJTransitNotFoundError(NJTransitError):
     a genuine no-service result -- both surface as "unable to find trips" --
     so a caller cannot distinguish a typo from an unserved pair.
     """
+
+
+class NJTransitAuthError(NJTransitError):
+    """The RailData API rejected the credentials.
+
+    **Not retryable.** ``getToken`` answered ``Authenticated: False``, which
+    means the username or password is wrong or the account is not enabled for
+    production. Retrying spends one of the ten daily token requests on the
+    same answer, so callers must stop and ask for new credentials instead.
+    """
+
+
+class NJTransitQuotaError(NJTransitError):
+    """The RailData API refused a request on its daily usage limit.
+
+    Retryable, but not soon: the counters reset at midnight Eastern. Callers
+    should keep whatever they already have rather than poll harder.
+    """

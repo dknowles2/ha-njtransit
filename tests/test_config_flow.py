@@ -22,7 +22,9 @@ from custom_components.njtransit.const import (
     CONF_FAVORITE_TRAINS,
     CONF_ORIGIN,
     CONF_ORIGIN_ID,
+    CONF_SOURCE,
     DOMAIN,
+    SOURCE_WEBSITE,
 )
 
 from .conftest import install_api_mock, load_fixture, load_payload
@@ -41,10 +43,23 @@ def suggested_origin(result: Any) -> str | None:
     return None
 
 
-async def start_flow(hass: HomeAssistant) -> Any:
-    """Begin the user flow."""
+async def start_menu(hass: HomeAssistant) -> Any:
+    """Begin the user flow, stopping at the source menu."""
     return await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": SOURCE_USER}
+    )
+
+
+async def start_flow(hass: HomeAssistant, source: str = SOURCE_WEBSITE) -> Any:
+    """Begin the user flow and choose a source, landing on its next step.
+
+    For the website that is the commute form; for RailData it is the
+    credentials form.
+    """
+    result = await start_menu(hass)
+    assert result["type"] is FlowResultType.MENU
+    return await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": source}
     )
 
 
@@ -127,6 +142,7 @@ class TestUserFlow:
             CONF_ORIGIN_ID: "RT",
             CONF_DESTINATION: NY_PENN,
             CONF_DESTINATION_ID: "NY",
+            CONF_SOURCE: SOURCE_WEBSITE,
         }
 
     async def test_suggests_the_station_nearest_home(

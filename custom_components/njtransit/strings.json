@@ -2,6 +2,22 @@
   "config": {
     "step": {
       "user": {
+        "title": "Choose a data source",
+        "description": "Both give the same departures and alerts. RailData is NJ Transit's documented API: it needs a free developer account from developer.njtransit.com, and at New York Penn it reports the platform from the signalling system about ten minutes before the board posts it.",
+        "menu_options": {
+          "website": "njtransit.com (no account needed)",
+          "raildata": "RailData API (developer account; shows tracks earlier)"
+        }
+      },
+      "raildata": {
+        "title": "RailData account",
+        "description": "The production credentials NJ Transit emailed when you registered. They are checked now and stored in this entry.",
+        "data": {
+          "username": "Username",
+          "password": "Password"
+        }
+      },
+      "commute": {
         "title": "Add a commute",
         "description": "Each commute is a separate entry. Add the integration again for a different destination, or for the trip home.",
         "data": {
@@ -11,18 +27,38 @@
         "data_description": {
           "destination": "Optional. Narrows departures to trains that actually reach this station, including ones requiring a transfer."
         }
+      },
+      "reconfigure": {
+        "title": "Change data source",
+        "description": "Switch this commute to the other API. Stations and options are kept.",
+        "menu_options": {
+          "website": "njtransit.com (no account needed)",
+          "raildata": "RailData API (developer account; shows tracks earlier)"
+        }
+      },
+      "reauth_confirm": {
+        "title": "RailData credentials rejected",
+        "description": "NJ Transit no longer accepts the stored username and password. Enter the current ones.",
+        "data": {
+          "username": "Username",
+          "password": "Password"
+        }
       }
     },
     "error": {
       "cannot_connect": "Could not reach NJ Transit.",
       "invalid_station": "NJ Transit does not recognize that station.",
       "same_station": "Origin and destination must differ.",
-      "unknown": "Unexpected error."
+      "unknown": "Unexpected error.",
+      "invalid_auth": "NJ Transit rejected that username and password.",
+      "quota": "Today's RailData sign-in limit has been used up. Try again after midnight Eastern."
     },
     "abort": {
       "already_configured": "This commute is already set up.",
       "cannot_connect": "Could not reach NJ Transit.",
-      "unknown": "Unexpected error."
+      "unknown": "Unexpected error.",
+      "reauth_successful": "Credentials updated.",
+      "reconfigure_successful": "Data source changed."
     }
   },
   "options": {

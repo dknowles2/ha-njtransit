@@ -8,18 +8,26 @@ from typing import Any, Final
 
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api.client import NJTransitClient
-from .api.exceptions import NJTransitError
+from .api.exceptions import (
+    NJTransitAuthError,
+    NJTransitConnectionError,
+    NJTransitError,
+)
 from .api.models import TrainRun
 from .api.parsing import now_local
+from .api.raildata import RailDataClient
 from .const import (
     CONF_DEPARTURE_INTERVAL,
     CONF_DESTINATION,
+    CONF_DESTINATION_ID,
     CONF_FAVORITE_TRAINS,
     CONF_LOOKAHEAD,
     CONF_ORIGIN,
+    CONF_ORIGIN_ID,
     CONF_STATUS_INTERVAL,
     DEFAULT_DEPARTURE_INTERVAL,
     DEFAULT_LOOKAHEAD,
@@ -35,14 +43,23 @@ from .coordinator import (
     RouteCoordinator,
     StaticCoordinator,
     SystemStatusCoordinator,
+    forget_store,
+    register_store,
+    store_count,
     store_for,
 )
 from .entity import normalize_train_ids, usable_departures
 from .frontend import async_register_card
+from .sources import build_client, store_key
 from .track_history import TrackHistory
 
 # Guards construction of the shared store against concurrent entry setup.
 _SETUP_LOCK: Final = f"{DOMAIN}_setup_lock"
+
+# The one track history, whichever sources are in use. Stores are per source
+# (SPEC 2.9) but the history's storage key is not, and two objects writing to
+# it would each discard the other's stations on every save.
+_HISTORY: Final = f"{DOMAIN}_history"
 
 # How long a train can stay latched, measured from when following began.
 #
@@ -73,7 +90,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: NJTransitConfigEntry) ->
     await async_register_card(hass)
 
     session = async_get_clientsession(hass)
-    client = NJTransitClient(session)
+    key = store_key(entry)
 
     origin: str = entry.data[CONF_ORIGIN]
     destination: str | None = entry.data.get(CONF_DESTINATION)
@@ -88,8 +105,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: NJTransitConfigEntry) ->
     #
     # `setdefault` never awaits, so every entry gets the same lock object.
     async with hass.data.setdefault(_SETUP_LOCK, asyncio.Lock()):
-        store = store_for(hass)
+        store = store_for(hass, key)
         if store is None:
+            client = build_client(hass, entry)
+            if isinstance(client, RailDataClient):
+                # Credentials are checked before any coordinator runs, so a
+                # wrong password reads as "needs reauthentication" rather
+                # than as a board that never loads. A network failure here
+                # is the ordinary retry.
+                try:
+                    await client.authenticate()
+                except NJTransitAuthError as err:
+                    raise ConfigEntryAuthFailed(str(err)) from err
+                except NJTransitConnectionError as err:
+                    raise ConfigEntryNotReady(str(err)) from err
             static = StaticCoordinator(hass, client)
             status = SystemStatusCoordinator(
                 hass,
@@ -99,10 +128,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: NJTransitConfigEntry) ->
             )
             await static.async_config_entry_first_refresh()
             await status.async_config_entry_first_refresh()
-            history = TrackHistory(hass)
-            await history.async_load()
-            store = CoordinatorStore(static=static, status=status, history=history)
-            hass.data[DOMAIN] = store
+            history = hass.data.get(_HISTORY)
+            if not isinstance(history, TrackHistory):
+                history = TrackHistory(hass)
+                await history.async_load()
+                hass.data[_HISTORY] = history
+            store = CoordinatorStore(
+                client=client, static=static, status=status, history=history
+            )
+            register_store(hass, key, store)
+        else:
+            client = store.client
+            if isinstance(client, RailDataClient):
+                client.remember(origin, entry.data[CONF_ORIGIN_ID])
+                if destination and CONF_DESTINATION_ID in entry.data:
+                    client.remember(destination, entry.data[CONF_DESTINATION_ID])
 
         store.claim(entry.entry_id)
 
@@ -181,8 +221,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: NJTransitConfigEntry) ->
     # on top of a working commute, and the alternative to a coordinate is an
     # automation that does not filter by location, which is how this behaved
     # before the lookup existed.
+    #
+    # Always the website, whichever source the commute reads from. RailData
+    # publishes no coordinates, and this is an anonymous one-shot lookup of
+    # a public fact rather than a second feed to keep in step (SPEC 2.9).
     try:
-        origin_coordinates = await client.station_coordinates(origin)
+        origin_coordinates = await NJTransitClient(session).station_coordinates(origin)
     except NJTransitError:
         origin_coordinates = None
 
@@ -221,7 +265,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: NJTransitConfigEntry) -
     if not unloaded:
         return False
 
-    store = store_for(hass)
+    key = store_key(entry)
+    store = store_for(hass, key)
     if store is None:
         return True
 
@@ -230,7 +275,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: NJTransitConfigEntry) -
         await store.static.async_shutdown()
         await store.status.async_shutdown()
         await store.history.async_flush()
-        hass.data.pop(DOMAIN, None)
+        forget_store(hass, key)
+        if store_count(hass) == 0:
+            hass.data.pop(_HISTORY, None)
 
     return True
 

@@ -1,0 +1,241 @@
+{
+  "TRAIN_ID": "6295",
+  "LINECODE": "MC",
+  "BACKCOLOR": "#C36366",
+  "FORECOLOR": "#FFFFFF",
+  "SHADOWCOLOR": "#000000",
+  "DESTINATION": "Montclair State",
+  "TRANSFERAT": "",
+  "STOPS": [
+    {
+      "STATION_2CHAR": "NY",
+      "STATIONNAME": "New York Penn Station",
+      "TIME": "14-Sep-2026 09:32:00 PM",
+      "PICKUP": "",
+      "DROPOFF": "",
+      "DEPARTED": "NO",
+      "STOP_STATUS": "BOARDING",
+      "DEP_TIME": "14-Sep-2026 09:32:00 PM",
+      "TIME_UTC_FORMAT": "15-Sep-2026 01:32:00 AM",
+      "STOP_LINES": [
+        {
+          "LINE_CODE": "GS",
+          "LINE_NAME": "Gladstone Branch",
+          "LINE_COLOR": "#A1D5AE"
+        },
+        {
+          "LINE_CODE": "ME",
+          "LINE_NAME": "ME Line",
+          "LINE_COLOR": "#00953B"
+        },
+        {
+          "LINE_CODE": "NC",
+          "LINE_NAME": "North Jersey Coast Line",
+          "LINE_COLOR": "#009CDB"
+        },
+        {
+          "LINE_CODE": "NE",
+          "LINE_NAME": "Northeast Corridor Line",
+          "LINE_COLOR": "#F7505E"
+        }
+      ]
+    },
+    {
+      "STATION_2CHAR": "SE",
+      "STATIONNAME": "Secaucus Upper Lvl",
+      "TIME": "14-Sep-2026 09:41:30 PM",
+      "PICKUP": "",
+      "DROPOFF": "",
+      "DEPARTED": "NO",
+      "STOP_STATUS": "",
+      "DEP_TIME": "14-Sep-2026 09:42:00 PM",
+      "TIME_UTC_FORMAT": "15-Sep-2026 01:41:30 AM",
+      "STOP_LINES": [
+        {
+          "LINE_CODE": "BC",
+          "LINE_NAME": "Bergen County Line",
+          "LINE_COLOR": "#98A8BF"
+        },
+        {
+          "LINE_CODE": "GS",
+          "LINE_NAME": "Gladstone Branch",
+          "LINE_COLOR": "#A1D5AE"
+        },
+        {
+          "LINE_CODE": "ME",
+          "LINE_NAME": "ME Line",
+          "LINE_COLOR": "#00953B"
+        },
+        {
+          "LINE_CODE": "ML",
+          "LINE_NAME": "Main Line",
+          "LINE_COLOR": "#F2B826"
+        },
+        {
+          "LINE_CODE": "NC",
+          "LINE_NAME": "North Jersey Coast Line",
+          "LINE_COLOR": "#009CDB"
+        },
+        {
+          "LINE_CODE": "NE",
+          "LINE_NAME": "Northeast Corridor Line",
+          "LINE_COLOR": "#F7505E"
+        },
+        {
+          "LINE_CODE": "PV",
+          "LINE_NAME": "Pascack Valley Line",
+          "LINE_COLOR": "#A34F8B"
+        },
+        {
+          "LINE_CODE": "SL",
+          "LINE_NAME": "BetMGM Meadowlands",
+          "LINE_COLOR": "#99CC66"
+        }
+      ]
+    },
+    {
+      "STATION_2CHAR": "ND",
+      "STATIONNAME": "Newark Broad Street",
+      "TIME": "14-Sep-2026 09:51:00 PM",
+      "PICKUP": "",
+      "DROPOFF": "",
+      "DEPARTED": "NO",
+      "STOP_STATUS": "",
+      "DEP_TIME": "14-Sep-2026 09:52:00 PM",
+      "TIME_UTC_FORMAT": "15-Sep-2026 01:51:00 AM",
+      "STOP_LINES": [
+        {
+          "LINE_CODE": "GS",
+          "LINE_NAME": "Gladstone Branch",
+          "LINE_COLOR": "#A1D5AE"
+        },
+        {
+          "LINE_CODE": "ME",
+          "LINE_NAME": "ME Line",
+          "LINE_COLOR": "#00953B"
+        }
+      ]
+    },
+    {
+      "STATION_2CHAR": "WT",
+      "STATIONNAME": "Watsessing Avenue",
+      "TIME": "14-Sep-2026 09:57:30 PM",
+      "PICKUP": "",
+      "DROPOFF": "",
+      "DEPARTED": "NO",
+      "STOP_STATUS": "",
+      "DEP_TIME": "14-Sep-2026 09:58:15 PM",
+      "TIME_UTC_FORMAT": "15-Sep-2026 01:57:30 AM",
+      "STOP_LINES": []
+    },
+    {
+      "STATION_2CHAR": "BM",
+      "STATIONNAME": "Bloomfield",
+      "TIME": "14-Sep-2026 09:59:45 PM",
+      "PICKUP": "",
+      "DROPOFF": "",
+      "DEPARTED": "NO",
+      "STOP_STATUS": "",
+      "DEP_TIME": "14-Sep-2026 10:00:45 PM",
+      "TIME_UTC_FORMAT": "15-Sep-2026 01:59:45 AM",
+      "STOP_LINES": []
+    },
+    {
+      "STATION_2CHAR": "GG",
+      "STATIONNAME": "Glen Ridge",
+      "TIME": "14-Sep-2026 10:02:15 PM",
+      "PICKUP": "",
+      "DROPOFF": "",
+      "DEPARTED": "NO",
+      "STOP_STATUS": "",
+      "DEP_TIME": "14-Sep-2026 10:03:15 PM",
+      "TIME_UTC_FORMAT": "15-Sep-2026 02:02:15 AM",
+      "STOP_LINES": []
+    },
+    {
+      "STATION_2CHAR": "MC",
+      "STATIONNAME": "Bay Street",
+      "TIME": "14-Sep-2026 10:05:15 PM",
+      "PICKUP": "",
+      "DROPOFF": "",
+      "DEPARTED": "NO",
+      "STOP_STATUS": "",
+      "DEP_TIME": "14-Sep-2026 10:06:15 PM",
+      "TIME_UTC_FORMAT": "15-Sep-2026 02:05:15 AM",
+      "STOP_LINES": []
+    },
+    {
+      "STATION_2CHAR": "WA",
+      "STATIONNAME": "Walnut Street",
+      "TIME": "14-Sep-2026 10:08:45 PM",
+      "PICKUP": "",
+      "DROPOFF": "",
+      "DEPARTED": "NO",
+      "STOP_STATUS": "",
+      "DEP_TIME": "14-Sep-2026 10:09:45 PM",
+      "TIME_UTC_FORMAT": "15-Sep-2026 02:08:45 AM",
+      "STOP_LINES": []
+    },
+    {
+      "STATION_2CHAR": "WG",
+      "STATIONNAME": "Watchung Avenue",
+      "TIME": "14-Sep-2026 10:11:15 PM",
+      "PICKUP": "",
+      "DROPOFF": "",
+      "DEPARTED": "NO",
+      "STOP_STATUS": "",
+      "DEP_TIME": "14-Sep-2026 10:12:15 PM",
+      "TIME_UTC_FORMAT": "15-Sep-2026 02:11:15 AM",
+      "STOP_LINES": []
+    },
+    {
+      "STATION_2CHAR": "UM",
+      "STATIONNAME": "Upper Montclair",
+      "TIME": "14-Sep-2026 10:14:15 PM",
+      "PICKUP": "",
+      "DROPOFF": "",
+      "DEPARTED": "NO",
+      "STOP_STATUS": "",
+      "DEP_TIME": "14-Sep-2026 10:15:15 PM",
+      "TIME_UTC_FORMAT": "15-Sep-2026 02:14:15 AM",
+      "STOP_LINES": []
+    },
+    {
+      "STATION_2CHAR": "MS",
+      "STATIONNAME": "Mountain Avenue",
+      "TIME": "14-Sep-2026 10:16:45 PM",
+      "PICKUP": "",
+      "DROPOFF": "",
+      "DEPARTED": "NO",
+      "STOP_STATUS": "",
+      "DEP_TIME": "14-Sep-2026 10:17:30 PM",
+      "TIME_UTC_FORMAT": "15-Sep-2026 02:16:45 AM",
+      "STOP_LINES": []
+    },
+    {
+      "STATION_2CHAR": "HS",
+      "STATIONNAME": "Montclair Heights",
+      "TIME": "14-Sep-2026 10:19:00 PM",
+      "PICKUP": "",
+      "DROPOFF": "",
+      "DEPARTED": "NO",
+      "STOP_STATUS": "",
+      "DEP_TIME": "14-Sep-2026 10:20:00 PM",
+      "TIME_UTC_FORMAT": "15-Sep-2026 02:19:00 AM",
+      "STOP_LINES": []
+    },
+    {
+      "STATION_2CHAR": "UV",
+      "STATIONNAME": "Montclair State U",
+      "TIME": "14-Sep-2026 10:28:00 PM",
+      "PICKUP": "",
+      "DROPOFF": "",
+      "DEPARTED": "NO",
+      "STOP_STATUS": "",
+      "DEP_TIME": "14-Sep-2026 10:29:00 PM",
+      "TIME_UTC_FORMAT": "15-Sep-2026 02:28:00 AM",
+      "STOP_LINES": []
+    }
+  ],
+  "CAPACITY": []
+}

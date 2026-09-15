@@ -338,6 +338,113 @@ NEC    Northeast Corridor
 
 `getSystemStatus.abbreviation` does **not** use this vocabulary consistently — see §6.4.
 
+### 2.9 The RailData source
+
+Everything above describes the website. The integration can also read from NJ Transit's
+**RailData API** — `POST https://raildata.njtransit.com/api/TrainData/<method>`,
+form-encoded, documented in the "RailData API v2.1" PDF that comes with a developer
+account from `developer.njtransit.com`. It is the documented API behind DepartureVision,
+which is why §12's guess that it "would be a sturdier foundation" turned out right and also
+why its board rows carry the website's vocabulary verbatim: the same `LINE` titles
+(`Northeast Corrdr`, `No Jersey Coast`), the same `M&E`-style abbreviations, the same
+status phrases (`in 9 Min`, `BOARDING`, `All Aboard`). The difference is the envelope —
+upper-case keys, every value a string, full timestamps (`14-Sep-2026 09:32:00 PM`) instead
+of the bare clock — and one thing the website cannot give at any price.
+
+**Which API a commute reads from is chosen at setup and stored in the entry's data**
+(`source`: `website` or `raildata`; entries from before the choice existed carry neither
+and read the website). Both clients present the same six methods, declared as the
+`RailSource` protocol in `api/source.py`, and nothing above `api/` can tell them apart.
+Changing source is the reconfigure flow, not an option, because it swaps the client under
+every coordinator. The shared coordinator store is keyed by source — and for RailData by
+account — because a board polled from each is a different feed, and because the RailData
+client holds a token that belongs to one account.
+
+**Method mapping.** For each thing the integration asks:
+
+| Question | Website | RailData | Notes |
+|---|---|---|---|
+| departure board | `getTrainDepartureScreens` | `getTrainSchedule19Rec` | same 19-row cap; `STATIONMSGS` folded into `banner_message` / `fullscreen_message` |
+| stop list | `getTrainStopList` | `getTrainStopList` | `DEP_TIME` is the timetable, `TIME` the estimate; the model wants the timetable (§6.2) |
+| station list | `getTrainScheduleStationsRailForDV` | `getStationList` | no alias rows; **`STATION_2CHAR` is the same code as `pentaStationID`** (RT, NY, HB), which is what lets an entry switch source without changing identity |
+| lines | `getTrainLines` | Appendix VI, as a table | coded with the *website's* alert codes (`MNE`, `NEC`) so `alert_line_codes` needs no second vocabulary |
+| alerts | `getSystemStatus` | `getStationMSG` with empty station and line | one `SystemAlert` per line in `MSG_LINE_SCOPE`, as the website repeats a multi-line alert; `is_advisory` is always `False` — the feed carries live messages only, so the advisories sensor reads 0 on this source |
+| day's trains | `getTripPlannerSchedule`, paged | `getStationSchedule` for origin and destination, joined on train number | direct trains only, which is §2.7's filter anyway; where nothing runs direct the route degrades to label matching instead of showing connections |
+| coordinates | `TripPlannerAlternates` / `DVCloseStation` | — | **always the website**, whichever source. RailData publishes none; this is a one-shot anonymous lookup of a public fact, not a feed |
+| signalled track | — | `getVehicleData` | below |
+
+**Three documented limits shape the client.** `getToken` may be called ten times a day and
+its token lasts 24 hours; `getStationSchedule` five times a day; realtime methods 40,000
+a day. So the token and every station-day fetched are handed to a store the integration
+backs with `.storage/njtransit.raildata.<account>`, and a restart spends nothing. A token
+the API declares `Invalid token.` is discarded and replaced exactly once per call. Two
+entries on one account share a client, and therefore a token and every schedule either
+fetched: the reverse commute costs no extra schedule calls. `Authenticated: False` is
+`NJTransitAuthError`, which coordinators translate to `ConfigEntryAuthFailed` so Home
+Assistant asks for new credentials rather than retrying on the same ten-a-day budget;
+`Daily usage limit` is `NJTransitQuotaError`, retryable after midnight Eastern. Credentials
+live in the entry's data, are never logged, and diagnostics never dumps the entry's data.
+
+**The day's schedule is published from that day's midnight, and nothing about tomorrow
+before it.** So `scheduled_trips(on=tomorrow)` returns empty without a call, and the route
+coordinator — for both sources — now refreshes at a fixed 01:45 local rather than a day
+after setup, so a commute set up at 15:00 does not carry yesterday's trains until 15:00
+tomorrow. The 27-hour window also holds two runs of one train number a day apart, which is
+why the join bounds a journey at six hours; without that, train 3201's 00:05 departure
+paired with the next day's as a 1440-minute trip.
+
+**Station names are a sixth vocabulary.** RailData says `Short Hills` where the website
+says `Short Hills Station`, and its list has no alias rows. An entry stores both the title
+and the code, and the code is shared, so `RailDataClient.remember(title, code)` is told at
+setup and never needs the list to resolve a title it was configured with; titles it was
+not told about resolve through the list, exactly then by words. Reconfiguring re-reads the
+titles from the new source's list by code, because the website's planner rejects bare
+`Short Hills` (§3.5) and would otherwise degrade the route filter after a switch.
+
+**Track translations.** Appendix II of the documentation lists six stations where the
+feed reports the railroad's track number and the signs say something else — Secaucus
+Lower Level's `4` is platform `E`. Applied at parse time, keyed by station code, so
+`Departure.track` means the same thing on both sources.
+
+**The signalled track, which is the point.** `getVehicleData` reports every running
+train's last track circuit — a signalling-system name like `AA-AAJO13ATK` — and at New
+York Penn those decode to platforms:
+
+```
+platform = 22 - n      n after "AJO" in AA-AAJO13ATK, or the two digits after "-A" in AA-A190TK
+```
+
+Only circuits ending `TK` are track circuits; `R`, `P`, `N`, `UP`, `DP` are route and
+points indications a train waits on at a signal and decode to nothing. Written as a
+hypothesis against five pairs on the first night, confirmed on the next ten, and holding at
+**229 of 231** board postings over the following days. Against the board's median
+posting at T-10, the signal shows the set on its platform at a median of 18 minutes
+before departure in the morning rush, 21 in the evening, and about 30 midday — for the
+65% of departures whose set is on a platform under its own number at all. It does not
+recover the other third: the feed drops an arriving train the moment its trip completes,
+which is usually still in the throat, and polling faster does not change that (measured at
+10-second and 30-second intervals on consecutive weekdays, 7% and 10% of morning-rush
+arrivals caught on a platform). That is the feed's limit, and the throat-to-platform map
+that would lift it is future work.
+
+This is exactly the "which track is occupied" signal §3.8 declared unobtainable, and it
+is: unobtainable *from the website*. The client attaches it as
+`Departure.signalled_track`, matched on train number and scheduled origin departure so a
+set standing under yesterday's number is not this train. It is deliberately **not** folded
+into `Departure.track`: the board is the official answer, the track history (§7.2) is
+measured against the board's posting time, and a signalled platform recorded as a posting
+would corrupt the one measurement that makes that history worth keeping.
+`Departure.track_source` (`board` / `signalled` / `None`) is what a consumer wanting one
+answer reads. Decoders are per station in `api/circuits.py`; only `NY` exists, and any
+other station answers `None` rather than a guess.
+
+**`getStationMSG` scoping, confirmed 2026-09-14 22:10.** With both parameters empty it
+returns the whole feed; with a station it returns the messages for lines serving that
+station (an M&E alert came back for `NY` and not for `NP`); with a line code, that line's.
+One call with both empty is therefore the system status, and the client makes exactly
+that. Live messages carry `MSG_RICHTEXT` and `MSG_URL` beside the documented fields, and
+those reach `SystemAlert.message_html` and `.url`.
+
 ## 3. Hard constraints discovered
 
 Each was observed directly and must be respected by the client.
@@ -455,7 +562,8 @@ Montclair-Boonton) between them enumerate essentially every NJT train inbound to
 Penn for two requests. What cannot be obtained at any cost is the arrival **track** —
 `getTrainStopList` has no track field (§2.2), and a station's board reports track only for
 departures. **Consequence:** any model that wants "which track is occupied, and until
-when" cannot be built on this API. Turnaround-based track inference is not available.
+when" cannot be built on this API. Turnaround-based track inference is not available —
+*from the website*. The RailData source's vehicle feed is where it is (§2.9).
 
 Track publication is also late, and station-dependent. Measured 2026-08-04 by polling one
 board at 60s intervals:
@@ -571,13 +679,19 @@ custom_components/njtransit/
 ├── strings.json
 ├── brand/                # generated icons, original artwork only
 ├── translations/en.json
+├── sources.py            # which API an entry reads, and the client for it (§2.9)
+├── raildata_store.py     # HA storage behind the RailData client's token and schedules
 └── api/                  # NO Home Assistant imports — see §4.1
     ├── __init__.py
-    ├── client.py         # transport, error handling
+    ├── source.py         # the RailSource protocol both clients satisfy
+    ├── client.py         # website transport, error handling
     ├── exceptions.py
     ├── queries.py        # operations verbatim from §2
     ├── models.py         # frozen dataclasses
-    └── parsing.py        # time, status, crowding, train-number extraction
+    ├── parsing.py        # time, status, crowding, train-number extraction
+    ├── raildata.py       # RailData transport: tokens, quotas, station codes (§2.9)
+    ├── raildata_parsing.py
+    └── circuits.py       # track circuit → platform, per station
 tests/
 ├── fixtures/             # recorded payloads, incl. 2026-08-03 disruption capture
 scripts/
@@ -648,12 +762,15 @@ NJTransitError
 ├── NJTransitConnectionError    # transport; retryable
 ├── NJTransitRequestError       # WAF / malformed; NOT retryable, indicates a client bug
 ├── NJTransitAPIError           # GraphQL errors; likely upstream schema drift
-└── NJTransitNotFoundError      # null payload; e.g. unknown station
+├── NJTransitNotFoundError      # null payload; e.g. unknown station
+├── NJTransitAuthError          # RailData rejected the credentials; NOT retryable (§2.9)
+└── NJTransitQuotaError         # RailData daily limit; retryable after midnight
 ```
 
 Coordinators map `NJTransitConnectionError` → `UpdateFailed`, and
 `NJTransitRequestError` / `NJTransitAPIError` → `UpdateFailed` plus a logged warning,
-since those signal the endpoint changed under us.
+since those signal the endpoint changed under us. `NJTransitAuthError` →
+`ConfigEntryAuthFailed`, which starts the reauth flow instead of retrying.
 
 ### 5.3 Models
 
@@ -1008,23 +1125,33 @@ trips rather than reducing them to a set, and belongs with the deferred trip-pla
 
 ### 8.1 Flow steps
 
-**Step `user`** — creates a commute entry:
+**Step `user`** — a menu: `website` or `raildata` (§2.9).
 
-1. Fetch `getTrainScheduleStationsRailForDV`, sort by `title`.
+**Step `raildata`** — username and password, exchanged for a token on the spot.
+`Authenticated: False` → `invalid_auth`; the daily token limit → `quota`.
+
+**Step `commute`** — creates the entry:
+
+1. Fetch the chosen source's station list, sort by `title`.
 2. `SelectSelector` for **origin station**.
 3. `SelectSelector` for **destination** (optional).
 4. Validate the origin with a board query; `NJTransitNotFoundError` → `invalid_station`.
-5. If a destination was chosen, resolve the train-ID set via `getTripPlannerSchedule`
-   (§2.5) using the ` Station`-suffixed name vocabulary (§3.5). No itineraries returned →
-   warn but do not block; fall back to label matching.
+5. If a destination was chosen, resolve the train-ID set (§2.5, or §2.9's schedule join)
+   using that source's name vocabulary. No itineraries returned → warn but do not block;
+   fall back to label matching.
 
-Abort with `already_configured` if the origin/destination pair already exists.
+Abort with `already_configured` if the origin/destination pair already exists — on either
+source, because the unique ID is the station codes and those are shared. Switching source
+is the **reconfigure** flow: the same menu, then credentials if RailData, then the entry's
+`source`, credentials and station titles are rewritten and the entry reloaded. The
+nearest-station suggestion always asks the website (§3.9), on either source.
 
 **Options flow:** departure interval, status interval, number of upcoming-departure
 sensors (default 3, max 10), disruption threshold and lookahead. The destination is part
 of the unique ID and therefore *not* editable here — changing it means adding a new entry.
 
-Reauth is not applicable — no credentials.
+**Reauth** applies to the RailData source only: `NJTransitAuthError` from any coordinator
+raises `ConfigEntryAuthFailed`, and `reauth_confirm` asks for the credentials again.
 
 ## 9. Entities
 
@@ -1207,10 +1334,9 @@ Mitigations: pinned fixtures turn drift into test failures, narrow field selecti
 §3.1, and `scripts/extract_ops.py` re-derives the site's own operations on demand. This
 remains the dominant risk and belongs in the README.
 
-NJ Transit also operates a registration-gated official developer API, not evaluated here.
-If it covers departures and alerts it would be a sturdier foundation and is likely a
-prerequisite for core acceptance — worth evaluating before investing in deferred-tier
-features.
+NJ Transit also operates a registration-gated official developer API. It was evaluated,
+covers everything but coordinates, and is now the second source (§2.9). It is the sturdier
+foundation, and it is the one to reach for if the website changes under the default.
 
 ## 13. Open questions
 

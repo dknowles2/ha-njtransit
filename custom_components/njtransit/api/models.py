@@ -85,7 +85,17 @@ class Departure:
     realtime data is available yet."""
 
     track: str | None = None
-    """Platform, when assigned."""
+    """Platform, when the board has posted one."""
+
+    signalled_track: str | None = None
+    """Platform the signalling system shows this train standing on.
+
+    Only the RailData source can fill this, and only at stations whose track
+    circuits have been decoded (SPEC 2.9). It is independent of :attr:`track`
+    rather than a fallback for it: the board is the official answer and the
+    track history is measured against it, so nothing here pretends a
+    signalled platform is a posted one. Consumers wanting a single answer
+    read :attr:`track_source`."""
 
     delay_minutes: int | None = None
     """Minutes behind schedule, or ``None`` when the board has no realtime
@@ -97,6 +107,27 @@ class Departure:
     cars: tuple[Car, ...] = ()
     """Consist with crowding, when known. Empty for most rows -- the board
     only carries it for imminent departures."""
+
+    @property
+    def track_source(self) -> str | None:
+        """Return where the best available platform answer came from.
+
+        ``"board"`` once the station has posted a track, ``"signalled"`` when
+        only the signalling system has shown the train on a platform, and
+        ``None`` when neither has. The board wins whenever it has spoken,
+        even against a disagreeing signal -- it is the official answer and
+        the one the platform signs will match.
+        """
+        if self.track:
+            return "board"
+        if self.signalled_track:
+            return "signalled"
+        return None
+
+    @property
+    def best_track(self) -> str | None:
+        """Return the platform to show, board first, signalling second."""
+        return self.track or self.signalled_track
 
     @property
     def status_text(self) -> str:

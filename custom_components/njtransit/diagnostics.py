@@ -1,7 +1,8 @@
 """Diagnostics for the NJ Transit integration.
 
-No redaction is needed. The endpoint takes no credentials and returns no
-personal data -- these are public departure boards and service alerts.
+Nothing here is personal -- these are public departure boards and service
+alerts -- but an entry on the RailData source holds an account's username
+and password, so the entry's data is never dumped, only named fields of it.
 
 The contents are chosen around the failure modes users actually hit. This
 integration talks to an undocumented endpoint through four different naming
@@ -19,6 +20,7 @@ from homeassistant.core import HomeAssistant
 from .api.parsing import alert_line_codes, now_local
 from .coordinator import NJTransitConfigEntry
 from .entity import usable_departures
+from .sources import source_of
 from .track_history import TrackHistory
 
 
@@ -40,6 +42,7 @@ async def async_get_config_entry_diagnostics(
         "config": {
             "origin": runtime.origin,
             "destination": runtime.destination,
+            "source": source_of(entry),
             "options": dict(entry.options),
         },
         "coordinators": {
