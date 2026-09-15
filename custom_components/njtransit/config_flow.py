@@ -4,6 +4,13 @@ One config entry is one *commute*, keyed on the origin/destination pair, so
 Short Hills to New York Penn and Short Hills to Hoboken coexist -- as do
 reverse-direction entries for the trip home. Keying on the origin alone would
 make the second commute look like a duplicate.
+
+The first question is which API to read from. The website needs nothing and
+is the default; RailData needs a developer account and, in return, reports
+the platform from the signalling system before the board posts it. The
+choice is per commute and lives in the entry's data, so the reconfigure flow
+is where it changes -- swapping the source swaps the client under every
+coordinator, which is a reload rather than an option.
 """
 
 from __future__ import annotations
@@ -12,11 +19,13 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant.config_entries import (
+    SOURCE_RECONFIGURE,
     ConfigEntryState,
     ConfigFlow,
     ConfigFlowResult,
     OptionsFlow,
 )
+from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
@@ -33,8 +42,15 @@ from homeassistant.helpers.selector import (
 )
 
 from .api.client import NJTransitClient
-from .api.exceptions import NJTransitConnectionError, NJTransitError
+from .api.exceptions import (
+    NJTransitAuthError,
+    NJTransitConnectionError,
+    NJTransitError,
+    NJTransitQuotaError,
+)
 from .api.models import Station
+from .api.raildata import RailDataClient
+from .api.source import RailSource
 from .const import (
     CONF_DELAY_THRESHOLD,
     CONF_DEPARTURE_COUNT,
@@ -45,6 +61,7 @@ from .const import (
     CONF_LOOKAHEAD,
     CONF_ORIGIN,
     CONF_ORIGIN_ID,
+    CONF_SOURCE,
     CONF_STATUS_INTERVAL,
     DEFAULT_DELAY_THRESHOLD,
     DEFAULT_DEPARTURE_COUNT,
@@ -54,8 +71,13 @@ from .const import (
     DOMAIN,
     MAX_DEPARTURE_COUNT,
     MIN_INTERVAL,
+    SOURCE_RAILDATA,
+    SOURCE_WEBSITE,
 )
 from .coordinator import NJTransitConfigEntry
+from .raildata_store import RailDataStorage
+
+SOURCES = (SOURCE_WEBSITE, SOURCE_RAILDATA)
 
 
 def canonical_stations(stations: tuple[Station, ...]) -> list[Station]:
@@ -97,19 +119,113 @@ class NJTransitConfigFlow(ConfigFlow, domain=DOMAIN):
 
     def __init__(self) -> None:
         """Initialize the flow."""
+        self._source: str = SOURCE_WEBSITE
+        self._credentials: dict[str, str] = {}
+        self._client: RailSource | None = None
         self._stations: list[Station] = []
         self._suggested_origin: str | None = None
 
+    @property
+    def _source_client(self) -> RailSource:
+        """Return a client for the chosen source, building one on first use."""
+        if self._client is None:
+            session = async_get_clientsession(self.hass)
+            if self._source == SOURCE_RAILDATA:
+                self._client = self._raildata_client()
+            else:
+                self._client = NJTransitClient(session)
+        return self._client
+
+    def _raildata_client(self) -> RailDataClient:
+        """Return a RailData client for the credentials entered so far.
+
+        Backed by the account's store, so the token this flow requests is
+        the one the entry it creates will find. Ten a day; the flow and the
+        entry between them spend one.
+        """
+        username = self._credentials[CONF_USERNAME]
+        return RailDataClient(
+            async_get_clientsession(self.hass),
+            username,
+            self._credentials[CONF_PASSWORD],
+            RailDataStorage(self.hass, username),
+        )
+
     async def _load_stations(self) -> list[Station]:
-        """Fetch and collapse the canonical station list."""
+        """Fetch and collapse the chosen source's station list."""
         if self._stations:
             return self._stations
 
-        client = NJTransitClient(async_get_clientsession(self.hass))
-        self._stations = canonical_stations(await client.stations())
+        self._stations = canonical_stations(await self._source_client.stations())
         return self._stations
 
+    # -- choosing a source ---------------------------------------------------
+
     async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Choose which API to read from."""
+        return self.async_show_menu(step_id="user", menu_options=list(SOURCES))
+
+    async def async_step_website(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Read from njtransit.com, which needs no account."""
+        self._source = SOURCE_WEBSITE
+        self._credentials = {}
+        self._client = None
+        self._stations = []
+        if self.source == SOURCE_RECONFIGURE:
+            return await self._reconfigure()
+        return await self.async_step_commute()
+
+    async def async_step_raildata(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Read from the RailData API, which needs a developer account."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            self._source = SOURCE_RAILDATA
+            self._credentials = {
+                CONF_USERNAME: user_input[CONF_USERNAME].strip(),
+                CONF_PASSWORD: user_input[CONF_PASSWORD],
+            }
+            self._client = None
+            self._stations = []
+            errors = await self._check_credentials()
+            if not errors:
+                if self.source == SOURCE_RECONFIGURE:
+                    return await self._reconfigure()
+                return await self.async_step_commute()
+
+        return self.async_show_form(
+            step_id="raildata",
+            data_schema=_credentials_schema(user_input),
+            errors=errors,
+        )
+
+    async def _check_credentials(self) -> dict[str, str]:
+        """Exchange the credentials for a token, returning form errors."""
+        client = self._raildata_client()
+        try:
+            await client.authenticate(fresh=True)
+        except NJTransitAuthError:
+            return {"base": "invalid_auth"}
+        except NJTransitQuotaError:
+            return {"base": "quota"}
+        except NJTransitConnectionError:
+            return {"base": "cannot_connect"}
+        except NJTransitError:
+            return {"base": "unknown"}
+        # Keep the client that just signed in: the station list and the
+        # origin check ride on the same token rather than each spending
+        # another of the day's ten.
+        self._client = client
+        return {}
+
+    # -- the commute -----------------------------------------------------------
+
+    async def async_step_commute(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Pick an origin and destination."""
@@ -153,8 +269,80 @@ class NJTransitConfigFlow(ConfigFlow, domain=DOMAIN):
             self._suggested_origin = await self._suggest_origin(stations)
 
         return self.async_show_form(
-            step_id="user",
+            step_id="commute",
             data_schema=self._schema(stations, self._suggested_origin),
+            errors=errors,
+        )
+
+    # -- changing source, and credentials ------------------------------------
+
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Switch an existing commute to the other source."""
+        return self.async_show_menu(step_id="reconfigure", menu_options=list(SOURCES))
+
+    async def _reconfigure(self) -> ConfigFlowResult:
+        """Move the entry being reconfigured onto the chosen source.
+
+        The stations stay -- the codes are the same on both APIs -- but the
+        stored titles are re-read from the new source's list, because each
+        API wants its own spelling: the website's planner rejects a bare
+        ``Short Hills`` that RailData's list is happy to supply.
+        """
+        entry = self._get_reconfigure_entry()
+        try:
+            stations = await self._load_stations()
+        except NJTransitConnectionError:
+            return self.async_abort(reason="cannot_connect")
+        except NJTransitError:
+            return self.async_abort(reason="unknown")
+
+        by_code = {station.penta_id: station for station in stations}
+        updates: dict[str, Any] = {CONF_SOURCE: self._source, **self._credentials}
+        origin = by_code.get(entry.data[CONF_ORIGIN_ID])
+        if origin is not None:
+            updates[CONF_ORIGIN] = origin.title
+        destination = by_code.get(entry.data.get(CONF_DESTINATION_ID, ""))
+        if destination is not None:
+            updates[CONF_DESTINATION] = destination.title
+
+        data = {
+            key: value
+            for key, value in entry.data.items()
+            if key not in (CONF_USERNAME, CONF_PASSWORD)
+        }
+        return self.async_update_reload_and_abort(
+            entry, data={**data, **updates}, reason="reconfigure_successful"
+        )
+
+    async def async_step_reauth(self, entry_data: dict[str, Any]) -> ConfigFlowResult:
+        """Handle the RailData API rejecting the stored credentials."""
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Ask for new credentials and check them."""
+        entry = self._get_reauth_entry()
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            self._source = SOURCE_RAILDATA
+            self._credentials = {
+                CONF_USERNAME: user_input[CONF_USERNAME].strip(),
+                CONF_PASSWORD: user_input[CONF_PASSWORD],
+            }
+            self._client = None
+            errors = await self._check_credentials()
+            if not errors:
+                return self.async_update_reload_and_abort(
+                    entry, data_updates=self._credentials
+                )
+
+        suggested = user_input or {CONF_USERNAME: entry.data.get(CONF_USERNAME, "")}
+        return self.async_show_form(
+            step_id="reauth_confirm",
+            data_schema=_credentials_schema(suggested),
             errors=errors,
         )
 
@@ -176,6 +364,8 @@ class NJTransitConfigFlow(ConfigFlow, domain=DOMAIN):
         if not latitude and not longitude:
             return None
 
+        # Always the website. RailData publishes no coordinates, and this is
+        # an anonymous lookup of a public fact, not a feed (SPEC 2.9).
         client = NJTransitClient(async_get_clientsession(self.hass))
         try:
             nearby = await client.nearest_stations(latitude, longitude)
@@ -199,8 +389,7 @@ class NJTransitConfigFlow(ConfigFlow, domain=DOMAIN):
         :raise NJTransitError: The station was not recognized, or the endpoint
             could not be reached.
         """
-        client = NJTransitClient(async_get_clientsession(self.hass))
-        await client.departures(title)
+        await self._source_client.departures(title)
 
     @staticmethod
     def _schema(stations: list[Station], suggested: str | None = None) -> vol.Schema:
@@ -231,10 +420,14 @@ class NJTransitConfigFlow(ConfigFlow, domain=DOMAIN):
             return origin.title
         return f"{origin.title} to {destination.title}"
 
-    @staticmethod
-    def _data(origin: Station, destination: Station | None) -> dict[str, Any]:
+    def _data(self, origin: Station, destination: Station | None) -> dict[str, Any]:
         """Return the entry data."""
-        data = {CONF_ORIGIN: origin.title, CONF_ORIGIN_ID: origin.penta_id}
+        data: dict[str, Any] = {
+            CONF_ORIGIN: origin.title,
+            CONF_ORIGIN_ID: origin.penta_id,
+            CONF_SOURCE: self._source,
+            **self._credentials,
+        }
         if destination is not None:
             data[CONF_DESTINATION] = destination.title
             data[CONF_DESTINATION_ID] = destination.penta_id
@@ -349,6 +542,25 @@ class NJTransitOptionsFlow(OptionsFlow):
                 sort=False,
             )
         )
+
+
+def _credentials_schema(suggested: dict[str, Any] | None) -> vol.Schema:
+    """Return the RailData username/password form.
+
+    The username is pre-filled on a retry so a typo in the password does not
+    cost retyping both; the password never is.
+    """
+    username = (suggested or {}).get(CONF_USERNAME, "")
+    return vol.Schema(
+        {
+            vol.Required(
+                CONF_USERNAME, description={"suggested_value": username}
+            ): TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT)),
+            vol.Required(CONF_PASSWORD): TextSelector(
+                TextSelectorConfig(type=TextSelectorType.PASSWORD)
+            ),
+        }
+    )
 
 
 def _seconds(low: int, high: int) -> NumberSelector:

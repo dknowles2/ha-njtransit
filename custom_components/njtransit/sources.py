@@ -1,0 +1,70 @@
+"""Which API a commute reads from, and the client that reads it.
+
+Kept apart from ``__init__`` so diagnostics and the config flow can ask
+without importing the whole setup path.
+"""
+
+from __future__ import annotations
+
+from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
+from .api.client import NJTransitClient
+from .api.raildata import RailDataClient
+from .api.source import RailSource
+from .const import (
+    CONF_DESTINATION,
+    CONF_DESTINATION_ID,
+    CONF_ORIGIN,
+    CONF_ORIGIN_ID,
+    CONF_SOURCE,
+    DEFAULT_SOURCE,
+    SOURCE_RAILDATA,
+)
+from .coordinator import NJTransitConfigEntry
+from .raildata_store import RailDataStorage
+
+
+def source_of(entry: NJTransitConfigEntry) -> str:
+    """Return which API an entry reads from.
+
+    Entries created before the choice existed carry no ``source`` and read
+    from the website, which is what they always did.
+    """
+    return str(entry.data.get(CONF_SOURCE, DEFAULT_SOURCE))
+
+
+def store_key(entry: NJTransitConfigEntry) -> str:
+    """Return which shared store an entry belongs to.
+
+    One per source, and for RailData one per account: the client holds the
+    token, and two entries on different accounts must not share one.
+    """
+    source = source_of(entry)
+    if source == SOURCE_RAILDATA:
+        return f"{source}:{entry.data.get(CONF_USERNAME, '')}"
+    return source
+
+
+def build_client(hass: HomeAssistant, entry: NJTransitConfigEntry) -> RailSource:
+    """Return a client for the entry's source."""
+    session = async_get_clientsession(hass)
+    if source_of(entry) != SOURCE_RAILDATA:
+        return NJTransitClient(session)
+
+    username = str(entry.data[CONF_USERNAME])
+    client = RailDataClient(
+        session,
+        username,
+        str(entry.data[CONF_PASSWORD]),
+        RailDataStorage(hass, username),
+    )
+    # The entry stores the title alongside the code, and the code is the
+    # identifier both APIs share. Telling the client saves it resolving the
+    # title through a station list whose spelling may differ from the one
+    # the entry was set up with.
+    client.remember(entry.data[CONF_ORIGIN], entry.data[CONF_ORIGIN_ID])
+    if CONF_DESTINATION in entry.data and CONF_DESTINATION_ID in entry.data:
+        client.remember(entry.data[CONF_DESTINATION], entry.data[CONF_DESTINATION_ID])
+    return client

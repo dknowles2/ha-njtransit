@@ -11,12 +11,30 @@ Transit rail departures and service alerts for a specific commute.
 
 ## The one thing to understand first
 
-There is no official NJ Transit API here. This talks to the private GraphQL
-endpoint behind njtransit.com: no auth, no documentation, no compatibility
-promise, introspection disabled, and a WAF in front. Everything known about it
-was reverse-engineered, and it can change without notice.
+There are two data sources, and a commute reads from one of them (SPEC §2.9).
 
-Two consequences shape the whole codebase:
+The default is the private GraphQL endpoint behind njtransit.com: no auth, no
+documentation, no compatibility promise, introspection disabled, and a WAF in
+front. Everything known about it was reverse-engineered, and it can change
+without notice.
+
+The other is NJ Transit's documented RailData API, which needs a developer
+account and rations its calls -- ten sign-ins a day, five schedule downloads a
+day. `api/raildata.py` keeps the token and every fetched station-day in
+storage so a restart spends nothing; if you touch it, keep it that way, and
+never log, print or assert on a credential. In return it carries the one
+thing the website cannot: the signalling system's view of which platform a
+train is standing on, decoded per station in `api/circuits.py`. Only New York
+Penn is decoded. **`Departure.signalled_track` is kept apart from
+`Departure.track` on purpose** -- the track history is measured against the
+board's posting time, and folding the signal in would corrupt that
+measurement.
+
+Everything above `api/` sees only the models. Both clients satisfy the
+`RailSource` protocol in `api/source.py`; do not make a coordinator or entity
+depend on which one it has.
+
+Two consequences of the website's nature shape the whole codebase:
 
 1. **Never widen a GraphQL field selection casually.** Asking for a field the
    server cannot populate nulls the *entire* response, not just that field.
@@ -44,6 +62,15 @@ operation — queries assigned to minified constants, which the regex cannot see
 it, so do not assume the named-operation list is complete.
 
 ## Fixtures are evidence, not scaffolding
+
+`tests/fixtures/raildata/` was recorded 2026-09-14 21:27 EDT against the
+production RailData API, every call within the same minute, so the New York
+board and the vehicle feed describe one instant: train 3889 posted on track 3
+and standing on circuit `AA-A190TK`, which decodes to 3. That pair is the
+regression guard for the decoder. `station_msg.json` is mostly assembled from
+the API documentation's own examples, because the live feed was empty at the
+time; the one real message it carried forty minutes later is appended.
+
 
 `tests/fixtures/` holds a coherent capture taken during a live Morris & Essex
 disruption on 2026-08-03 — every query issued within the same minute, so

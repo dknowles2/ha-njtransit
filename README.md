@@ -7,15 +7,18 @@ A Home Assistant integration for NJ Transit rail departures and service alerts,
 scoped to a commute you actually take.
 
 > [!WARNING]
-> This uses the private GraphQL endpoint behind njtransit.com. There is no
-> official API, no documentation, and no compatibility promise. It can break
-> without notice. See [Reliability](#reliability).
+> By default this uses the private GraphQL endpoint behind njtransit.com.
+> There is no official API there, no documentation, and no compatibility
+> promise. It can break without notice. See [Reliability](#reliability).
+> NJ Transit's documented [RailData API](#choosing-a-data-source) is
+> available as an alternative for anyone with a developer account.
 
 ## Contents
 
 - [Why a commute, not a station](#why-a-commute-not-a-station)
 - [Installation](#installation)
 - [Configuration](#configuration)
+- [Choosing a data source](#choosing-a-data-source)
 - [Options](#options)
 - [Entities](#entities)
 - [Automation examples](#automation-examples)
@@ -85,9 +88,9 @@ should end up at `config/custom_components/njtransit/manifest.json`.
 
 Settings → Devices & Services → **Add Integration** → **NJ Transit**.
 
-Pick an **origin** and, optionally, a **destination**. Add the integration
-again for each additional commute, including the reverse direction for the trip
-home.
+Choose a [data source](#choosing-a-data-source), then pick an **origin** and,
+optionally, a **destination**. Add the integration again for each additional
+commute, including the reverse direction for the trip home.
 
 Station names come from NJ Transit's own list and must be used verbatim — most
 end in `Station` or `Terminal`, but `MetLife Stadium` and
@@ -100,6 +103,46 @@ An entry with no destination reports the **whole board** for that station,
 unfiltered, and no calendar is created. Useful for a station you pass through
 rather than commute along. The destination is part of an entry's identity and
 cannot be changed later — add another commute instead.
+
+## Choosing a data source
+
+The first step of setup asks which API to read from. Both give the same
+departures, alerts, stop lists and calendar; every entity is identical either
+way.
+
+| | njtransit.com | RailData API |
+|---|---|---|
+| Account | none | free developer account from [developer.njtransit.com](https://developer.njtransit.com/registration) |
+| Status | private, undocumented, can change without notice | documented, versioned |
+| Track at New York Penn | when the board posts it, about 10 min before departure | **also from the signalling system, about 20 min before departure** |
+| Planned advisories sensor | populated | always 0 — the feed carries live messages only |
+| Transfer itineraries | shown where nothing runs direct | not available; such a commute falls back to label matching |
+
+**The signalling track is the reason to bother.** At New York Penn, RailData's
+vehicle feed reports which track circuit each train is standing on, and Penn's
+platform circuits decode to platform numbers. For roughly two thirds of
+departures the set is on its platform well before the board says so — a median
+of about 20 minutes before departure, against the board's 10 — and across
+several days of comparison the signal matched the board 229 times out of 231.
+It appears on the departure sensors as `signalled_track`, with `track_source`
+saying which answer is current. Only New York Penn is decoded so far; other
+stations report `null`.
+
+RailData rations its calls: ten sign-ins a day, five schedule downloads a day,
+40,000 realtime calls a day. The integration keeps the sign-in token and each
+station's daily schedule in Home Assistant's storage so restarts do not spend
+them again. Two commutes on the same account share everything. A board poll a
+minute plus the signalling feed beside it is under 3,000 calls a day.
+
+To switch an existing commute, open the entry and choose **Reconfigure**.
+Stations and options are kept; only the client underneath changes. If NJ
+Transit rejects the stored password later, Home Assistant asks for a new one.
+
+Station proximity — the nearest-station suggestion at setup and the
+`origin_latitude`/`origin_longitude` attributes — always comes from
+njtransit.com, whichever source the commute reads from. RailData publishes no
+coordinates, and this is a one-off anonymous lookup of a public fact rather
+than a feed.
 
 ## Options
 
@@ -169,7 +212,9 @@ integration is working, there is simply no train.
 | `train_id` | A **string**, not a number — Trenton's board carries Amtrak IDs like `A79` |
 | `destination` | Headsign text, e.g. `New York -SEC` |
 | `line` | e.g. `Morristown Line` |
-| `track` | Platform, or `null` until assigned |
+| `track` | Platform as the board posts it, or `null` until assigned |
+| `signalled_track` | Platform the signalling system shows the train standing on, or `null`. RailData source, New York Penn only — see [Choosing a data source](#choosing-a-data-source) |
+| `track_source` | `board` once the board has posted, `signalled` when only the signalling system has, `null` when neither |
 | `status` | Normalized: `on_time`, `delayed`, `cancelled`, `boarding`, `all_aboard`, `departed`, `unknown` |
 | `status_raw` | The board's own text, e.g. `in 21 Min`. Empty until realtime data exists |
 | `status_text` | One phrase combining status and delay — see below |
@@ -765,7 +810,7 @@ Display `status_text` rather than deriving your own from `status` and
 
 ## Reliability
 
-The endpoint is private and undocumented, so this integration is built
+The default endpoint is private and undocumented, so this integration is built
 defensively:
 
 - GraphQL field selections are **pinned**, not broad. Requesting a field the
@@ -779,7 +824,9 @@ defensively:
   broken install.
 
 That reduces the blast radius. It does not eliminate it. If NJ Transit changes
-the endpoint, this will need updating.
+the endpoint, this will need updating — or switch the commute to the
+[RailData source](#choosing-a-data-source), which NJ Transit documents and
+supports.
 
 ## Troubleshooting
 
@@ -798,9 +845,13 @@ out.
 **The calendar shows a train that was cancelled.** The calendar is the
 timetable. Cancellations are folded in only for departures on the live board.
 
+**RailData says the sign-in limit is used up.** Ten token requests a day, and
+the integration normally spends one. Repeated reconfiguring or restarting with
+a broken token store can use them; wait until midnight Eastern.
+
 **Something else.** Download diagnostics from the integration's device page —
 Settings → Devices & Services → NJ Transit → the device → ⋮ → **Download
-diagnostics**. It contains no credentials, because the endpoint takes none.
+diagnostics**. It names the data source and never includes credentials.
 
 ## Contributing
 

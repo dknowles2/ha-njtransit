@@ -12,6 +12,17 @@ CONF_ORIGIN_ID: Final = "origin_id"
 CONF_DESTINATION: Final = "destination"
 CONF_DESTINATION_ID: Final = "destination_id"
 
+# Which API answers. Stored in the entry's data rather than its options
+# because changing it changes the client every coordinator is built on,
+# which is a reload, not a live tweak.
+CONF_SOURCE: Final = "source"
+SOURCE_WEBSITE: Final = "website"
+"""The private GraphQL endpoint behind njtransit.com. No account needed."""
+SOURCE_RAILDATA: Final = "raildata"
+"""NJ Transit's documented RailData API. Needs a developer account, and in
+return gives the signalling system's track before the board posts it."""
+DEFAULT_SOURCE: Final = SOURCE_WEBSITE
+
 CONF_DEPARTURE_INTERVAL: Final = "departure_interval"
 CONF_STATUS_INTERVAL: Final = "status_interval"
 CONF_DEPARTURE_COUNT: Final = "departure_count"
@@ -45,3 +56,8 @@ TRACK_HISTORY_DAYS: Final = 30
 # largest thing the integration owns, and Home Assistant flushes a pending
 # delayed save on shutdown, so a long delay costs nothing but a crash.
 TRACK_HISTORY_SAVE_DELAY: Final = 600
+
+# Storage key for what the RailData client must not fetch twice: its token
+# (ten a day) and each station's schedule (five a day). One file per account.
+RAILDATA_STORAGE_KEY: Final = f"{DOMAIN}.raildata"
+RAILDATA_STORAGE_VERSION: Final = 1

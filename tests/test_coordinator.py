@@ -21,14 +21,16 @@ from pytest_homeassistant_custom_component.test_util.aiohttp import (
 )
 
 from custom_components.njtransit.api.client import NJTransitClient
-from custom_components.njtransit.api.parsing import TZ
+from custom_components.njtransit.api.parsing import TZ, now_local
 from custom_components.njtransit.coordinator import (
+    ROUTE_REFRESH_AT,
     DepartureCoordinator,
     ProgressCoordinator,
     RouteCoordinator,
     StaticCoordinator,
     SystemStatusCoordinator,
     store_for,
+    until_next,
 )
 
 from .conftest import install_api_mock
@@ -293,3 +295,33 @@ class TestProgressCoordinator:
             assert coordinator.data is None
         finally:
             await session.close()
+
+
+class TestRouteRefreshCadence:
+    """The route re-resolves at a fixed early-morning time, not setup + 24h."""
+
+    @pytest.mark.parametrize(
+        ("now", "expected"),
+        [
+            # Before the hour: later today.
+            (datetime(2026, 9, 14, 0, 30, tzinfo=TZ), timedelta(hours=1, minutes=15)),
+            # After it: tomorrow.
+            (datetime(2026, 9, 14, 15, 0, tzinfo=TZ), timedelta(hours=10, minutes=45)),
+            # On it: a full day, never zero.
+            (datetime(2026, 9, 14, 1, 45, tzinfo=TZ), timedelta(days=1)),
+        ],
+    )
+    def test_until_next(self, now: datetime, expected: timedelta) -> None:
+        assert until_next(ROUTE_REFRESH_AT, now) == expected
+
+    async def test_a_refresh_schedules_the_next_for_the_morning(
+        self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+    ) -> None:
+        install_api_mock(aioclient_mock)
+        entry = make_entry()
+        await setup_entry(hass, entry)
+
+        interval = entry.runtime_data.route.update_interval
+        assert interval is not None
+        assert timedelta(0) < interval <= timedelta(days=1)
+        assert interval == until_next(ROUTE_REFRESH_AT, now_local())
