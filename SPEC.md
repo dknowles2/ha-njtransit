@@ -407,15 +407,18 @@ Lower Level's `4` is platform `E`. Applied at parse time, keyed by station code,
 `Departure.track` means the same thing on both sources.
 
 **The signaled track, which is the point.** `getVehicleData` reports every running
-train's last track circuit — a signaling-system name like `AA-AAJO13ATK` — and at New
+train's last track circuit — a signaling-system name like `JO-AJO13ATK` — and at New
 York Penn those decode to platforms:
 
 ```
-platform = 22 - n      n after "AJO" in AA-AAJO13ATK, or the two digits after "-A" in AA-A190TK
+platform = 22 - n      n after "AJO" in JO-AJO13ATK or JO-AJO16TK, or the two digits after "-A" in AA-A190TK
 ```
 
-Only circuits ending `TK` are track circuits; `R`, `P`, `N`, `UP`, `DP` are route and
-points indications a train waits on at a signal and decode to nothing. Written as a
+The letter after the number is `A`, `B` or absent -- the letterless form is one sighting in
+eight and was missed for the first week, at the cost of thirteen minutes of warning on the
+one train it was checked against. Only circuits ending `TK` are track circuits; `R`, `P`,
+`N`, `UP`, `DP` are route and points indications a train waits on at a signal and decode
+to nothing. Written as a
 hypothesis against five pairs on the first night, confirmed on the next ten, and holding at
 **229 of 231** board postings over the following days. Against the board's median
 posting at T-10, the signal shows the set on its platform at a median of 18 minutes

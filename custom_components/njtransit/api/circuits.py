@@ -1,7 +1,7 @@
 """Decode the RailData feed's track circuits into public platform numbers.
 
 ``getVehicleData`` reports every running train's last track circuit -- a
-signaling-system name like ``AA-AAJO13ATK`` -- rather than a platform. At a
+signaling-system name like ``JO-AJO13ATK`` -- rather than a platform. At a
 station whose circuit naming has been worked out, that name says which
 platform the train is standing on, and it says so before the departure board
 does: at New York Penn the board posts about ten minutes ahead of departure,
@@ -14,7 +14,7 @@ and the two scales meet at 11::
 
     platform = 22 - n
 
-where ``n`` is the number after ``AJO`` in ``AA-AAJO13ATK`` or the two digits
+where ``n`` is the number after ``AJO`` in ``JO-AJO13ATK`` or the two digits
 after ``-A`` in ``AA-A190TK``. Written down as a hypothesis against five
 pairs on the first night, confirmed on the next ten it had never seen, and
 holding at 229 of 231 board postings over the following days. Only circuits
@@ -33,7 +33,11 @@ from __future__ import annotations
 import re
 from collections.abc import Callable
 
-_PENN_AJO = re.compile(r"AJO(\d+)[AB]TK$")
+# `JO-AJO13ATK`, `JO-AJO13BTK` and -- one sighting in eight -- `JO-AJO16TK`
+# with no letter at all. The letterless form was missed for the first week
+# because nobody had seen one; 19 of the 20 recorded before a board posting
+# agreed with the board, which is the same rate as the lettered ones.
+_PENN_AJO = re.compile(r"AJO(\d+)[AB]?TK$")
 _PENN_A_SERIES = re.compile(r"-A(\d\d)\dTK$")
 
 # Penn's platforms run 1 to 21; anything outside that is a circuit the formula
