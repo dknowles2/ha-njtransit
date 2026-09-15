@@ -51,7 +51,7 @@ def departure(
     *,
     train_id: str = "6320",
     track: str | None = "2",
-    signalled_track: str | None = None,
+    signaled_track: str | None = None,
     status: str = "on_time",
     status_text: str = "On time",
     delay: int | None = 0,
@@ -71,10 +71,10 @@ def departure(
             "device_class": "timestamp",
             "train_id": train_id,
             "track": track,
-            "signalled_track": signalled_track,
+            "signaled_track": signaled_track,
             "track_source": "board"
             if track
-            else ("signalled" if signalled_track else None),
+            else ("signaled" if signaled_track else None),
             "status": status,
             "status_text": status_text,
             "status_raw": status_raw,
@@ -453,18 +453,18 @@ async def test_a_track_appearing_is_news(
     assert "Track 4" in sent[-1]["title"]
 
 
-async def test_a_signalled_track_is_shown_as_likely(
+async def test_a_signaled_track_is_shown_as_likely(
     hass: HomeAssistant,
     notifications: list[ServiceCall],
     freezer: FrozenDateTimeFactory,
 ) -> None:
-    """Before the board posts, the signalling system's platform stands in,
+    """Before the board posts, the signaling system's platform stands in,
     marked as a likelihood."""
     freezer.move_to(MORNING)
     leaves = MORNING + timedelta(minutes=20)
     await install(hass)
 
-    hass.states.async_set(FAVORITE, *departure(leaves, track=None, signalled_track="3"))
+    hass.states.async_set(FAVORITE, *departure(leaves, track=None, signaled_track="3"))
     await hass.async_block_till_done()
 
     sent = pushes(notifications)
@@ -472,7 +472,7 @@ async def test_a_signalled_track_is_shown_as_likely(
     assert "Track 3 (likely)" in sent[-1]["title"]
 
 
-async def test_a_signalled_track_appearing_is_news(
+async def test_a_signaled_track_appearing_is_news(
     hass: HomeAssistant,
     notifications: list[ServiceCall],
     freezer: FrozenDateTimeFactory,
@@ -486,7 +486,7 @@ async def test_a_signalled_track_appearing_is_news(
     await hass.async_block_till_done()
     hass.states.async_set(
         FAVORITE,
-        *departure(leaves, track=None, signalled_track="3", status_raw="in 22 Min"),
+        *departure(leaves, track=None, signaled_track="3", status_raw="in 22 Min"),
     )
     await hass.async_block_till_done()
 
@@ -506,11 +506,11 @@ async def test_the_board_posting_drops_the_likely(
     leaves = MORNING + timedelta(minutes=12)
     await install(hass)
 
-    hass.states.async_set(FAVORITE, *departure(leaves, track=None, signalled_track="3"))
+    hass.states.async_set(FAVORITE, *departure(leaves, track=None, signaled_track="3"))
     await hass.async_block_till_done()
     hass.states.async_set(
         FAVORITE,
-        *departure(leaves, track="4", signalled_track="3", status_raw="in 11 Min"),
+        *departure(leaves, track="4", signaled_track="3", status_raw="in 11 Min"),
     )
     await hass.async_block_till_done()
 

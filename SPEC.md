@@ -371,7 +371,7 @@ client holds a token that belongs to one account.
 | alerts | `getSystemStatus` | `getStationMSG` with empty station and line | one `SystemAlert` per line in `MSG_LINE_SCOPE`, as the website repeats a multi-line alert; `is_advisory` is always `False` — the feed carries live messages only, so the advisories sensor reads 0 on this source |
 | day's trains | `getTripPlannerSchedule`, paged | `getStationSchedule` for origin and destination, joined on train number | direct trains only, which is §2.7's filter anyway; where nothing runs direct the route degrades to label matching instead of showing connections |
 | coordinates | `TripPlannerAlternates` / `DVCloseStation` | — | **always the website**, whichever source. RailData publishes none; this is a one-shot anonymous lookup of a public fact, not a feed |
-| signalled track | — | `getVehicleData` | below |
+| signaled track | — | `getVehicleData` | below |
 
 **Three documented limits shape the client.** `getToken` may be called ten times a day and
 its token lasts 24 hours; `getStationSchedule` five times a day; realtime methods 40,000
@@ -406,8 +406,8 @@ feed reports the railroad's track number and the signs say something else — Se
 Lower Level's `4` is platform `E`. Applied at parse time, keyed by station code, so
 `Departure.track` means the same thing on both sources.
 
-**The signalled track, which is the point.** `getVehicleData` reports every running
-train's last track circuit — a signalling-system name like `AA-AAJO13ATK` — and at New
+**The signaled track, which is the point.** `getVehicleData` reports every running
+train's last track circuit — a signaling-system name like `AA-AAJO13ATK` — and at New
 York Penn those decode to platforms:
 
 ```
@@ -427,14 +427,24 @@ which is usually still in the throat, and polling faster does not change that (m
 arrivals caught on a platform). That is the feed's limit, and the throat-to-platform map
 that would lift it is future work.
 
+`getVehicleData` lists only trains that have moved in the last five minutes, so a set
+standing on its platform drops out of the feed while it waits and reappears when it boards.
+The client therefore *remembers* the last platform sighting per station, train number and
+scheduled departure, and keeps reporting it while the train is absent from the feed. A
+sighting on another platform replaces it; a sighting anywhere that is not a platform --
+the throat, a switch -- clears it, because the train has moved off; a feed that could not
+be read changes nothing. The memory is dropped when the train leaves the board, which
+bounds it at the board's nineteen rows and means a later run under the same number starts
+clean.
+
 This is exactly the "which track is occupied" signal §3.8 declared unobtainable, and it
 is: unobtainable *from the website*. The client attaches it as
-`Departure.signalled_track`, matched on train number and scheduled origin departure so a
+`Departure.signaled_track`, matched on train number and scheduled origin departure so a
 set standing under yesterday's number is not this train. It is deliberately **not** folded
 into `Departure.track`: the board is the official answer, the track history (§7.2) is
-measured against the board's posting time, and a signalled platform recorded as a posting
+measured against the board's posting time, and a signaled platform recorded as a posting
 would corrupt the one measurement that makes that history worth keeping.
-`Departure.track_source` (`board` / `signalled` / `None`) is what a consumer wanting one
+`Departure.track_source` (`board` / `signaled` / `None`) is what a consumer wanting one
 answer reads. Decoders are per station in `api/circuits.py`; only `NY` exists, and any
 other station answers `None` rather than a guess.
 

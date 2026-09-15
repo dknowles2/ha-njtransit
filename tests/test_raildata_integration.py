@@ -275,7 +275,7 @@ class TestSetup:
         asked = [c for c in called if c["method"] == "getTrainSchedule19Rec"]
         assert asked[0]["station"] == "RT"
 
-    async def test_the_signalled_track_reaches_the_sensor(
+    async def test_the_signaled_track_reaches_the_sensor(
         self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
     ) -> None:
         """New York Penn, train 3889: the board says 3 and so does the circuit."""
@@ -295,7 +295,7 @@ class TestSetup:
         assert state is not None
         assert state.attributes["train_id"] == "3889"
         assert state.attributes["track"] == "3"
-        assert state.attributes["signalled_track"] == "3"
+        assert state.attributes["signaled_track"] == "3"
         assert state.attributes["track_source"] == "board"
 
     async def test_two_entries_on_one_account_share_a_client(

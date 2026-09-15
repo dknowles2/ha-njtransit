@@ -480,35 +480,46 @@ def join_schedules(
 
 @dataclass(frozen=True)
 class Sighting:
-    """A train the signalling system shows standing on a platform."""
+    """Where the signaling system last showed a train."""
 
     train_id: str
-    platform: str
+    platform: str | None
+    """The public platform, when the circuit is one at the station asked
+    about. ``None`` means the train was seen somewhere that is not a platform
+    there -- a throat, a switch, another station, the yard -- which is not
+    the same as not being seen at all."""
     scheduled: datetime | None
     """The train's scheduled departure from its origin, for matching a
     sighting to a board row rather than to yesterday's train of the same
     number."""
 
+    def matches(self, train_id: str, scheduled: datetime) -> bool:
+        """Whether this sighting is of the board row given."""
+        return self.train_id == train_id and (
+            self.scheduled is None or self.scheduled == scheduled
+        )
+
 
 def parse_sightings(
     station_code: str, payload: list[dict[str, Any]] | None
 ) -> tuple[Sighting, ...]:
-    """Return the trains ``getVehicleData`` shows on a platform at a station.
+    """Return where ``getVehicleData`` shows every train it knows about.
 
-    Everything else in the feed -- trains elsewhere on the network, trains on
-    a throat or a switch, stations without a decoder -- is dropped here, so
-    the client only ever sees platform sightings it can act on.
+    Every train in the feed is returned, with a platform only when its
+    circuit is one at the station asked about. The ones seen elsewhere are
+    kept because "seen elsewhere" is information: a train that was on
+    platform 3 and is now on a switch has left it, where a train that has
+    simply dropped out of the feed is standing still.
     """
     sightings: list[Sighting] = []
     for item in payload or ():
         train_id = _text(item, "ID")
-        platform = decode_platform(station_code, _text(item, "ICS_TRACK_CKT"))
-        if not train_id or platform is None:
+        if not train_id:
             continue
         sightings.append(
             Sighting(
                 train_id=train_id,
-                platform=platform,
+                platform=decode_platform(station_code, _text(item, "ICS_TRACK_CKT")),
                 scheduled=parse_timestamp(item.get("SCHED_DEP_TIME")),
             )
         )

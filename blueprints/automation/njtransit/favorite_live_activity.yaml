@@ -17,7 +17,7 @@ blueprint:
 
 
     On the RailData source at New York Penn, the track can be known before the
-    board posts it: the signalling system shows which platform the train is
+    board posts it: the signaling system shows which platform the train is
     standing on, typically ten minutes earlier, and has matched the board 229
     times out of 231. That shows as **Track 3 (likely)** until the board
     confirms it, at which point the "(likely)" drops.
@@ -564,7 +564,7 @@ variables:
   #     on its own schedule while the favourite sits still.
   shown_fields: >-
     {{ [states(source), state_attr(source, 'train_id'),
-        state_attr(source, 'track'), state_attr(source, 'signalled_track'),
+        state_attr(source, 'track'), state_attr(source, 'signaled_track'),
         state_attr(source, 'status_text'), state_attr(source, 'crowding')] }}
   changed: >-
     {{ riding
@@ -573,7 +573,7 @@ variables:
        or [trigger.from_state.state,
            trigger.from_state.attributes.get('train_id'),
            trigger.from_state.attributes.get('track'),
-           trigger.from_state.attributes.get('signalled_track'),
+           trigger.from_state.attributes.get('signaled_track'),
            trigger.from_state.attributes.get('status_text'),
            trigger.from_state.attributes.get('crowding')] != shown_fields }}
   ride_train: "{{ state_attr(progress_entity, 'train_id') or '' }}"
@@ -582,16 +582,16 @@ variables:
   ride_late: "{{ state_attr(progress_entity, 'minutes_late') | int(0) }}"
   train: "{{ state_attr(source, 'train_id') or '' }}"
   # The board's track once it has posted one; before that, the platform the
-  # signalling system shows the train standing on, if the source carries it.
+  # signaling system shows the train standing on, if the source carries it.
   # The board always wins -- it is the official answer and the one the
-  # platform signs match -- and the signalled one is marked as a likelihood,
+  # platform signs match -- and the signaled one is marked as a likelihood,
   # however good its record, because a "3" that turns into a "4" with no
   # warning is worse than a "3 (likely)" that does.
   posted_track: "{{ state_attr(source, 'track') }}"
-  signalled_track: "{{ state_attr(source, 'signalled_track') }}"
+  signaled_track: "{{ state_attr(source, 'signaled_track') }}"
   track: >-
     {{ posted_track if posted_track else
-       (signalled_track ~ ' (likely)' if signalled_track else none) }}
+       (signaled_track ~ ' (likely)' if signaled_track else none) }}
   status: "{{ state_attr(source, 'status_text') or 'Scheduled' }}"
   destination: "{{ state_attr(source, 'destination') or '' }}"
   # How full the train is, when the board says. It only carries consist data

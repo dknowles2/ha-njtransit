@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Choose a data source",
-        "description": "Both give the same departures and alerts. RailData is NJ Transit's documented API: it needs a free developer account from developer.njtransit.com, and at New York Penn it reports the platform from the signalling system about ten minutes before the board posts it.",
+        "description": "Both give the same departures and alerts. RailData is NJ Transit's documented API: it needs a free developer account from developer.njtransit.com, and at New York Penn it reports the platform from the signaling system about ten minutes before the board posts it.",
         "menu_options": {
           "website": "njtransit.com (no account needed)",
           "raildata": "RailData API (developer account; shows tracks earlier)"

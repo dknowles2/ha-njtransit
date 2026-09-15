@@ -7,7 +7,7 @@ make the second commute look like a duplicate.
 
 The first question is which API to read from. The website needs nothing and
 is the default; RailData needs a developer account and, in return, reports
-the platform from the signalling system before the board posts it. The
+the platform from the signaling system before the board posts it. The
 choice is per commute and lives in the entry's data, so the reconfigure flow
 is where it changes -- swapping the source swaps the client under every
 coordinator, which is a reload rather than an option.

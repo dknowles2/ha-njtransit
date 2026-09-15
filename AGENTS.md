@@ -23,9 +23,9 @@ account and rations its calls -- ten sign-ins a day, five schedule downloads a
 day. `api/raildata.py` keeps the token and every fetched station-day in
 storage so a restart spends nothing; if you touch it, keep it that way, and
 never log, print or assert on a credential. In return it carries the one
-thing the website cannot: the signalling system's view of which platform a
+thing the website cannot: the signaling system's view of which platform a
 train is standing on, decoded per station in `api/circuits.py`. Only New York
-Penn is decoded. **`Departure.signalled_track` is kept apart from
+Penn is decoded. **`Departure.signaled_track` is kept apart from
 `Departure.track` on purpose** -- the track history is measured against the
 board's posting time, and folding the signal in would corrupt that
 measurement.

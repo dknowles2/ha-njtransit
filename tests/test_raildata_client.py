@@ -29,7 +29,12 @@ from custom_components.njtransit.api.raildata import (
 )
 from custom_components.njtransit.api.raildata_parsing import LINES
 
-from .conftest import TEST_TOKEN, MemoryStore, install_raildata_mock
+from .conftest import (
+    TEST_TOKEN,
+    MemoryStore,
+    install_raildata_mock,
+    load_raildata_fixture,
+)
 
 # When the fixtures were recorded, so "today" lines up with the schedule.
 RECORDED_AT = datetime(2026, 9, 14, 21, 27, tzinfo=TZ)
@@ -399,7 +404,7 @@ class TestStationNames:
 class TestSignal:
     """The one thing this source has that the website does not."""
 
-    async def test_a_penn_departure_gets_its_signalled_track(
+    async def test_a_penn_departure_gets_its_signaled_track(
         self, client_for: ClientFactory
     ) -> None:
         """Train 3889, recorded on track 3 by the board and circuit AA-A190TK."""
@@ -409,11 +414,11 @@ class TestSignal:
         by_id = {d.train_id: d for d in board.departures}
 
         assert by_id["3889"].track == "3"
-        assert by_id["3889"].signalled_track == "3"
+        assert by_id["3889"].signaled_track == "3"
         assert by_id["3889"].track_source == "board"
         # Everything else on the board was not on a platform yet.
         assert all(
-            d.signalled_track is None for d in board.departures if d.train_id != "3889"
+            d.signaled_track is None for d in board.departures if d.train_id != "3889"
         )
 
     async def test_the_signal_stands_in_before_the_board_posts(
@@ -430,8 +435,8 @@ class TestSignal:
         train = next(d for d in departures if d.train_id == "3889")
 
         assert train.track is None
-        assert train.signalled_track == "3"
-        assert train.track_source == "signalled"
+        assert train.signaled_track == "3"
+        assert train.track_source == "signaled"
         assert train.best_track == "3"
 
     async def test_a_sighting_of_another_run_of_the_same_number_is_ignored(
@@ -447,9 +452,102 @@ class TestSignal:
         departures = (await client_for(mocker).departures("NY")).departures
         train = next(d for d in departures if d.train_id == "3889")
 
-        assert train.signalled_track is None
+        assert train.signaled_track is None
 
-    async def test_the_signalling_feed_is_not_read_elsewhere(
+    async def test_a_sighting_is_remembered_while_the_train_stands_still(
+        self, client_for: ClientFactory
+    ) -> None:
+        """The feed lists trains that moved in the last five minutes. A set
+        waiting on its platform drops out of it; the platform must not."""
+        mocker = AiohttpClientMocker()
+        install_raildata_mock(mocker)
+        client = client_for(mocker)
+        first = await client.departures("NY")
+        assert _train(first, "3889").signaled_track == "3"
+
+        mocker.clear_requests()
+        install_raildata_mock(mocker, {"getVehicleData": _vehicles_without("3889")})
+        second = await client.departures("NY")
+
+        assert _train(second, "3889").signaled_track == "3"
+
+    async def test_a_train_seen_off_the_platform_is_forgotten(
+        self, client_for: ClientFactory
+    ) -> None:
+        """Seen elsewhere is not the same as not seen: it moved."""
+        mocker = AiohttpClientMocker()
+        install_raildata_mock(mocker)
+        client = client_for(mocker)
+        await client.departures("NY")
+
+        mocker.clear_requests()
+        install_raildata_mock(
+            mocker, {"getVehicleData": _vehicles_with("3889", "AA-AAJO13AUP")}
+        )
+        board = await client.departures("NY")
+
+        assert _train(board, "3889").signaled_track is None
+
+    async def test_a_new_platform_replaces_the_old(
+        self, client_for: ClientFactory
+    ) -> None:
+        mocker = AiohttpClientMocker()
+        install_raildata_mock(mocker)
+        client = client_for(mocker)
+        await client.departures("NY")
+
+        mocker.clear_requests()
+        install_raildata_mock(
+            mocker, {"getVehicleData": _vehicles_with("3889", "AA-A170TK")}
+        )
+        board = await client.departures("NY")
+
+        assert _train(board, "3889").signaled_track == "5"
+
+    async def test_an_unreadable_feed_keeps_what_was_known(
+        self, client_for: ClientFactory
+    ) -> None:
+        mocker = AiohttpClientMocker()
+        install_raildata_mock(mocker)
+        client = client_for(mocker)
+        await client.departures("NY")
+
+        mocker.clear_requests()
+        install_raildata_mock(mocker, {"getVehicleData": TimeoutError()})
+        board = await client.departures("NY")
+
+        assert _train(board, "3889").signaled_track == "3"
+
+    async def test_memory_is_dropped_once_the_train_leaves_the_board(
+        self, client_for: ClientFactory
+    ) -> None:
+        """Bounded by the board, so a day of departures does not accumulate,
+        and a later run under the same number starts clean."""
+        mocker = AiohttpClientMocker()
+        install_raildata_mock(mocker)
+        client = client_for(mocker)
+        await client.departures("NY")
+
+        board = _new_york_board()
+        board["ITEMS"] = [i for i in board["ITEMS"] if i["TRAIN_ID"] != "3889"]
+        mocker.clear_requests()
+        install_raildata_mock(
+            mocker,
+            {
+                "getTrainSchedule19Rec": board,
+                "getVehicleData": _vehicles_without("3889"),
+            },
+        )
+        await client.departures("NY")
+
+        # Back on the board, unseen by the feed: nothing is remembered.
+        mocker.clear_requests()
+        install_raildata_mock(mocker, {"getVehicleData": _vehicles_without("3889")})
+        again = await client.departures("NY")
+
+        assert _train(again, "3889").signaled_track is None
+
+    async def test_the_signaling_feed_is_not_read_elsewhere(
         self, client_for: ClientFactory
     ) -> None:
         """Short Hills has no decoder, so the call would be wasted."""
@@ -466,7 +564,7 @@ class TestSignal:
         board = await client_for(mocker).departures("NY")
 
         assert len(board.departures) == 19
-        assert all(d.signalled_track is None for d in board.departures)
+        assert all(d.signaled_track is None for d in board.departures)
 
 
 class TestRuns:
@@ -608,6 +706,23 @@ def _mocked() -> AiohttpClientMocker:
 
 def _new_york_board() -> dict[str, Any]:
     """Return a mutable copy of the recorded New York board."""
-    from .conftest import load_raildata_fixture
-
     return load_raildata_fixture("train_schedule19_new_york")
+
+
+def _train(board: Any, train_id: str) -> Any:
+    """Return one departure from a board."""
+    return next(d for d in board.departures if d.train_id == train_id)
+
+
+def _vehicles_without(train_id: str) -> list[dict[str, Any]]:
+    """Return the recorded vehicle feed with one train dropped from it."""
+    return [v for v in load_raildata_fixture("vehicle_data") if v["ID"] != train_id]
+
+
+def _vehicles_with(train_id: str, circuit: str) -> list[dict[str, Any]]:
+    """Return the recorded vehicle feed with one train moved to ``circuit``."""
+    vehicles = load_raildata_fixture("vehicle_data")
+    for vehicle in vehicles:
+        if vehicle["ID"] == train_id:
+            vehicle["ICS_TRACK_CKT"] = circuit
+    return vehicles
