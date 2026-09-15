@@ -126,8 +126,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: NJTransitConfigEntry) ->
                 "system status",
                 _interval(entry, CONF_STATUS_INTERVAL, DEFAULT_STATUS_INTERVAL),
             )
-            await static.async_config_entry_first_refresh()
-            await status.async_config_entry_first_refresh()
+            await static.async_first_refresh()
+            await status.async_first_refresh()
             history = hass.data.get(_HISTORY)
             if not isinstance(history, TrackHistory):
                 history = TrackHistory(hass)
@@ -136,6 +136,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: NJTransitConfigEntry) ->
             store = CoordinatorStore(
                 client=client, static=static, status=status, history=history
             )
+            store.adopt(hass, static)
+            store.adopt(hass, status)
             register_store(hass, key, store)
         else:
             client = store.client
@@ -250,6 +252,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: NJTransitConfigEntry) ->
         history=store.history,
         origin=origin,
         destination=destination,
+        store_key=key,
         origin_coordinates=origin_coordinates,
         options=dict(entry.options),
     )
@@ -265,7 +268,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: NJTransitConfigEntry) -
     if not unloaded:
         return False
 
-    key = store_key(entry)
+    key = entry.runtime_data.store_key
     store = store_for(hass, key)
     if store is None:
         return True
