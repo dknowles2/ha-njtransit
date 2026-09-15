@@ -6,7 +6,7 @@ carrying a token that ``getToken`` issues in exchange for a developer
 account's username and password. Compared with the website's GraphQL
 endpoint it is sturdier -- documented, versioned, with a compatibility
 promise -- and it carries one thing the website cannot: ``getVehicleData``,
-the signalling system's view of where every train is standing, which at New
+the signaling system's view of where every train is standing, which at New
 York Penn says which platform a departure will leave from some ten minutes
 before the board does (SPEC 2.9).
 
@@ -23,7 +23,7 @@ Three limits shape the design, all from the documentation:
   twice. Two commutes between the same two stations cost two calls a day,
   restarts included.
 * **Realtime calls are capped at 40,000 a day.** A board poll a minute is
-  1,440; a signalling poll beside it doubles that. Comfortable, but not
+  1,440; a signaling poll beside it doubles that. Comfortable, but not
   something to spend on faster polling than the feed refreshes.
 
 Credentials are held only on this object. They are never logged, never put
@@ -53,6 +53,7 @@ from .exceptions import (
     NJTransitQuotaError,
 )
 from .models import (
+    Departure,
     DepartureBoard,
     RailLine,
     ScheduledTrip,
@@ -65,6 +66,7 @@ from .parsing import now_local
 from .raildata_parsing import (
     LINES,
     ScheduleCall,
+    Sighting,
     join_schedules,
     parse_board,
     parse_messages,
@@ -161,6 +163,11 @@ class RailDataClient:
         self._stations_fetched: datetime | None = None
         self._codes: dict[str, str] = {}
         self._schedule_lock = asyncio.Lock()
+
+        self._platforms: dict[tuple[str, str, datetime], str] = {}
+        """The last platform the signaling system showed each departure on,
+        by station, train number and scheduled departure. See
+        :meth:`_signaled`."""
 
     # -- persistence -------------------------------------------------------
 
@@ -366,9 +373,9 @@ class RailDataClient:
     async def departures(self, station: str) -> DepartureBoard:
         """Return a station's departure board.
 
-        At a station whose track circuits are decoded, the signalling feed is
+        At a station whose track circuits are decoded, the signaling feed is
         read beside the board and any departure it shows standing on a
-        platform gets that platform as ``signalled_track``. A failure there
+        platform gets that platform as ``signaled_track``. A failure there
         costs the signal, never the board: the board is the product and the
         signal is the bonus.
 
@@ -390,27 +397,63 @@ class RailDataClient:
         try:
             vehicles = await self._call("getVehicleData")
         except NJTransitError as err:
-            _LOGGER.debug("Signalling feed unavailable for %s: %s", station, err)
-            return board
-
-        sightings = {
-            sighting.train_id: sighting
-            for sighting in parse_sightings(
+            _LOGGER.debug("Signaling feed unavailable for %s: %s", station, err)
+            sightings: tuple[Sighting, ...] | None = None
+        else:
+            sightings = parse_sightings(
                 code, vehicles if isinstance(vehicles, list) else None
             )
-        }
-        departures = []
-        for departure in board.departures:
-            sighting = sightings.get(departure.train_id)
-            # A sighting names the train's scheduled origin departure. When
-            # both sides have one they must agree, or the set on the
-            # platform is a different run under the same number.
-            if sighting is not None and (
-                sighting.scheduled is None or sighting.scheduled == departure.scheduled
-            ):
-                departure = replace(departure, signalled_track=sighting.platform)
-            departures.append(departure)
-        return replace(board, departures=tuple(departures))
+
+        self._forget_departed(code, board)
+        return replace(
+            board,
+            departures=tuple(
+                replace(
+                    departure,
+                    signaled_track=self._signaled(code, departure, sightings),
+                )
+                for departure in board.departures
+            ),
+        )
+
+    def _signaled(
+        self,
+        code: str,
+        departure: Departure,
+        sightings: tuple[Sighting, ...] | None,
+    ) -> str | None:
+        """Return the platform the signaling system has this train on.
+
+        The feed lists only trains that have moved in the last five minutes,
+        so a set standing on its platform drops out of it while it waits and
+        reappears when it boards. A sighting is therefore *remembered* per
+        train and run, and kept while the train is absent from the feed. It
+        is replaced when the train is seen on another platform, and cleared
+        when the train is seen anywhere that is not a platform -- it has
+        moved off, and the last platform is no longer where it is. A feed
+        that could not be read changes nothing.
+
+        Remembered sightings are dropped once the train leaves the board,
+        which is what bounds the memory: nineteen rows at most.
+        """
+        key = (code, departure.train_id, departure.scheduled)
+        if sightings is not None:
+            for sighting in sightings:
+                if not sighting.matches(departure.train_id, departure.scheduled):
+                    continue
+                if sighting.platform is None:
+                    self._platforms.pop(key, None)
+                else:
+                    self._platforms[key] = sighting.platform
+                break
+        return self._platforms.get(key)
+
+    def _forget_departed(self, code: str, board: DepartureBoard) -> None:
+        """Drop remembered platforms for trains no longer on this board."""
+        current = {(code, d.train_id, d.scheduled) for d in board.departures}
+        for key in list(self._platforms):
+            if key[0] == code and key not in current:
+                del self._platforms[key]
 
     async def stations(self) -> tuple[Station, ...]:
         """Return the station list, one row per station.

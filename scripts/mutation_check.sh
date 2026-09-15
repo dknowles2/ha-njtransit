@@ -131,14 +131,33 @@ run "a fetched station-day is fetched again" \
   "            if key not in schedules:" "            if True:"
 
 run "the signal is matched on train number alone" \
-  custom_components/njtransit/api/raildata.py \
-  "sighting.scheduled is None or sighting.scheduled == departure.scheduled" \
-  "True"
+  custom_components/njtransit/api/raildata_parsing.py \
+  "        return self.train_id == train_id and (
+            self.scheduled is None or self.scheduled == scheduled
+        )" \
+  "        return self.train_id == train_id"
 
-run "the signalling feed is read at every station" \
+run "the signaling feed is read at every station" \
   custom_components/njtransit/api/raildata.py \
   "if not has_decoder(code) or not board.departures:" \
   "if not board.departures:"
+
+run "a sighting is forgotten the moment the train stops moving" \
+  custom_components/njtransit/api/raildata.py \
+  "        return self._platforms.get(key)" \
+  "        return self._platforms.pop(key, None)"
+
+run "a train seen off its platform keeps the platform" \
+  custom_components/njtransit/api/raildata.py \
+  "                if sighting.platform is None:
+                    self._platforms.pop(key, None)" \
+  "                if sighting.platform is None:
+                    pass"
+
+run "remembered platforms outlive the board" \
+  custom_components/njtransit/api/raildata.py \
+  "            if key[0] == code and key not in current:" \
+  "            if False:"
 
 run "the signal overrides the board" \
   custom_components/njtransit/api/models.py \
@@ -173,20 +192,20 @@ run "the route refreshes a day after setup rather than in the morning" \
   "        self.update_interval = until_next(ROUTE_REFRESH_AT, now)" \
   "        pass"
 
-run "the Live Activity ignores the signalled track" \
+run "the Live Activity ignores the signaled track" \
   blueprints/automation/njtransit/favorite_live_activity.yaml \
-  "       (signalled_track ~ ' (likely)' if signalled_track else none) }}" \
+  "       (signaled_track ~ ' (likely)' if signaled_track else none) }}" \
   "       none }}"
 
-run "the Live Activity shows the signalled track as posted" \
+run "the Live Activity shows the signaled track as posted" \
   blueprints/automation/njtransit/favorite_live_activity.yaml \
-  "       (signalled_track ~ ' (likely)' if signalled_track else none) }}" \
-  "       (signalled_track if signalled_track else none) }}"
+  "       (signaled_track ~ ' (likely)' if signaled_track else none) }}" \
+  "       (signaled_track if signaled_track else none) }}"
 
-run "a signalled track appearing is not news to the Live Activity" \
+run "a signaled track appearing is not news to the Live Activity" \
   blueprints/automation/njtransit/favorite_live_activity.yaml \
-  "           trigger.from_state.attributes.get('signalled_track')," \
-  "           state_attr(source, 'signalled_track'),"
+  "           trigger.from_state.attributes.get('signaled_track')," \
+  "           state_attr(source, 'signaled_track'),"
 
 run "a rejected credential retries instead of asking for reauth" \
   custom_components/njtransit/coordinator.py \

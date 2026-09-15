@@ -1,7 +1,7 @@
 """Decode the RailData feed's track circuits into public platform numbers.
 
 ``getVehicleData`` reports every running train's last track circuit -- a
-signalling-system name like ``AA-AAJO13ATK`` -- rather than a platform. At a
+signaling-system name like ``AA-AAJO13ATK`` -- rather than a platform. At a
 station whose circuit naming has been worked out, that name says which
 platform the train is standing on, and it says so before the departure board
 does: at New York Penn the board posts about ten minutes ahead of departure,

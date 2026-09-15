@@ -114,17 +114,17 @@ way.
 |---|---|---|
 | Account | none | free developer account from [developer.njtransit.com](https://developer.njtransit.com/registration) |
 | Status | private, undocumented, can change without notice | documented, versioned |
-| Track at New York Penn | when the board posts it, about 10 min before departure | **also from the signalling system, about 20 min before departure** |
+| Track at New York Penn | when the board posts it, about 10 min before departure | **also from the signaling system, about 20 min before departure** |
 | Planned advisories sensor | populated | always 0 — the feed carries live messages only |
 | Transfer itineraries | shown where nothing runs direct | not available; such a commute falls back to label matching |
 
-**The signalling track is the reason to bother.** At New York Penn, RailData's
+**The signaling track is the reason to bother.** At New York Penn, RailData's
 vehicle feed reports which track circuit each train is standing on, and Penn's
 platform circuits decode to platform numbers. For roughly two thirds of
 departures the set is on its platform well before the board says so — a median
 of about 20 minutes before departure, against the board's 10 — and across
 several days of comparison the signal matched the board 229 times out of 231.
-It appears on the departure sensors as `signalled_track`, with `track_source`
+It appears on the departure sensors as `signaled_track`, with `track_source`
 saying which answer is current. Only New York Penn is decoded so far; other
 stations report `null`.
 
@@ -132,7 +132,7 @@ RailData rations its calls: ten sign-ins a day, five schedule downloads a day,
 40,000 realtime calls a day. The integration keeps the sign-in token and each
 station's daily schedule in Home Assistant's storage so restarts do not spend
 them again. Two commutes on the same account share everything. A board poll a
-minute plus the signalling feed beside it is under 3,000 calls a day.
+minute plus the signaling feed beside it is under 3,000 calls a day.
 
 To switch an existing commute, open the entry and choose **Reconfigure**.
 Stations and options are kept; only the client underneath changes. If NJ
@@ -213,8 +213,8 @@ integration is working, there is simply no train.
 | `destination` | Headsign text, e.g. `New York -SEC` |
 | `line` | e.g. `Morristown Line` |
 | `track` | Platform as the board posts it, or `null` until assigned |
-| `signalled_track` | Platform the signalling system shows the train standing on, or `null`. RailData source, New York Penn only — see [Choosing a data source](#choosing-a-data-source) |
-| `track_source` | `board` once the board has posted, `signalled` when only the signalling system has, `null` when neither |
+| `signaled_track` | Platform the signaling system last showed the train standing on, or `null`. Held while the train sits still, cleared if it moves off. RailData source, New York Penn only — see [Choosing a data source](#choosing-a-data-source) |
+| `track_source` | `board` once the board has posted, `signaled` when only the signaling system has, `null` when neither |
 | `status` | Normalized: `on_time`, `delayed`, `cancelled`, `boarding`, `all_aboard`, `departed`, `unknown` |
 | `status_raw` | The board's own text, e.g. `in 21 Min`. Empty until realtime data exists |
 | `status_text` | One phrase combining status and delay — see below |
@@ -458,7 +458,7 @@ Train 6643 · Track 4 · 12 min late · Filling up
 
 On the [RailData source](#choosing-a-data-source) at New York Penn the track
 can be known before the board posts it. Until it does, the activity shows the
-signalling system's platform as a likelihood — `Track 4 (likely)` — and drops
+signaling system's platform as a likelihood — `Track 4 (likely)` — and drops
 the hedge the moment the board confirms. The board always wins if the two ever
 disagree.
 

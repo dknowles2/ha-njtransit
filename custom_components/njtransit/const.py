@@ -20,7 +20,7 @@ SOURCE_WEBSITE: Final = "website"
 """The private GraphQL endpoint behind njtransit.com. No account needed."""
 SOURCE_RAILDATA: Final = "raildata"
 """NJ Transit's documented RailData API. Needs a developer account, and in
-return gives the signalling system's track before the board posts it."""
+return gives the signaling system's track before the board posts it."""
 DEFAULT_SOURCE: Final = SOURCE_WEBSITE
 
 CONF_DEPARTURE_INTERVAL: Final = "departure_interval"

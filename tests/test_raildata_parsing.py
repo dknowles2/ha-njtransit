@@ -79,7 +79,7 @@ class TestBoard:
         assert train.crowding is CrowdLevel.LIGHT
         assert len(train.cars) == 6
         assert train.cars[0].position == "Back"
-        assert train.signalled_track is None
+        assert train.signaled_track is None
 
     def test_a_row_without_realtime_data(self) -> None:
         """Blank status means nothing is known, not that the train is on time."""
@@ -443,22 +443,36 @@ class TestSchedule:
 
 
 class TestSightings:
-    """`getVehicleData`, reduced to platform sightings at one station."""
+    """`getVehicleData`, read for one station."""
 
-    def test_only_platform_circuits_at_a_decoded_station(self) -> None:
+    def test_every_train_is_reported_and_platforms_decoded(self) -> None:
         sightings = parse_sightings("NY", load_raildata_fixture("vehicle_data"))
         by_id = {s.train_id: s for s in sightings}
 
-        assert set(by_id) == {"3289", "3889"}
+        assert len(sightings) == 36
+        assert {s.train_id for s in sightings if s.platform} == {"3289", "3889"}
         assert by_id["3889"].platform == "3"
         assert by_id["3889"].scheduled == datetime(2026, 9, 14, 21, 35, tzinfo=TZ)
+        # Seen, but not on a Penn platform: a Bergen County train upstate.
+        assert by_id["65"].platform is None
 
-    def test_nothing_at_a_station_without_a_decoder(self) -> None:
-        assert parse_sightings("RT", load_raildata_fixture("vehicle_data")) == ()
+    def test_no_platforms_at_a_station_without_a_decoder(self) -> None:
+        sightings = parse_sightings("RT", load_raildata_fixture("vehicle_data"))
+        assert sightings
+        assert all(s.platform is None for s in sightings)
 
     def test_tolerates_an_empty_feed(self) -> None:
         assert parse_sightings("NY", None) == ()
         assert parse_sightings("NY", [{"ID": "", "ICS_TRACK_CKT": "AA-A190TK"}]) == ()
+
+    def test_matching_a_board_row(self) -> None:
+        when = datetime(2026, 9, 14, 21, 35, tzinfo=TZ)
+        sighting = parse_sightings("NY", load_raildata_fixture("vehicle_data"))
+        train = next(s for s in sighting if s.train_id == "3889")
+
+        assert train.matches("3889", when)
+        assert not train.matches("3889", when.replace(day=15))
+        assert not train.matches("3890", when)
 
 
 def _day(
