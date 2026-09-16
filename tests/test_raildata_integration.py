@@ -18,7 +18,7 @@ import pytest
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
-from homeassistant.core import HomeAssistant
+from homeassistant.core import CoreState, HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -651,6 +651,36 @@ class TestSetup:
         assert len(flows) == 1
         assert flows[0]["context"]["entry_id"] == account.entry_id
         assert flows[0]["context"]["source"] == "reauth"
+
+    async def test_unloading_the_account_at_shutdown_schedules_no_reloads(
+        self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+    ) -> None:
+        """At Home Assistant shutdown every commute is being unloaded right
+        along with its account. Scheduling a reload for any of them then
+        would just be a task racing the shutdown itself for work that is
+        immediately undone -- "Task exception was never retrieved" or
+        `OperationNotAllowed` on every restart."""
+        install_api_mock(aioclient_mock)
+        install_raildata_mock(aioclient_mock)
+        account = await setup_account(hass)
+        outbound = make_raildata_entry(account.entry_id)
+        inbound = make_raildata_entry(
+            account.entry_id,
+            origin="New York Penn Station",
+            origin_id="NY",
+            destination="Short Hills",
+            destination_id="RT",
+        )
+        await setup_entry(hass, outbound)
+        await setup_entry(hass, inbound)
+
+        hass.set_state(CoreState.stopping)
+        with patch.object(
+            hass.config_entries, "async_schedule_reload"
+        ) as schedule_reload:
+            assert await hass.config_entries.async_unload(account.entry_id)
+
+        schedule_reload.assert_not_called()
 
     async def test_an_unreachable_api_retries(
         self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker

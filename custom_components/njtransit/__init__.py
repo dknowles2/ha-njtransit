@@ -268,8 +268,16 @@ async def _async_unload_account_entry(
     if store_count(hass) == 0:
         hass.data.pop(_HISTORY, None)
 
+    if hass.is_stopping:
+        # Every commute is being unloaded right along with this account at
+        # shutdown. Scheduling a reload for any of them here would just be a
+        # task racing the shutdown itself -- "Task exception was never
+        # retrieved" or `OperationNotAllowed` on every restart -- for work
+        # that would be immediately undone anyway.
+        return True
+
     for dependent_id in dependents:
-        hass.async_create_task(hass.config_entries.async_reload(dependent_id))
+        hass.config_entries.async_schedule_reload(dependent_id)
 
     return True
 

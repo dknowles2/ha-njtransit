@@ -48,7 +48,12 @@ from homeassistant.helpers.selector import (
     TextSelectorType,
 )
 
-from .account import account_entries, async_create_account_entry, find_account_entry
+from .account import (
+    account_entries,
+    account_unique_id,
+    async_create_account_entry,
+    find_account_entry,
+)
 from .api.client import NJTransitClient
 from .api.exceptions import (
     NJTransitAuthError,
@@ -66,6 +71,7 @@ from .const import (
     CONF_DEPARTURE_INTERVAL,
     CONF_DESTINATION,
     CONF_DESTINATION_ID,
+    CONF_ENTRY_TYPE,
     CONF_FAVORITE_TRAINS,
     CONF_LOOKAHEAD,
     CONF_ORIGIN,
@@ -79,6 +85,7 @@ from .const import (
     DEFAULT_LOOKAHEAD,
     DEFAULT_STATUS_INTERVAL,
     DOMAIN,
+    ENTRY_TYPE_ACCOUNT,
     MAX_DEPARTURE_COUNT,
     MIN_INTERVAL,
     SOURCE_RAILDATA,
@@ -316,6 +323,35 @@ class NJTransitConfigFlow(ConfigFlow, domain=DOMAIN):
             step_id="raildata_account",
             data_schema=_credentials_schema(user_input),
             errors=errors,
+        )
+
+    async def async_step_import(self, import_data: dict[str, Any]) -> ConfigFlowResult:
+        """Create a RailData account entry non-interactively.
+
+        Not reached by anything a user does directly. `account.
+        async_create_account_entry` drives this step -- from this same
+        flow, when a brand-new username is entered, and from
+        `async_migrate_entry` in `__init__.py`, when an old commute's
+        credentials need an account to move onto -- rather than
+        constructing a `ConfigEntry` by hand, which would pin account
+        creation to that class's own constructor across Home Assistant
+        releases.
+
+        The unique ID is set and checked here rather than left to the
+        caller, so a second call for a username that already has an
+        account entry aborts instead of creating a duplicate, exactly as
+        the ordinary flow's `_abort_if_unique_id_configured` would.
+        """
+        username = import_data[CONF_USERNAME]
+        await self.async_set_unique_id(account_unique_id(username))
+        self._abort_if_unique_id_configured()
+        return self.async_create_entry(
+            title=f"RailData ({username})",
+            data={
+                CONF_ENTRY_TYPE: ENTRY_TYPE_ACCOUNT,
+                CONF_USERNAME: username,
+                CONF_PASSWORD: import_data[CONF_PASSWORD],
+            },
         )
 
     async def _check_credentials(self) -> dict[str, str]:

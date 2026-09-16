@@ -84,7 +84,8 @@
         "data_description": {
           "departure_interval": "NJ Transit caches responses for 30 seconds, so polling faster gains nothing.",
           "lookahead": "Departures beyond this window are ignored by the disruption sensor.",
-          "favorite_trains": "Train numbers you usually catch, e.g. 6662. Leave empty to skip the favorite sensor entirely."
+          "favorite_trains": "Train numbers you usually catch, e.g. 6662. Leave empty to skip the favorite sensor entirely.",
+          "status_interval": "On the RailData source, the alert feed is polled per account at a fixed interval rather than this one -- see Choosing a data source in the README."
         }
       }
     }

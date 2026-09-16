@@ -144,14 +144,23 @@ run "direct-only filter disabled" \
 # credentials -- it references an account entry that owns the shared client,
 # and reauth, migration and setup-ordering all depend on getting that
 # reference right.
-run "migration lets two commutes on one username create two accounts" \
-  custom_components/njtransit/__init__.py \
-  "        existing = find_account_entry(hass, username)
-        if existing is not None:
-            return existing" \
-  "        existing = find_account_entry(hass, username)
-        if False:
-            return existing"
+# The migration's own pre-check (`_async_ensure_account_entry` in
+# `__init__.py`) is no longer the only thing standing between two commutes
+# on one username and two account entries: `async_create_account_entry`
+# creates the account through the config flow's own `async_step_import`,
+# which sets the unique ID and aborts on a collision before creating
+# anything, so a second caller gets the existing account back even with the
+# pre-check disabled. Breaking the pre-check alone no longer produces two
+# accounts -- mutating the fallback that reads an aborted flow's result is
+# what actually exercises the collapse-to-one-account guarantee now.
+run "a raced account creation raises instead of returning the existing one" \
+  custom_components/njtransit/account.py \
+  "    existing = find_account_entry(hass, username)
+    if existing is not None:
+        return existing" \
+  "    existing = find_account_entry(hass, username)
+    if False:
+        return existing"
 
 run "a commute sets up before its RailData account is loaded" \
   custom_components/njtransit/__init__.py \
@@ -174,6 +183,11 @@ run "a rejected credential asks every commute instead of the account" \
                 entry = hass.config_entries.async_get_entry(entry_id)
                 if entry is not None:
                     entry.async_start_reauth(hass)"
+
+run "an account unload schedules reloads even while Home Assistant is stopping" \
+  custom_components/njtransit/__init__.py \
+  "    if hass.is_stopping:" \
+  "    if False:"
 
 # The RailData source. Each of these is a behaviour the daily limits or the
 # signal's honesty depend on, and each was fully covered before it was

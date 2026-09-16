@@ -15,13 +15,12 @@ neither should import the other.
 
 from __future__ import annotations
 
-from types import MappingProxyType
-
 from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 
-from .const import CONF_ENTRY_TYPE, CONFIG_ENTRY_VERSION, DOMAIN, ENTRY_TYPE_ACCOUNT
+from .const import CONF_ENTRY_TYPE, DOMAIN, ENTRY_TYPE_ACCOUNT
 
 
 def is_account_entry(entry: ConfigEntry) -> bool:
@@ -62,28 +61,40 @@ async def async_create_account_entry(
 ) -> ConfigEntry:
     """Create, add, and set up a new RailData account entry.
 
+    Goes through the config flow's own `async_step_import` rather than
+    constructing a `ConfigEntry` directly: that class's constructor takes
+    several Home Assistant-internal arguments (`discovery_keys`,
+    `subentries_data`, `minor_version`, ...) that are not a stable
+    integration-facing API and have changed shape across releases, so
+    building one by hand here would be one upgrade away from breaking
+    account creation silently.
+
     The caller is expected to have already checked the credentials -- a
     config flow with `authenticate(fresh=True)`, or a migration reusing
     credentials an existing commute entry was already running on -- because
-    this never spends a `getToken` call itself. Setup of the new entry does
-    call `authenticate()`, but that rides on whatever token the account's
-    storage already holds.
+    this never spends a `getToken` call itself: `async_step_import` only
+    ever calls `async_create_entry`, and the new entry's own setup
+    authenticates without `fresh=True`, riding on whatever token the
+    account's storage already holds.
     """
-    entry = ConfigEntry(
-        version=CONFIG_ENTRY_VERSION,
-        minor_version=1,
-        domain=DOMAIN,
-        title=f"RailData ({username})",
-        data={
-            CONF_ENTRY_TYPE: ENTRY_TYPE_ACCOUNT,
-            CONF_USERNAME: username,
-            CONF_PASSWORD: password,
-        },
-        source=SOURCE_IMPORT,
-        options={},
-        unique_id=account_unique_id(username),
-        discovery_keys=MappingProxyType({}),
-        subentries_data=(),
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": SOURCE_IMPORT},
+        data={CONF_USERNAME: username, CONF_PASSWORD: password},
     )
-    await hass.config_entries.async_add(entry)
-    return entry
+    entry = result.get("result")
+    if isinstance(entry, ConfigEntry):
+        return entry
+
+    # `async_step_import` sets the account's unique ID before creating it,
+    # so a second call for a username that already has an account aborts
+    # with `already_configured` instead of creating a duplicate -- the same
+    # outcome `find_account_entry` gives a caller that checks first, for a
+    # caller (or a second Home Assistant process sharing storage) that
+    # raced it instead.
+    existing = find_account_entry(hass, username)
+    if existing is not None:
+        return existing
+    raise HomeAssistantError(
+        f"Could not create a RailData account entry for {username}"
+    )
