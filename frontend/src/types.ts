@@ -51,6 +51,12 @@ export interface Departure {
   trainId: string | null;
   favorite: boolean;
   track: string | null;
+  /**
+   * The platform the signaling system shows the train standing on, before
+   * the board has posted one. RailData source, New York Penn only; null
+   * everywhere else.
+   */
+  signaledTrack: string | null;
   status: string | null;
   statusText: string | null;
   delayMinutes: number | null;

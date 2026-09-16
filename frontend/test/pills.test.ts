@@ -27,6 +27,7 @@ function train(overrides: Partial<Departure> = {}): Departure {
     trainId: "6613",
     favorite: false,
     track: null,
+    signaledTrack: null,
     status: "on_time",
     statusText: null,
     delayMinutes: null,
@@ -43,6 +44,34 @@ describe("the track pill", () => {
       text: "Track 4",
       tone: "accent",
     });
+  });
+
+  it("shows the signaled platform as likely before the board posts", () => {
+    expect(trackPill(train({ signaledTrack: "7" }), 20, true)).toEqual({
+      text: "Track 7 (likely)",
+      tone: "accent",
+    });
+  });
+
+  it("lets the board win over the signal", () => {
+    // 2 of 231 disagreed. The board is the official answer and the one
+    // the platform signs match.
+    expect(trackPill(train({ track: "8", signaledTrack: "7" }), 20, true)).toEqual({
+      text: "Track 8",
+      tone: "accent",
+    });
+  });
+
+  it("does not call a track overdue when the signal already has it", () => {
+    // The board being late is not news to someone who can see the train.
+    const pill = trackPill(
+      train({ signaledTrack: "7" }),
+      TRACK_OVERDUE_MINUTES,
+      true,
+    );
+
+    expect(pill?.text).toBe("Track 7 (likely)");
+    expect(pill?.tone).toBe("accent");
   });
 
   it("stays quiet when the station is posting no tracks at all", () => {
@@ -104,8 +133,19 @@ describe("the board's track cell", () => {
     expect(trackCell(train({ track: "4" }), 20, true).text).toBe("4");
   });
 
+  it("carries a signaled platform with a question mark", () => {
+    expect(trackCell(train({ signaledTrack: "7" }), 20, true)).toEqual({
+      text: "7?",
+      tone: "accent",
+    });
+  });
+
   it("warns when the track is overdue", () => {
     expect(trackCell(train(), 1, true)).toEqual({ text: "⚠️", tone: "bad" });
+  });
+
+  it("does not warn when the signal already has the platform", () => {
+    expect(trackCell(train({ signaledTrack: "7" }), 1, true).text).toBe("7?");
   });
 
   it("shows a dash rather than a warning when nothing is posted", () => {

@@ -148,6 +148,7 @@ export function readDeparture(
     trainId: text(attributes.train_id),
     favorite: attributes.favorite === true,
     track: text(attributes.track),
+    signaledTrack: text(attributes.signaled_track),
     status: text(attributes.status),
     statusText: text(attributes.status_text),
     delayMinutes: typeof delay === "number" ? delay : null,
