@@ -681,6 +681,11 @@ Two differences worth knowing about:
   recomputes every ten seconds.
 - **Rows open.** Tapping the hero or any row on the board opens that
   departure's more-info dialog.
+- **The signaled track shows early.** On the [RailData
+  source](#choosing-a-data-source) at New York Penn, the hero says
+  `Track 7 (likely)` and the board row `7?` while the signaling system has
+  the train on a platform the board has not announced. The moment the board
+  posts, the hedge drops and the board's number wins, even if it differs.
 
 **The card is tinted by the worst thing on it** — a wash across the top-left
 corner, green normally, amber for a delay, red for a cancellation or an

@@ -16,6 +16,7 @@ export function departure(
       train_id: "6613",
       favorite: false,
       track: null,
+      signaled_track: null,
       status: "on_time",
       status_text: null,
       delay_minutes: null,

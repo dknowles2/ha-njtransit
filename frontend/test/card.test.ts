@@ -148,6 +148,18 @@ describe("the hero", () => {
 });
 
 describe("the pills", () => {
+  it("shows the signaled platform as likely until the board posts", async () => {
+    const card = await mount(
+      fakeHass([
+        departure(`${PREFIX}_next_departure`, IN_31_MINUTES, {
+          signaled_track: "7",
+        }),
+      ]),
+    );
+
+    expect(pills(card)).toContain("Track 7 (likely)");
+  });
+
   it("shows the track once it is posted", async () => {
     const card = await mount(
       fakeHass([

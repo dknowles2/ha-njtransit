@@ -47,6 +47,15 @@ export function trackPill(
   if (departure.track) {
     return { text: `Track ${departure.track}`, tone: "accent" };
   }
+  // The signaling system has the set standing on a platform the board has
+  // not announced. Right 229 times of 231, so it earns the accent tone --
+  // but it is marked, because a "7" that turns into an "8" without warning
+  // is worse than a "7 (likely)" that does. It also outranks the overdue
+  // warning below: the board being late is not news to someone who can
+  // already see where the train is.
+  if (departure.signaledTrack) {
+    return { text: `Track ${departure.signaledTrack} (likely)`, tone: "accent" };
+  }
   // A cancelled train is never getting a platform, so "Track not posted yet"
   // is not a fact about it -- and next to a red `Cancelled` it reads as a
   // second, contradictory piece of news. The YAML card said exactly this.
@@ -77,6 +86,9 @@ export function trackCell(
 ): Pill {
   if (departure.track) {
     return { text: departure.track, tone: "accent" };
+  }
+  if (departure.signaledTrack) {
+    return { text: `${departure.signaledTrack}?`, tone: "accent" };
   }
   if (
     posting &&

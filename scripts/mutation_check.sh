@@ -560,6 +560,26 @@ run_card "card: overdue claimed where no track is posted" \
   'return board.some((departure) => departure.track !== null);' \
   'return true;'
 
+run_card "card: the signaled platform is never shown" \
+  frontend/src/pills.ts \
+  '  if (departure.signaledTrack) {
+    return { text: `Track ${departure.signaledTrack} (likely)`, tone: "accent" };
+  }' \
+  ''
+
+run_card "card: the signal is shown as if the board had posted it" \
+  frontend/src/pills.ts \
+  '    return { text: `Track ${departure.signaledTrack} (likely)`, tone: "accent" };' \
+  '    return { text: `Track ${departure.signaledTrack}`, tone: "accent" };'
+
+run_card "card: the signal outranks the board" \
+  frontend/src/pills.ts \
+  '  if (departure.track) {
+    return { text: `Track ${departure.track}`, tone: "accent" };
+  }
+  // The signaling system' \
+  '  // The signaling system'
+
 run_card "card: the crowding hint fires when nothing differs" \
   frontend/src/pills.ts \
   'return best !== null && high > low ? best : null;' \
