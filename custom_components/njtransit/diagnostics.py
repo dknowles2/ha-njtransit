@@ -15,10 +15,12 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import Any
 
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
+from .account import is_account_entry
 from .api.parsing import alert_line_codes, now_local
-from .coordinator import NJTransitConfigEntry
+from .coordinator import NJTransitConfigEntry, store_for
 from .entity import usable_departures
 from .sources import source_of
 from .track_history import TrackHistory
@@ -26,8 +28,30 @@ from .track_history import TrackHistory
 
 async def async_get_config_entry_diagnostics(
     hass: HomeAssistant,
-    entry: NJTransitConfigEntry,
+    entry: ConfigEntry,
 ) -> dict[str, Any]:
+    """Return diagnostics for a config entry -- a commute, or an account."""
+    if is_account_entry(entry):
+        return _account_diagnostics(hass, entry)
+    return _commute_diagnostics(entry)
+
+
+def _account_diagnostics(hass: HomeAssistant, entry: ConfigEntry) -> dict[str, Any]:
+    """Return diagnostics for a RailData account.
+
+    Never the username or password -- only that the entry exists, how many
+    commutes reference it, and whether its shared client is healthy.
+    """
+    runtime = getattr(entry, "runtime_data", None)
+    store = store_for(hass, runtime.store_key) if runtime is not None else None
+    return {
+        "config": {"entry_type": "account"},
+        "commutes_using_this_account": len(store.users) - 1 if store else 0,
+        "generated_at": now_local().isoformat(),
+    }
+
+
+def _commute_diagnostics(entry: NJTransitConfigEntry) -> dict[str, Any]:
     """Return diagnostics for a commute."""
     runtime = entry.runtime_data
     board = runtime.board.data

@@ -360,6 +360,26 @@ every coordinator. The shared coordinator store is keyed by source — and for R
 account — because a board polled from each is a different feed, and because the RailData
 client holds a token that belongs to one account.
 
+**A commute on the RailData source does not hold its own credentials.** It stores
+`account` — the `entry_id` of a separate account entry (`account.py`; `entry_type:
+"account"` in its data) — which holds the username and password, authenticates once, and
+owns the shared `RailDataClient` and the `CoordinatorStore` built from it. Commutes on the
+same account reference the same account entry, so two commutes typing the same password no
+longer check and reauthenticate it independently: adding a second commute on an account
+already set up offers it in a picker instead of asking for credentials again. The account
+entry creates no entities. A commute's setup depends on its account entry being loaded --
+`ConfigEntryNotReady` otherwise, which self-heals on Home Assistant's own setup-retry
+backoff once the account comes up — and the account entry's own unload (a reauth reload, or
+removal) reloads every commute referencing it, landing them back on that same
+`ConfigEntryNotReady` retry if the account is not there when they come back up rather than
+leaving them polling a client that no longer exists. See §8.1 for the flow; `__init__.py`
+splits setup and unload between `_async_setup_account_entry` and `_async_setup_commute_entry`
+along this line. Before this split, each commute entry carried its
+own copy of the username and password; `async_migrate_entry` moves an old entry's
+credentials onto an account entry found (by username) or created for it, so two commutes
+that predate the split and share one username collapse onto one account entry rather than
+two.
+
 **Method mapping.** For each thing the integration asks:
 
 | Question | Website | RailData | Notes |
@@ -380,10 +400,13 @@ backs with `.storage/njtransit.raildata.<account>`, and a restart spends nothing
 the API declares `Invalid token.` is discarded and replaced exactly once per call. Two
 entries on one account share a client, and therefore a token and every schedule either
 fetched: the reverse commute costs no extra schedule calls. `Authenticated: False` is
-`NJTransitAuthError`, which coordinators translate to `ConfigEntryAuthFailed` so Home
-Assistant asks for new credentials rather than retrying on the same ten-a-day budget;
-`Daily usage limit` is `NJTransitQuotaError`, retryable after midnight Eastern. Credentials
-live in the entry's data, are never logged, and diagnostics never dumps the entry's data.
+`NJTransitAuthError`; at the account entry's own setup this becomes `ConfigEntryAuthFailed`
+directly, and from a shared coordinator's ongoing poll it goes through `CoordinatorStore.
+adopt`'s `auth_failed` callback to the account entry (§8.1), so Home Assistant asks for new
+credentials there rather than retrying on the same ten-a-day budget. `Daily usage limit` is
+`NJTransitQuotaError`, retryable after midnight Eastern. Credentials live in the *account*
+entry's data (§8.1), never a commute's, are never logged, and diagnostics never dumps
+either entry's data.
 
 **The day's schedule is published from that day's midnight, and nothing about tomorrow
 before it.** So `scheduled_trips(on=tomorrow)` returns empty without a call, and the route
@@ -1158,8 +1181,22 @@ trips rather than reducing them to a set, and belongs with the deferred trip-pla
 
 **Step `user`** — a menu: `website` or `raildata` (§2.9).
 
-**Step `raildata`** — username and password, exchanged for a token on the spot.
-`Authenticated: False` → `invalid_auth`; the daily token limit → `quota`.
+**Step `raildata`** — chooses which RailData *account* this commute reads through
+(§2.9). If any account entries already exist, a `SelectSelector` lists them by username
+plus an "add a new account" option; picking an existing one moves straight to `commute`
+(or `_reconfigure`) spending no sign-in, since the flow can read a *loaded* account's own
+live client, and otherwise builds one from its stored credentials, which rides on whatever
+token its storage already holds. If no account exists yet, this step goes straight to
+`raildata_account` — there is nothing to choose between.
+
+**Step `raildata_account`** — username and password for a *new* RailData account, checked
+against `authenticate(fresh=True)` on the spot. `Authenticated: False` → `invalid_auth`; the
+daily token limit → `quota`. A username that already has an account entry is not
+re-checked — the typed password is discarded and that account is reused, the same
+find-or-create rule the migration uses (§2.9) — because fixing a broken password for an
+existing account belongs to that account's own reauth, not to this form. On success, a new
+account entry is created (and set up) before the flow continues to `commute`, so `commute`
+never has to know whether the account is brand new or was just picked from the list.
 
 **Step `commute`** — creates the entry:
 
@@ -1171,18 +1208,30 @@ trips rather than reducing them to a set, and belongs with the deferred trip-pla
    using that source's name vocabulary. No itineraries returned → warn but do not block;
    fall back to label matching.
 
+On the RailData source the entry's data stores `account` — the account entry's `entry_id`
+— instead of a username and password.
+
 Abort with `already_configured` if the origin/destination pair already exists — on either
 source, because the unique ID is the station codes and those are shared. Switching source
-is the **reconfigure** flow: the same menu, then credentials if RailData, then the entry's
-`source`, credentials and station titles are rewritten and the entry reloaded. The
-nearest-station suggestion always asks the website (§3.9), on either source.
+is the **reconfigure** flow: the same menu (and account picker, if moving to RailData), then
+the entry's `source`, `account` (or its absence) and station titles are rewritten and the
+entry reloaded. The nearest-station suggestion always asks the website (§3.9), on either
+source.
 
 **Options flow:** departure interval, status interval, number of upcoming-departure
 sensors (default 3, max 10), disruption threshold and lookahead. The destination is part
 of the unique ID and therefore *not* editable here — changing it means adding a new entry.
+A RailData *account* entry has no options flow of its own; its shared status coordinator
+polls at the default interval rather than one configurable per commute, which was true in
+substance before this split too — only the entry that happened to build the shared store
+saw its interval option honored, and now that entry is always the account.
 
-**Reauth** applies to the RailData source only: `NJTransitAuthError` from any coordinator
-raises `ConfigEntryAuthFailed`, and `reauth_confirm` asks for the credentials again.
+**Reauth** applies to a RailData *account* entry, not a commute: `NJTransitAuthError` from
+the account's own setup, or from a shared coordinator via `CoordinatorStore.adopt`'s
+`auth_failed` callback, starts the account entry's reauth, and `reauth_confirm` asks for
+that account's credentials again. Every commute referencing the account picks up the fix
+when the account reloads (`_async_unload_account_entry` in `__init__.py` reloads every
+entry claiming the store).
 
 ## 9. Entities
 

@@ -123,12 +123,71 @@ run "a rejected credential on a shared coordinator tells nobody" \
 
 run "a reconfigured entry releases the wrong store" \
   custom_components/njtransit/__init__.py \
-  "    key = entry.runtime_data.store_key" \
-  "    key = store_key(entry)"
+  "    key = entry.runtime_data.store_key
+    store = store_for(hass, key)
+    if store is None:
+        return True
+
+    await store.release_board(entry.runtime_data.origin, entry.entry_id)" \
+  "    key = store_key(hass, entry)
+    store = store_for(hass, key)
+    if store is None:
+        return True
+
+    await store.release_board(entry.runtime_data.origin, entry.entry_id)"
 
 run "direct-only filter disabled" \
   custom_components/njtransit/coordinator.py \
   "if not trip.has_transfer" "if True"
+
+# The RailData account entry. A commute no longer carries its own
+# credentials -- it references an account entry that owns the shared client,
+# and reauth, migration and setup-ordering all depend on getting that
+# reference right.
+# The migration's own pre-check (`_async_ensure_account_entry` in
+# `__init__.py`) is no longer the only thing standing between two commutes
+# on one username and two account entries: `async_create_account_entry`
+# creates the account through the config flow's own `async_step_import`,
+# which sets the unique ID and aborts on a collision before creating
+# anything, so a second caller gets the existing account back even with the
+# pre-check disabled. Breaking the pre-check alone no longer produces two
+# accounts -- mutating the fallback that reads an aborted flow's result is
+# what actually exercises the collapse-to-one-account guarantee now.
+run "a raced account creation raises instead of returning the existing one" \
+  custom_components/njtransit/account.py \
+  "    existing = find_account_entry(hass, username)
+    if existing is not None:
+        return existing" \
+  "    existing = find_account_entry(hass, username)
+    if False:
+        return existing"
+
+run "a commute sets up before its RailData account is loaded" \
+  custom_components/njtransit/__init__.py \
+  "    if account_entry is None or account_entry.state is not ConfigEntryState.LOADED:" \
+  "    if account_entry is None:"
+
+run "a rejected credential asks every commute instead of the account" \
+  custom_components/njtransit/coordinator.py \
+  "        @callback
+        def start_reauth() -> None:
+            entry_id = self.account_entry_id
+            if entry_id is None:
+                return
+            entry = hass.config_entries.async_get_entry(entry_id)
+            if entry is not None:
+                entry.async_start_reauth(hass)" \
+  "        @callback
+        def start_reauth() -> None:
+            for entry_id in self._users:
+                entry = hass.config_entries.async_get_entry(entry_id)
+                if entry is not None:
+                    entry.async_start_reauth(hass)"
+
+run "an account unload schedules reloads even while Home Assistant is stopping" \
+  custom_components/njtransit/__init__.py \
+  "    if hass.is_stopping:" \
+  "    if False:"
 
 # The RailData source. Each of these is a behaviour the daily limits or the
 # signal's honesty depend on, and each was fully covered before it was

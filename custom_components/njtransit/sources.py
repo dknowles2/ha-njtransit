@@ -14,15 +14,12 @@ from .api.client import NJTransitClient
 from .api.raildata import RailDataClient
 from .api.source import RailSource
 from .const import (
-    CONF_DESTINATION,
-    CONF_DESTINATION_ID,
-    CONF_ORIGIN,
-    CONF_ORIGIN_ID,
+    CONF_ACCOUNT,
     CONF_SOURCE,
     DEFAULT_SOURCE,
     SOURCE_RAILDATA,
 )
-from .coordinator import NJTransitConfigEntry
+from .coordinator import NJTransitAccountConfigEntry, NJTransitConfigEntry
 from .raildata_store import RailDataStorage
 
 
@@ -35,36 +32,49 @@ def source_of(entry: NJTransitConfigEntry) -> str:
     return str(entry.data.get(CONF_SOURCE, DEFAULT_SOURCE))
 
 
-def store_key(entry: NJTransitConfigEntry) -> str:
+def account_entry_for(
+    hass: HomeAssistant, entry: NJTransitConfigEntry
+) -> NJTransitAccountConfigEntry | None:
+    """Return the RailData account entry a commute references, if any."""
+    account_id = entry.data.get(CONF_ACCOUNT)
+    if not account_id:
+        return None
+    return hass.config_entries.async_get_entry(account_id)
+
+
+def store_key(hass: HomeAssistant, entry: NJTransitConfigEntry) -> str:
     """Return which shared store an entry belongs to.
 
     One per source, and for RailData one per account: the client holds the
-    token, and two entries on different accounts must not share one.
+    token, and two entries on different accounts must not share one. A
+    commute no longer carries the username itself -- it is read from the
+    account entry it references.
     """
     source = source_of(entry)
-    if source == SOURCE_RAILDATA:
-        return f"{source}:{entry.data.get(CONF_USERNAME, '')}"
-    return source
+    if source != SOURCE_RAILDATA:
+        return source
+    account = account_entry_for(hass, entry)
+    username = account.data.get(CONF_USERNAME, "") if account is not None else ""
+    return f"{source}:{username}"
 
 
-def build_client(hass: HomeAssistant, entry: NJTransitConfigEntry) -> RailSource:
-    """Return a client for the entry's source."""
+def build_client(hass: HomeAssistant, entry: NJTransitAccountConfigEntry) -> RailSource:
+    """Return a client for a RailData account entry's credentials.
+
+    Only ever called for an entry that carries its own username and
+    password -- an account entry itself, never a commute, which since the
+    RailData account entry holds none of its own.
+    """
     session = async_get_clientsession(hass)
-    if source_of(entry) != SOURCE_RAILDATA:
-        return NJTransitClient(session)
-
     username = str(entry.data[CONF_USERNAME])
-    client = RailDataClient(
+    return RailDataClient(
         session,
         username,
         str(entry.data[CONF_PASSWORD]),
         RailDataStorage(hass, username),
     )
-    # The entry stores the title alongside the code, and the code is the
-    # identifier both APIs share. Telling the client saves it resolving the
-    # title through a station list whose spelling may differ from the one
-    # the entry was set up with.
-    client.remember(entry.data[CONF_ORIGIN], entry.data[CONF_ORIGIN_ID])
-    if CONF_DESTINATION in entry.data and CONF_DESTINATION_ID in entry.data:
-        client.remember(entry.data[CONF_DESTINATION], entry.data[CONF_DESTINATION_ID])
-    return client
+
+
+def website_client(hass: HomeAssistant) -> RailSource:
+    """Return a client for the website source, which needs no credentials."""
+    return NJTransitClient(async_get_clientsession(hass))

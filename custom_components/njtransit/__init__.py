@@ -6,11 +6,13 @@ import asyncio
 from datetime import timedelta
 from typing import Any, Final
 
-from homeassistant.const import Platform
+from homeassistant.config_entries import ConfigEntry, ConfigEntryState
+from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
+from .account import async_create_account_entry, find_account_entry, is_account_entry
 from .api.client import NJTransitClient
 from .api.exceptions import (
     NJTransitAuthError,
@@ -20,7 +22,9 @@ from .api.exceptions import (
 from .api.models import TrainRun
 from .api.parsing import now_local
 from .api.raildata import RailDataClient
+from .api.source import RailSource
 from .const import (
+    CONF_ACCOUNT,
     CONF_DEPARTURE_INTERVAL,
     CONF_DESTINATION,
     CONF_DESTINATION_ID,
@@ -29,15 +33,20 @@ from .const import (
     CONF_ORIGIN,
     CONF_ORIGIN_ID,
     CONF_STATUS_INTERVAL,
+    CONFIG_ENTRY_VERSION,
     DEFAULT_DEPARTURE_INTERVAL,
     DEFAULT_LOOKAHEAD,
     DEFAULT_STATUS_INTERVAL,
     DOMAIN,
     MIN_INTERVAL,
+    SOURCE_RAILDATA,
+    SOURCE_WEBSITE,
 )
 from .coordinator import (
+    AccountRuntime,
     CoordinatorStore,
     EntryRuntime,
+    NJTransitAccountConfigEntry,
     NJTransitConfigEntry,
     ProgressCoordinator,
     RouteCoordinator,
@@ -50,11 +59,22 @@ from .coordinator import (
 )
 from .entity import normalize_train_ids, usable_departures
 from .frontend import async_register_card
-from .sources import build_client, store_key
+from .sources import (
+    account_entry_for,
+    build_client,
+    source_of,
+    store_key,
+    website_client,
+)
 from .track_history import TrackHistory
 
 # Guards construction of the shared store against concurrent entry setup.
 _SETUP_LOCK: Final = f"{DOMAIN}_setup_lock"
+
+# Guards creation of a RailData account entry during migration, so two
+# commute entries migrating on the same username in the same startup do not
+# each create one -- see `async_migrate_entry`.
+_MIGRATION_LOCK: Final = f"{DOMAIN}_migration_lock"
 
 # The one track history, whichever sources are in use. Stores are per source
 # (SPEC 2.9) but the history's storage key is not, and two objects writing to
@@ -85,68 +105,204 @@ def _interval(entry: NJTransitConfigEntry, key: str, default: int) -> timedelta:
     return timedelta(seconds=max(MIN_INTERVAL, int(seconds)))
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: NJTransitConfigEntry) -> bool:
-    """Set up a commute from a config entry."""
-    await async_register_card(hass)
+async def _shared_history(hass: HomeAssistant) -> TrackHistory:
+    """Return the one track history, loading it on first use.
 
-    session = async_get_clientsession(hass)
-    key = store_key(entry)
+    Not per source or per account: its storage key is not, and two writers
+    would each discard the other's stations on every save.
+    """
+    history = hass.data.get(_HISTORY)
+    if not isinstance(history, TrackHistory):
+        history = TrackHistory(hass)
+        await history.async_load()
+        hass.data[_HISTORY] = history
+    return history
 
-    origin: str = entry.data[CONF_ORIGIN]
-    destination: str | None = entry.data.get(CONF_DESTINATION)
 
-    # Entries for one domain are set up concurrently, and building the shared
-    # store awaits several times. Without a lock, two commutes racing through
-    # here both see no store, both build one, and the second assignment wins --
-    # leaving the loser's entry holding an orphaned store. That means duplicate
-    # status and reference-data polling, no board sharing between commutes out
-    # of the same station, and two TrackHistory objects writing to one storage
-    # key, where the last save silently discards the other station's history.
-    #
-    # `setdefault` never awaits, so every entry gets the same lock object.
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Set up a config entry -- a commute, or a RailData account."""
+    if is_account_entry(entry):
+        return await _async_setup_account_entry(hass, entry)
+    return await _async_setup_commute_entry(hass, entry)
+
+
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Unload a config entry -- a commute, or a RailData account."""
+    if is_account_entry(entry):
+        return await _async_unload_account_entry(hass, entry)
+    return await _async_unload_commute_entry(hass, entry)
+
+
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Move a pre-account RailData commute's credentials onto an account.
+
+    Before the RailData account entry existed, every RailData commute entry carried its own username and
+    password. Two commutes on one account each carried the *same* password,
+    checked and reauthenticated independently even though they always shared
+    one client underneath (SPEC 7.1). This collapses every such entry onto
+    one account entry per username, found by username if a sibling commute
+    has already been migrated, created otherwise.
+
+    Website entries carry no credentials and are untouched beyond the
+    version bump.
+    """
+    if entry.version > CONFIG_ENTRY_VERSION:
+        # A newer version than this code understands. Refuse rather than
+        # guess at what changed.
+        return False
+
+    if entry.version < CONFIG_ENTRY_VERSION:
+        new_data = dict(entry.data)
+        if source_of(entry) == SOURCE_RAILDATA and CONF_USERNAME in new_data:
+            username = str(new_data.pop(CONF_USERNAME))
+            password = str(new_data.pop(CONF_PASSWORD, ""))
+            account = await _async_ensure_account_entry(hass, username, password)
+            new_data[CONF_ACCOUNT] = account.entry_id
+        hass.config_entries.async_update_entry(
+            entry, data=new_data, version=CONFIG_ENTRY_VERSION
+        )
+
+    return True
+
+
+async def _async_ensure_account_entry(
+    hass: HomeAssistant, username: str, password: str
+) -> ConfigEntry:
+    """Return the account entry for ``username``, creating it if needed.
+
+    Locked so that two commute entries migrating for the same username in
+    the same startup produce exactly one account entry rather than a race
+    between them.
+    """
+    lock: asyncio.Lock = hass.data.setdefault(_MIGRATION_LOCK, asyncio.Lock())
+    async with lock:
+        existing = find_account_entry(hass, username)
+        if existing is not None:
+            return existing
+        return await async_create_account_entry(hass, username, password)
+
+
+# -- the RailData account --------------------------------------------------
+
+
+async def _async_setup_account_entry(
+    hass: HomeAssistant, entry: NJTransitAccountConfigEntry
+) -> bool:
+    """Set up a RailData account: one client, one token, one set of fetched
+    schedules, shared by every commute entry that references it.
+
+    Creates no entities. A commute entry depends on this one being loaded
+    (see `_async_setup_commute_entry`) and reloads when it does.
+    """
+    key = f"{SOURCE_RAILDATA}:{entry.data.get(CONF_USERNAME, '')}"
+
     async with hass.data.setdefault(_SETUP_LOCK, asyncio.Lock()):
         store = store_for(hass, key)
         if store is None:
             client = build_client(hass, entry)
-            if isinstance(client, RailDataClient):
-                # Credentials are checked before any coordinator runs, so a
-                # wrong password reads as "needs reauthentication" rather
-                # than as a board that never loads. A network failure here
-                # is the ordinary retry.
-                try:
-                    await client.authenticate()
-                except NJTransitAuthError as err:
-                    raise ConfigEntryAuthFailed(str(err)) from err
-                except NJTransitConnectionError as err:
-                    raise ConfigEntryNotReady(str(err)) from err
+            assert isinstance(client, RailDataClient)
+            try:
+                # Not `fresh=True`: the config flow (or the migration that
+                # created this entry) already checked this password, and
+                # re-checking it on every restart would spend the ten-a-day
+                # budget for nothing. This rides on whatever the account's
+                # storage already holds.
+                await client.authenticate()
+            except NJTransitAuthError as err:
+                raise ConfigEntryAuthFailed(str(err)) from err
+            except NJTransitConnectionError as err:
+                raise ConfigEntryNotReady(str(err)) from err
+
             static = StaticCoordinator(hass, client)
             status = SystemStatusCoordinator(
                 hass,
                 client,
                 "system status",
-                _interval(entry, CONF_STATUS_INTERVAL, DEFAULT_STATUS_INTERVAL),
+                timedelta(seconds=DEFAULT_STATUS_INTERVAL),
             )
             await static.async_first_refresh()
             await status.async_first_refresh()
-            history = hass.data.get(_HISTORY)
-            if not isinstance(history, TrackHistory):
-                history = TrackHistory(hass)
-                await history.async_load()
-                hass.data[_HISTORY] = history
+            history = await _shared_history(hass)
             store = CoordinatorStore(
-                client=client, static=static, status=status, history=history
+                client=client,
+                static=static,
+                status=status,
+                history=history,
+                account_entry_id=entry.entry_id,
             )
             store.adopt(hass, static)
             store.adopt(hass, status)
             register_store(hass, key, store)
-        else:
-            client = store.client
-            if isinstance(client, RailDataClient):
-                client.remember(origin, entry.data[CONF_ORIGIN_ID])
-                if destination and CONF_DESTINATION_ID in entry.data:
-                    client.remember(destination, entry.data[CONF_DESTINATION_ID])
 
         store.claim(entry.entry_id)
+
+    entry.runtime_data = AccountRuntime(client=store.client, store_key=key)
+    return True
+
+
+async def _async_unload_account_entry(
+    hass: HomeAssistant, entry: NJTransitAccountConfigEntry
+) -> bool:
+    """Unload a RailData account.
+
+    Torn down unconditionally, whether or not a commute still claims it: the
+    account is the store's sole owner, so a claim is bookkeeping, not a vote
+    against teardown -- a reauth replacing this account's credentials must
+    never leave the old, now-wrong client running underneath commutes that
+    happened to still be using it. Every commute claiming the store is
+    reloaded afterward: if this was a reauth, they pick up a fresh client
+    built from the corrected credentials; if the account was removed, they
+    land on `ConfigEntryNotReady` -- a clear, retrying error state -- rather
+    than keep polling a client that no longer exists.
+    """
+    key = entry.runtime_data.store_key
+    store = store_for(hass, key)
+    if store is None:
+        return True
+
+    dependents = [entry_id for entry_id in store.users if entry_id != entry.entry_id]
+    store.release(entry.entry_id)
+
+    await store.async_shutdown()
+    forget_store(hass, key)
+    if store_count(hass) == 0:
+        hass.data.pop(_HISTORY, None)
+
+    if hass.is_stopping:
+        # Every commute is being unloaded right along with this account at
+        # shutdown. Scheduling a reload for any of them here would just be a
+        # task racing the shutdown itself -- "Task exception was never
+        # retrieved" or `OperationNotAllowed` on every restart -- for work
+        # that would be immediately undone anyway.
+        return True
+
+    for dependent_id in dependents:
+        hass.config_entries.async_schedule_reload(dependent_id)
+
+    return True
+
+
+# -- a commute --------------------------------------------------------------
+
+
+async def _async_setup_commute_entry(
+    hass: HomeAssistant, entry: NJTransitConfigEntry
+) -> bool:
+    """Set up a commute from a config entry."""
+    await async_register_card(hass)
+
+    session = async_get_clientsession(hass)
+
+    origin: str = entry.data[CONF_ORIGIN]
+    destination: str | None = entry.data.get(CONF_DESTINATION)
+
+    client: RailSource
+    if source_of(entry) == SOURCE_RAILDATA:
+        client, store = await _client_for_raildata_commute(
+            hass, entry, origin, destination
+        )
+    else:
+        client, store = await _client_for_website_commute(hass, entry)
 
     board = await store.board_for(
         hass,
@@ -252,7 +408,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: NJTransitConfigEntry) ->
         history=store.history,
         origin=origin,
         destination=destination,
-        store_key=key,
+        store_key=store_key(hass, entry),
         origin_coordinates=origin_coordinates,
         options=dict(entry.options),
     )
@@ -262,7 +418,98 @@ async def async_setup_entry(hass: HomeAssistant, entry: NJTransitConfigEntry) ->
     return True
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: NJTransitConfigEntry) -> bool:
+async def _client_for_raildata_commute(
+    hass: HomeAssistant,
+    entry: NJTransitConfigEntry,
+    origin: str,
+    destination: str | None,
+) -> tuple[RailDataClient, CoordinatorStore]:
+    """Return the shared client and store a RailData commute reads through.
+
+    The store is built by the account entry, never by a commute -- a
+    commute only ever joins one that already exists. If the account is not
+    loaded yet, setup retries rather than building a second, credential-less
+    store of its own. That retry rides on Home Assistant's own setup-retry
+    backoff: a commute that lands here before its account is ready is not
+    yet a claimant of the store, so it is not among the entries a later
+    account reload or removal reloads directly (`_async_unload_account_
+    entry`) -- it just tries again on its own schedule, which an account
+    that has since become ready satisfies without anything further to do.
+    """
+    account_entry = account_entry_for(hass, entry)
+    if account_entry is None or account_entry.state is not ConfigEntryState.LOADED:
+        raise ConfigEntryNotReady("The RailData account for this commute is not loaded")
+
+    async with hass.data.setdefault(_SETUP_LOCK, asyncio.Lock()):
+        key = account_entry.runtime_data.store_key
+        store = store_for(hass, key)
+        if store is None:
+            # The account claims to be loaded but its store is gone -- a
+            # reload landed between the state check above and here. Either
+            # way, joining nothing would silently orphan this commute.
+            raise ConfigEntryNotReady("The RailData account's store is not ready")
+
+        client = store.client
+        assert isinstance(client, RailDataClient)
+        # The entry stores the title alongside the code, and the code is the
+        # identifier both APIs share. Telling the client saves it resolving
+        # the title through a station list whose spelling may differ from
+        # the one the entry was set up with.
+        client.remember(origin, entry.data[CONF_ORIGIN_ID])
+        if destination and CONF_DESTINATION_ID in entry.data:
+            client.remember(destination, entry.data[CONF_DESTINATION_ID])
+
+        store.claim(entry.entry_id)
+
+    return client, store
+
+
+async def _client_for_website_commute(
+    hass: HomeAssistant, entry: NJTransitConfigEntry
+) -> tuple[RailSource, CoordinatorStore]:
+    """Return the shared client and store for the website source.
+
+    Unlike RailData there is no account entry to build this: the first
+    website commute through setup builds it, on behalf of every website
+    commute after it.
+    """
+    key = SOURCE_WEBSITE
+
+    # Entries for one domain are set up concurrently, and building the shared
+    # store awaits several times. Without a lock, two commutes racing through
+    # here both see no store, both build one, and the second assignment wins,
+    # leaving the loser's entry holding an orphaned store.
+    async with hass.data.setdefault(_SETUP_LOCK, asyncio.Lock()):
+        store = store_for(hass, key)
+        if store is None:
+            client = website_client(hass)
+            static = StaticCoordinator(hass, client)
+            status = SystemStatusCoordinator(
+                hass,
+                client,
+                "system status",
+                _interval(entry, CONF_STATUS_INTERVAL, DEFAULT_STATUS_INTERVAL),
+            )
+            await static.async_first_refresh()
+            await status.async_first_refresh()
+            history = await _shared_history(hass)
+            store = CoordinatorStore(
+                client=client, static=static, status=status, history=history
+            )
+            store.adopt(hass, static)
+            store.adopt(hass, status)
+            register_store(hass, key, store)
+        else:
+            client = store.client
+
+        store.claim(entry.entry_id)
+
+    return client, store
+
+
+async def _async_unload_commute_entry(
+    hass: HomeAssistant, entry: NJTransitConfigEntry
+) -> bool:
     """Unload a commute."""
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if not unloaded:
@@ -274,10 +521,13 @@ async def async_unload_entry(hass: HomeAssistant, entry: NJTransitConfigEntry) -
         return True
 
     await store.release_board(entry.runtime_data.origin, entry.entry_id)
-    if store.release(entry.entry_id):
-        await store.static.async_shutdown()
-        await store.status.async_shutdown()
-        await store.history.async_flush()
+    released = store.release(entry.entry_id)
+    if released and store.account_entry_id is None:
+        # The website store has no account to own its lifecycle, so the
+        # last commute leaving is what tears it down. A RailData store is
+        # only ever torn down by its account entry (`_async_unload_account_
+        # entry`), whether or not a commute is still claiming it.
+        await store.async_shutdown()
         forget_store(hass, key)
         if store_count(hass) == 0:
             hass.data.pop(_HISTORY, None)
