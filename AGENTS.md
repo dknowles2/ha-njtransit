@@ -34,6 +34,14 @@ Everything above `api/` sees only the models. Both clients satisfy the
 `RailSource` protocol in `api/source.py`; do not make a coordinator or entity
 depend on which one it has.
 
+A RailData commute does not hold its own credentials. It references a
+separate *account* config entry (`account.py`) that authenticates once and
+owns the shared client and `CoordinatorStore` -- see SPEC §2.9 and §8.1
+before touching `config_flow.py`'s RailData steps, `__init__.py`'s
+account/commute setup split, or `async_migrate_entry`. Adding a commute on
+an account already set up must not spend a second sign-in, and a rejected
+credential must ask once, on the account, not once per commute using it.
+
 Two consequences of the website's nature shape the whole codebase:
 
 1. **Never widen a GraphQL field selection casually.** Asking for a field the

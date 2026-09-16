@@ -377,6 +377,13 @@ class CoordinatorStore:
     static: StaticCoordinator
     status: SystemStatusCoordinator
     history: TrackHistory
+    account_entry_id: str | None = None
+    """The RailData account entry that owns this store, if any.
+
+    ``None`` for the website store, which has no credentials to reauth.
+    A RailData store's coordinators report a rejected credential to this
+    entry alone (SPEC 8.1) -- not to every commute claiming the store, which
+    would open a reauth flow per commute for what is one broken password."""
     boards: dict[str, DepartureCoordinator] = field(default_factory=dict)
     _board_users: dict[str, set[str]] = field(default_factory=dict)
     _users: set[str] = field(default_factory=set)
@@ -402,16 +409,20 @@ class CoordinatorStore:
         """Give a shared coordinator the entry-level plumbing it lacks.
 
         With no entry of its own, a rejected credential would otherwise be
-        a logged failure and nothing more. Every commute on this store runs
-        on the same credentials, so every one of them is asked.
+        a logged failure and nothing more. It is reported to the account
+        entry, which is where reauth lives -- not to every commute claiming
+        the store, which runs on the same credentials but does not hold
+        them.
         """
 
         @callback
         def start_reauth() -> None:
-            for entry_id in self._users:
-                entry = hass.config_entries.async_get_entry(entry_id)
-                if entry is not None:
-                    entry.async_start_reauth(hass)
+            entry_id = self.account_entry_id
+            if entry_id is None:
+                return
+            entry = hass.config_entries.async_get_entry(entry_id)
+            if entry is not None:
+                entry.async_start_reauth(hass)
 
         coordinator.auth_failed = start_reauth
 
@@ -472,6 +483,26 @@ class CoordinatorStore:
         coordinator = self.boards.pop(station, None)
         if coordinator is not None:
             await coordinator.async_shutdown()
+
+    async def async_shutdown(self) -> None:
+        """Shut down every coordinator this store owns, boards included.
+
+        For the website store this runs when the last commute releases it.
+        For a RailData store it runs only from the account entry's own
+        unload (`_async_unload_account_entry` in ``__init__``) -- credentials
+        belong to the account, not to any one commute, so a commute claim
+        must never keep this store, or a client about to be replaced by a
+        reauth, alive on its own."""
+        for detach in list(self._recorders.values()):
+            detach()
+        self._recorders.clear()
+        for coordinator in list(self.boards.values()):
+            await coordinator.async_shutdown()
+        self.boards.clear()
+        self._board_users.clear()
+        await self.static.async_shutdown()
+        await self.status.async_shutdown()
+        await self.history.async_flush()
 
 
 def store_for(
@@ -594,4 +625,23 @@ class EntryRuntime:
     a reload when nothing structural changed."""
 
 
+@dataclass
+class AccountRuntime:
+    """What a RailData account entry needs at runtime.
+
+    Deliberately thin next to :class:`EntryRuntime` -- an account entry has
+    no board, route or destination of its own. It exists to own the client
+    and the store built from it, which every commute entry referencing it
+    then shares."""
+
+    client: RailSource
+    store_key: str
+    """The shared store this account's coordinators are registered under.
+
+    Remembered rather than recomputed at unload for the same reason a
+    commute remembers it: unload must release the store that was actually
+    claimed, not one derived from data that may have already changed."""
+
+
 type NJTransitConfigEntry = ConfigEntry[EntryRuntime]
+type NJTransitAccountConfigEntry = ConfigEntry[AccountRuntime]

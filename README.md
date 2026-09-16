@@ -134,9 +134,23 @@ station's daily schedule in Home Assistant's storage so restarts do not spend
 them again. Two commutes on the same account share everything. A board poll a
 minute plus the signaling feed beside it is under 3,000 calls a day.
 
-To switch an existing commute, open the entry and choose **Reconfigure**.
-Stations and options are kept; only the client underneath changes. If NJ
-Transit rejects the stored password later, Home Assistant asks for a new one.
+**A RailData account is its own entry.** Choosing RailData for a commute asks
+for a username and password only the first time; after that, adding another
+commute on the same NJ Transit account offers it in a list instead of asking
+again. Settings → Devices & Services → NJ Transit shows the account entry
+alongside your commutes -- it holds the credentials and the shared client,
+and creates no entities of its own. Removing it removes every commute's
+access to that account; a commute left pointing at a removed or not-yet-loaded
+account shows a retrying "not ready" error rather than crashing, and picks
+itself back up once the account is available again.
+
+To switch an existing commute between sources, open the entry and choose
+**Reconfigure**. Stations and options are kept; only the client underneath
+changes, and switching to RailData goes through the same account picker as
+adding a commute. If NJ Transit rejects an account's stored password later,
+Home Assistant asks for a new one on the **account** entry -- fixing it there
+fixes every commute on that account at once, rather than asking once per
+commute.
 
 Station proximity — the nearest-station suggestion at setup and the
 `origin_latitude`/`origin_longitude` attributes — always comes from

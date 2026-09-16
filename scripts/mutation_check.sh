@@ -123,12 +123,57 @@ run "a rejected credential on a shared coordinator tells nobody" \
 
 run "a reconfigured entry releases the wrong store" \
   custom_components/njtransit/__init__.py \
-  "    key = entry.runtime_data.store_key" \
-  "    key = store_key(entry)"
+  "    key = entry.runtime_data.store_key
+    store = store_for(hass, key)
+    if store is None:
+        return True
+
+    await store.release_board(entry.runtime_data.origin, entry.entry_id)" \
+  "    key = store_key(hass, entry)
+    store = store_for(hass, key)
+    if store is None:
+        return True
+
+    await store.release_board(entry.runtime_data.origin, entry.entry_id)"
 
 run "direct-only filter disabled" \
   custom_components/njtransit/coordinator.py \
   "if not trip.has_transfer" "if True"
+
+# The RailData account entry. A commute no longer carries its own
+# credentials -- it references an account entry that owns the shared client,
+# and reauth, migration and setup-ordering all depend on getting that
+# reference right.
+run "migration lets two commutes on one username create two accounts" \
+  custom_components/njtransit/__init__.py \
+  "        existing = find_account_entry(hass, username)
+        if existing is not None:
+            return existing" \
+  "        existing = find_account_entry(hass, username)
+        if False:
+            return existing"
+
+run "a commute sets up before its RailData account is loaded" \
+  custom_components/njtransit/__init__.py \
+  "    if account_entry is None or account_entry.state is not ConfigEntryState.LOADED:" \
+  "    if account_entry is None:"
+
+run "a rejected credential asks every commute instead of the account" \
+  custom_components/njtransit/coordinator.py \
+  "        @callback
+        def start_reauth() -> None:
+            entry_id = self.account_entry_id
+            if entry_id is None:
+                return
+            entry = hass.config_entries.async_get_entry(entry_id)
+            if entry is not None:
+                entry.async_start_reauth(hass)" \
+  "        @callback
+        def start_reauth() -> None:
+            for entry_id in self._users:
+                entry = hass.config_entries.async_get_entry(entry_id)
+                if entry is not None:
+                    entry.async_start_reauth(hass)"
 
 # The RailData source. Each of these is a behaviour the daily limits or the
 # signal's honesty depend on, and each was fully covered before it was

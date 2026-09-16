@@ -11,11 +11,18 @@ the platform from the signaling system before the board posts it. The
 choice is per commute and lives in the entry's data, so the reconfigure flow
 is where it changes -- swapping the source swaps the client under every
 coordinator, which is a reload rather than an option.
+
+A RailData commute does not hold its own credentials. It references a
+separate *account* entry (`account.py`), so two commutes on one account are
+typed, checked and reauthenticated once rather than three times over. Adding
+a commute on RailData therefore has an extra fork: choose an account already
+set up, or add a new one -- and adding one is itself a second config entry
+created from inside this flow before it goes on to ask for stations.
 """
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Final
 
 import voluptuous as vol
 from homeassistant.config_entries import (
@@ -41,6 +48,7 @@ from homeassistant.helpers.selector import (
     TextSelectorType,
 )
 
+from .account import account_entries, async_create_account_entry, find_account_entry
 from .api.client import NJTransitClient
 from .api.exceptions import (
     NJTransitAuthError,
@@ -52,6 +60,7 @@ from .api.models import Station
 from .api.raildata import RailDataClient
 from .api.source import RailSource
 from .const import (
+    CONF_ACCOUNT,
     CONF_DELAY_THRESHOLD,
     CONF_DEPARTURE_COUNT,
     CONF_DEPARTURE_INTERVAL,
@@ -63,6 +72,7 @@ from .const import (
     CONF_ORIGIN_ID,
     CONF_SOURCE,
     CONF_STATUS_INTERVAL,
+    CONFIG_ENTRY_VERSION,
     DEFAULT_DELAY_THRESHOLD,
     DEFAULT_DEPARTURE_COUNT,
     DEFAULT_DEPARTURE_INTERVAL,
@@ -74,10 +84,13 @@ from .const import (
     SOURCE_RAILDATA,
     SOURCE_WEBSITE,
 )
-from .coordinator import NJTransitConfigEntry
+from .coordinator import AccountRuntime, NJTransitConfigEntry
 from .raildata_store import RailDataStorage
 
 SOURCES = (SOURCE_WEBSITE, SOURCE_RAILDATA)
+
+# Sentinel option value for "none of the accounts above -- a new one."
+_ADD_ACCOUNT: Final = "__add_account__"
 
 
 def canonical_stations(stations: tuple[Station, ...]) -> list[Station]:
@@ -115,12 +128,15 @@ def station_options(stations: list[Station]) -> list[SelectOptionDict]:
 class NJTransitConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for NJ Transit."""
 
-    VERSION = 1
+    VERSION = CONFIG_ENTRY_VERSION
 
     def __init__(self) -> None:
         """Initialize the flow."""
         self._source: str = SOURCE_WEBSITE
         self._credentials: dict[str, str] = {}
+        self._account_entry_id: str | None = None
+        """The RailData account this commute will reference, once chosen or
+        created. ``None`` on the website source."""
         self._client: RailSource | None = None
         self._stations: list[Station] = []
         self._suggested_origin: str | None = None
@@ -129,27 +145,54 @@ class NJTransitConfigFlow(ConfigFlow, domain=DOMAIN):
     def _source_client(self) -> RailSource:
         """Return a client for the chosen source, building one on first use."""
         if self._client is None:
-            session = async_get_clientsession(self.hass)
             if self._source == SOURCE_RAILDATA:
                 self._client = self._raildata_client()
             else:
+                session = async_get_clientsession(self.hass)
                 self._client = NJTransitClient(session)
         return self._client
 
     def _raildata_client(self) -> RailDataClient:
-        """Return a RailData client for the credentials entered so far.
+        """Return a RailData client for the account this flow is using.
 
-        Backed by the account's store, so the token this flow requests is
-        the one the entry it creates will find. Ten a day; the flow and the
-        entry between them spend one.
+        Credentials just typed take priority -- checking a password just
+        entered has to ride on a client built from it. Otherwise this uses
+        the account entry chosen or just created: its live client when the
+        account is loaded, so browsing stations does not spend a second
+        sign-in re-checking a password the account entry already checked;
+        a fresh client built from its stored credentials otherwise, which
+        rides on whatever token that account's storage already holds.
         """
-        username = self._credentials[CONF_USERNAME]
-        return RailDataClient(
-            async_get_clientsession(self.hass),
-            username,
-            self._credentials[CONF_PASSWORD],
-            RailDataStorage(self.hass, username),
-        )
+        if self._credentials:
+            username = self._credentials[CONF_USERNAME]
+            return RailDataClient(
+                async_get_clientsession(self.hass),
+                username,
+                self._credentials[CONF_PASSWORD],
+                RailDataStorage(self.hass, username),
+            )
+
+        if self._account_entry_id is not None:
+            account_entry = self.hass.config_entries.async_get_entry(
+                self._account_entry_id
+            )
+            if account_entry is not None:
+                runtime = getattr(account_entry, "runtime_data", None)
+                if (
+                    account_entry.state is ConfigEntryState.LOADED
+                    and isinstance(runtime, AccountRuntime)
+                    and isinstance(runtime.client, RailDataClient)
+                ):
+                    return runtime.client
+                username = str(account_entry.data[CONF_USERNAME])
+                return RailDataClient(
+                    async_get_clientsession(self.hass),
+                    username,
+                    str(account_entry.data[CONF_PASSWORD]),
+                    RailDataStorage(self.hass, username),
+                )
+
+        raise RuntimeError("No RailData account selected")
 
     async def _load_stations(self) -> list[Station]:
         """Fetch and collapse the chosen source's station list."""
@@ -173,6 +216,7 @@ class NJTransitConfigFlow(ConfigFlow, domain=DOMAIN):
         """Read from njtransit.com, which needs no account."""
         self._source = SOURCE_WEBSITE
         self._credentials = {}
+        self._account_entry_id = None
         self._client = None
         self._stations = []
         if self.source == SOURCE_RECONFIGURE:
@@ -182,7 +226,62 @@ class NJTransitConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_raildata(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Read from the RailData API, which needs a developer account."""
+        """Choose which RailData account this commute reads through.
+
+        Skips straight to collecting credentials when no account exists yet
+        -- there is nothing to choose between.
+        """
+        accounts = account_entries(self.hass)
+        if not accounts:
+            return await self.async_step_raildata_account()
+
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            choice = user_input[CONF_ACCOUNT]
+            if choice == _ADD_ACCOUNT:
+                return await self.async_step_raildata_account()
+
+            self._source = SOURCE_RAILDATA
+            self._account_entry_id = choice
+            self._credentials = {}
+            self._client = None
+            self._stations = []
+            if self.source == SOURCE_RECONFIGURE:
+                return await self._reconfigure()
+            return await self.async_step_commute()
+
+        options = [
+            SelectOptionDict(
+                value=account.entry_id, label=str(account.data[CONF_USERNAME])
+            )
+            for account in accounts
+        ]
+        options.append(SelectOptionDict(value=_ADD_ACCOUNT, label="Add a new account"))
+        return self.async_show_form(
+            step_id="raildata",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_ACCOUNT): SelectSelector(
+                        SelectSelectorConfig(
+                            options=options, mode=SelectSelectorMode.DROPDOWN
+                        )
+                    )
+                }
+            ),
+            errors=errors,
+        )
+
+    async def async_step_raildata_account(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Collect credentials for a new RailData account.
+
+        A username that already has an account entry is reused rather than
+        checked again: the retyped password is not spent on a second sign-in
+        for an account this Home Assistant already knows about. Fixing a
+        broken password for an existing account is what the account entry's
+        own reauth is for, not this form.
+        """
         errors: dict[str, str] = {}
         if user_input is not None:
             self._source = SOURCE_RAILDATA
@@ -192,14 +291,29 @@ class NJTransitConfigFlow(ConfigFlow, domain=DOMAIN):
             }
             self._client = None
             self._stations = []
-            errors = await self._check_credentials()
+
+            existing = find_account_entry(self.hass, self._credentials[CONF_USERNAME])
+            if existing is not None:
+                self._account_entry_id = existing.entry_id
+                self._credentials = {}
+            else:
+                errors = await self._check_credentials()
+                if not errors:
+                    account_entry = await async_create_account_entry(
+                        self.hass,
+                        self._credentials[CONF_USERNAME],
+                        self._credentials[CONF_PASSWORD],
+                    )
+                    self._account_entry_id = account_entry.entry_id
+                    self._credentials = {}
+
             if not errors:
                 if self.source == SOURCE_RECONFIGURE:
                     return await self._reconfigure()
                 return await self.async_step_commute()
 
         return self.async_show_form(
-            step_id="raildata",
+            step_id="raildata_account",
             data_schema=_credentials_schema(user_input),
             errors=errors,
         )
@@ -299,7 +413,10 @@ class NJTransitConfigFlow(ConfigFlow, domain=DOMAIN):
             return self.async_abort(reason="unknown")
 
         by_code = {station.penta_id: station for station in stations}
-        updates: dict[str, Any] = {CONF_SOURCE: self._source, **self._credentials}
+        updates: dict[str, Any] = {CONF_SOURCE: self._source}
+        if self._source == SOURCE_RAILDATA:
+            assert self._account_entry_id is not None
+            updates[CONF_ACCOUNT] = self._account_entry_id
         origin = by_code.get(entry.data[CONF_ORIGIN_ID])
         if origin is not None:
             updates[CONF_ORIGIN] = origin.title
@@ -307,17 +424,20 @@ class NJTransitConfigFlow(ConfigFlow, domain=DOMAIN):
         if destination is not None:
             updates[CONF_DESTINATION] = destination.title
 
-        data = {
-            key: value
-            for key, value in entry.data.items()
-            if key not in (CONF_USERNAME, CONF_PASSWORD)
-        }
+        # Drop a stale account reference when moving away from RailData; the
+        # website has no use for one and it must not be mistaken for a live
+        # reference once this entry no longer claims that account's store.
+        data = {key: value for key, value in entry.data.items() if key != CONF_ACCOUNT}
         return self.async_update_reload_and_abort(
             entry, data={**data, **updates}, reason="reconfigure_successful"
         )
 
     async def async_step_reauth(self, entry_data: dict[str, Any]) -> ConfigFlowResult:
-        """Handle the RailData API rejecting the stored credentials."""
+        """Handle the RailData API rejecting an account's stored credentials.
+
+        Reauth lives on the account entry -- every commute referencing it
+        runs on the same credentials, so fixing them once fixes all of them,
+        and only the account entry itself ever starts this flow (SPEC 8.1)."""
         return await self.async_step_reauth_confirm()
 
     async def async_step_reauth_confirm(
@@ -426,8 +546,10 @@ class NJTransitConfigFlow(ConfigFlow, domain=DOMAIN):
             CONF_ORIGIN: origin.title,
             CONF_ORIGIN_ID: origin.penta_id,
             CONF_SOURCE: self._source,
-            **self._credentials,
         }
+        if self._source == SOURCE_RAILDATA:
+            assert self._account_entry_id is not None
+            data[CONF_ACCOUNT] = self._account_entry_id
         if destination is not None:
             data[CONF_DESTINATION] = destination.title
             data[CONF_DESTINATION_ID] = destination.penta_id

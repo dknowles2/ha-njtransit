@@ -7,10 +7,28 @@ from typing import Final
 
 DOMAIN: Final = "njtransit"
 
+# Config entry schema version. Bumped for the RailData-account split: a
+# commute entry that used to carry its own username/password now references
+# an account entry instead. See `async_migrate_entry` in `__init__.py`.
+CONFIG_ENTRY_VERSION: Final = 2
+
 CONF_ORIGIN: Final = "origin"
 CONF_ORIGIN_ID: Final = "origin_id"
 CONF_DESTINATION: Final = "destination"
 CONF_DESTINATION_ID: Final = "destination_id"
+
+# Which kind of config entry this is. Every entry from before this field
+# existed is a commute, which is why commute entries do not bother setting
+# it -- only the account kind needs to be told apart.
+CONF_ENTRY_TYPE: Final = "entry_type"
+ENTRY_TYPE_ACCOUNT: Final = "account"
+"""A RailData account: username, password, and the shared client/token/
+schedule store every commute referencing it polls through. No entities of
+its own."""
+
+# A commute entry on the RailData source stores the account entry's ID here
+# instead of its own credentials.
+CONF_ACCOUNT: Final = "account"
 
 # Which API answers. Stored in the entry's data rather than its options
 # because changing it changes the client every coordinator is built on,

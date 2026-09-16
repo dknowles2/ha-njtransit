@@ -10,8 +10,15 @@
         }
       },
       "raildata": {
-        "title": "RailData account",
-        "description": "The production credentials NJ Transit emailed when you registered. They are checked now and stored in this entry.",
+        "title": "Choose a RailData account",
+        "description": "Commutes on the RailData source share an account's sign-in and daily limits. Pick one already set up, or add a new one.",
+        "data": {
+          "account": "Account"
+        }
+      },
+      "raildata_account": {
+        "title": "New RailData account",
+        "description": "The production credentials NJ Transit emailed when you registered. They are checked now and stored in a separate account entry that every commute on this account shares.",
         "data": {
           "username": "Username",
           "password": "Password"
@@ -38,7 +45,7 @@
       },
       "reauth_confirm": {
         "title": "RailData credentials rejected",
-        "description": "NJ Transit no longer accepts the stored username and password. Enter the current ones.",
+        "description": "NJ Transit no longer accepts this account's stored username and password. Enter the current ones -- every commute on this account picks them up once this is fixed.",
         "data": {
           "username": "Username",
           "password": "Password"
