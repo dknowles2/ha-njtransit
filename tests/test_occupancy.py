@@ -37,6 +37,10 @@ class TestTheDecode:
         assert decode("AA-A180TK") == "4"
         assert decode("AA-A200TK") == "2"
         assert decode("AA-A132TK") == "9"
+        # No `A`/`B` half-suffix at all, which the first version of the
+        # formula required and so threw away about one sighting in eight.
+        assert decode("JO-AJO16TK") == "6"
+        assert decode("JO-AJO13TK") == "9"
 
     def test_the_b_half_of_a_platform_is_the_same_platform(self) -> None:
         """Arrivals stop on the B end; the first version only matched A, and
