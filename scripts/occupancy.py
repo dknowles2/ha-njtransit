@@ -55,7 +55,12 @@ from zoneinfo import ZoneInfo
 
 TZ = ZoneInfo("America/New_York")
 
-_AJO = re.compile(r"AJO(\d+)[AB]TK$")
+# The `A`/`B` suffix marks which half of a platform track the set is
+# standing on, and about one sighting in eight carries no suffix at all
+# (`JO-AJO16TK`). Requiring one dropped those, which is the same bug the
+# shipped decoder had in 2026.9.0 -- and it is invisible in the accuracy
+# column, because what it costs is coverage.
+_AJO = re.compile(r"AJO(\d+)[AB]?TK$")
 _A_SERIES = re.compile(r"-A(\d\d)\dTK$")
 
 # A set left parked longer than this is assumed to have gone to the yard

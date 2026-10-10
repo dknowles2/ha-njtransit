@@ -26,6 +26,8 @@ here, and this script never sees it.
 Usage:
     python scripts/weekly_report.py --out ~/nypenn/reports
     python scripts/weekly_report.py --out ~/nypenn/reports --nypenn-log ~/nypenn/*.jsonl
+    python scripts/weekly_report.py --out ~/nypenn/reports \\
+        --raildata-log ~/nypenn/raildata.jsonl
 
 Everything below is stdlib. This is an operations tool, not shipped code.
 """
@@ -45,6 +47,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import learn_tracks
 import nypenn
+import signal_accuracy
 from analyze_tracks import BAR, NY_PENN, Observation, load
 from analyze_tracks import score as score_models
 
@@ -71,6 +74,17 @@ CSV_COLUMNS = [
     "answered",
 ]
 WEIGHTS_COLUMNS = ["run", "feature", "weight", "spread"]
+SIGNAL_COLUMNS = [
+    "run",
+    "day",
+    "posted",
+    "covered",
+    "agreed",
+    "healed",
+    "corrections",
+    "median_lead",
+    "median_head_start",
+]
 
 # How far behind the run the collected logs may fall before the nypenn section
 # says so. Twelve hours rather than a day: the collector polls every minute, so
@@ -277,6 +291,32 @@ def nypenn_section(logs: list[Path], run_at: datetime) -> str:
     return "\n".join(lines) + "\n"
 
 
+def signal_section(
+    logs: list[Path], days: int | None
+) -> tuple[str, list[dict[str, Any]]]:
+    """Return how the signalled platform did, from the collector's own logs.
+
+    Separate from `nypenn_section` because it answers a different question
+    about a different feed: that one grades somebody else's prediction, this
+    one grades ours. They share a shape only because both are measured against
+    the same board.
+
+    A window is applied here rather than in the report body. The change log
+    grows past 300MB a month and the collector host is the machine running
+    this, so a run that loaded all of it to print a fortnight would be killed
+    on the host it exists to report from.
+    """
+    present = [path for path in logs if path.is_file()]
+    if not present:
+        return "No collector logs found.\n", []
+    since = (
+        datetime.now(signal_accuracy.TZ).date() - timedelta(days=days)
+        if days is not None
+        else None
+    )
+    return signal_accuracy.report(signal_accuracy.load(*present, since=since))
+
+
 def append_csv(path: Path, columns: list[str], rows: list[dict[str, Any]]) -> None:
     """Append rows, writing the header only when the file is new.
 
@@ -310,6 +350,19 @@ def main() -> int:
     )
     parser.add_argument(
         "--station", default=NY_PENN, help="station to model; the terminal by default"
+    )
+    parser.add_argument(
+        "--raildata-log",
+        type=Path,
+        nargs="*",
+        default=[],
+        help="collector change logs to score the signalled platform from",
+    )
+    parser.add_argument(
+        "--signal-days",
+        type=int,
+        default=14,
+        help="how many days of collector log to score (default: 14)",
     )
     args = parser.parse_args()
 
@@ -369,6 +422,15 @@ def main() -> int:
         )
     else:
         parts += ["No observations to model this run.", ""]
+
+    if args.raildata_log:
+        section, signal_rows = signal_section(args.raildata_log, args.signal_days)
+        parts += ["## Signalled platform vs the board", "", section, ""]
+        append_csv(
+            args.out / "signal.csv",
+            SIGNAL_COLUMNS,
+            [{"run": run, **row} for row in signal_rows],
+        )
 
     parts += ["## nypenn.live", "", nypenn_section(args.nypenn_log, started), ""]
 

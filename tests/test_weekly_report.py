@@ -14,12 +14,14 @@ from __future__ import annotations
 import json
 import sys
 from datetime import UTC, datetime, timedelta
+from datetime import date as dt_date
 from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
-from weekly_report import nypenn_section
+from occupancy import TZ
+from weekly_report import nypenn_section, signal_section
 
 RUN_AT = datetime(2026, 8, 28, 11, 0, tzinfo=UTC)
 DEPARTURE = datetime(2026, 8, 26, 18, 30, tzinfo=UTC)
@@ -116,3 +118,62 @@ def test_a_missing_log_is_not_silently_empty(tmp_path: Path) -> None:
     assert "No nypenn.live logs found" in nypenn_section(
         [tmp_path / "absent.jsonl"], RUN_AT
     )
+
+
+def raildata_log(tmp_path: Path, *, day: dt_date) -> Path:
+    """Write a collector change log holding one scored departure on `day`."""
+
+    def at(hour: int, minute: int) -> int:
+        return int(
+            datetime(day.year, day.month, day.day, hour, minute, tzinfo=TZ).timestamp()
+        )
+
+    scheduled = f"{day.strftime('%d-%b-%Y')} 05:31:00 PM"
+    records = [
+        {
+            "type": "change",
+            "t": at(16, 46),
+            "train_id": "6273",
+            "sched_dep": scheduled,
+            "direction": "Westbound",
+            "line": "Montclair-Boonton Line",
+            "circuit": "JO-AJO13ATK",
+            "board_track": None,
+        },
+        {
+            "type": "change",
+            "t": at(17, 21),
+            "train_id": "6273",
+            "sched_dep": scheduled,
+            "direction": "Westbound",
+            "line": "Montclair-Boonton Line",
+            "circuit": None,
+            "board_track": "9",
+        },
+    ]
+    path = tmp_path / "raildata.jsonl"
+    path.write_text(
+        "".join(json.dumps(record) + "\n" for record in records), encoding="utf-8"
+    )
+    return path
+
+
+def test_the_signal_section_scores_the_collector_log(tmp_path: Path) -> None:
+    today = datetime.now(TZ).date()
+    section, rows = signal_section([raildata_log(tmp_path, day=today)], 14)
+    assert "1/1 (100%)" in section
+    assert rows[0]["agreed"] == 1
+
+
+def test_the_signal_window_excludes_older_days(tmp_path: Path) -> None:
+    """`--signal-days` is what keeps this runnable on the collector host."""
+    old = datetime.now(TZ).date() - timedelta(days=30)
+    section, rows = signal_section([raildata_log(tmp_path, day=old)], 14)
+    assert rows == []
+    assert "No scored departures" in section
+
+
+def test_a_missing_collector_log_is_not_silently_empty(tmp_path: Path) -> None:
+    section, rows = signal_section([tmp_path / "absent.jsonl"], 14)
+    assert "No collector logs found" in section
+    assert rows == []

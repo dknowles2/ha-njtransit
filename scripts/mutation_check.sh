@@ -407,6 +407,59 @@ run_card "card: the tick timer outlives the card" \
   'if (false) {
       clearInterval(this._timer);'
 
+# The signalled-platform measurement. The second of these is the reason the
+# module exists: the hand-rolled version scored against the board's first
+# posting and reported misses on departures the signal had got right.
+run "signal: healing is judged against the posting that got revised" \
+  scripts/signal_accuracy.py \
+  'healed = signal is not None and signal != board_final and board_final in after' \
+  'healed = signal is not None and signal != board_first and board_first in after'
+
+run "signal: the answer is graded against the posting that got revised" \
+  scripts/signal_accuracy.py \
+  'return self.signal is not None and self.signal == self.board_final' \
+  'return self.signal is not None and self.signal == self.board_first'
+
+run "signal: a sighting that arrives after the board counts as beating it" \
+  scripts/signal_accuracy.py \
+  'if at <= posted_at:' \
+  'if at <= scheduled:'
+
+run "signal: the first sighting is scored rather than the most recent" \
+  scripts/signal_accuracy.py \
+  'signal = before[-1][1] if before else None' \
+  'signal = before[0][1] if before else None'
+
+run "signal: the head start is credited with the board's indecision" \
+  scripts/signal_accuracy.py \
+  'return (self.board_first_at - self.signal_first_at).total_seconds() / 60' \
+  'return (self.scheduled - self.signal_first_at).total_seconds() / 60'
+
+run "signal: arrivals are scored against a departure board" \
+  scripts/signal_accuracy.py \
+  'and r.get("direction") == DEPARTING' \
+  'and r.get("direction") != DEPARTING'
+
+run "signal: a run is keyed by the feed's advancing scheduled time" \
+  scripts/signal_accuracy.py \
+  'if groups and at - datetime.fromtimestamp(groups[-1][-1]["t"], TZ) <= RUN_GAP:' \
+  'if groups and groups[-1][-1].get("sched_dep") == record.get("sched_dep"):'
+
+run "signal: healing is credited after the row has left the board" \
+  scripts/signal_accuracy.py \
+  'elif at <= left_board_at:' \
+  'elif True:'
+
+run "signal: the window is applied after the whole log is grouped" \
+  scripts/signal_accuracy.py \
+  'and datetime.fromtimestamp(when, TZ).date() < since' \
+  'and False'
+
+run "occupancy: a circuit with no half-suffix stops decoding" \
+  scripts/occupancy.py \
+  'AJO(\d+)[AB]?TK$' \
+  'AJO(\d+)[AB]TK$'
+
 echo
 if [ $failures -eq 0 ]; then
   echo "all mutations caught"
