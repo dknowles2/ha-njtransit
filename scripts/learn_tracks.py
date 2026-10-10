@@ -38,6 +38,7 @@ import argparse
 import math
 import statistics
 import sys
+from datetime import date, timedelta
 from pathlib import Path
 from typing import NamedTuple
 
@@ -53,6 +54,7 @@ from analyze_tracks import (
     _track_order,
     load,
 )
+from occupancy import TZ, Occupancy, Parked, line_key
 
 # Every platform seen at New York Penn. Fixed rather than derived so a fold
 # whose training days happen to miss a rare track still scores it as a
@@ -67,7 +69,18 @@ FEATURES = (
     "station overall",
     "minutes since vacated",
     "never used by this train",
+    # The signalling features. All zero when no occupancy log is supplied,
+    # which leaves every score identical to the model without them -- a
+    # column of zeros gets a gradient of zero and a weight of zero.
+    "set parked here",
+    "set parked here, same line",
+    "this train already reported here",
+    "hours since a set parked here",
 )
+
+# A set that parked longer ago than this is as informative as no set at all;
+# the feature saturates rather than growing without bound.
+PARKED_HORIZON = 4 * 3600
 
 # Enough passes for the loss to stop moving on a problem this small; there is
 # no early stopping because there is no validation split to stop against --
@@ -81,15 +94,30 @@ RECENT_DAYS = 3.0
 
 
 def candidates(
-    history: list[Observation], same_day: list[Observation], target: Observation
+    history: list[Observation],
+    same_day: list[Observation],
+    target: Observation,
+    occupancy: Occupancy | None = None,
 ) -> list[list[float]]:
     """Return one feature row per track, in `TRACKS` order.
 
-    Deliberately the same evidence the hand-written models read, so that a
-    difference in score is a difference in how it is *combined* rather than in
-    what was available. Anything here that they cannot see would make the
-    comparison meaningless.
+    The first seven columns are the same evidence the hand-written models read,
+    so that a difference in score is a difference in how it is *combined*
+    rather than in what was available.
+
+    The last four come from the signalling feed, read as of `PREDICT_LEAD`
+    before the target departs -- what the feed had said by then, and nothing
+    it said afterwards. That is the same as-of rule `_known_by` applies to the
+    board, and it is what makes these features something a prediction could
+    actually have used rather than a leak wearing a feature's name.
     """
+    parked: dict[str, Parked] = {}
+    own_platform: str | None = None
+    when = target.scheduled.replace(tzinfo=TZ) - timedelta(seconds=PREDICT_LEAD)
+    if occupancy is not None:
+        parked = occupancy.at(when)
+        own_platform = occupancy.train_at(target.train_id, when)
+    target_line = line_key(target.line)
     prior = [o for o in history if o.track and o.day < target.day]
     mine = [o for o in prior if o.train_id == target.train_id]
     recent = [o for o in mine if (target.day - o.day).days <= RECENT_DAYS]
@@ -124,6 +152,15 @@ def candidates(
                 # a track empty since breakfast dominate the feature.
                 min(vacated.get(track, REUSE_GAP_P10), REUSE_GAP_P10) / REUSE_GAP_P10,
                 0.0 if any(o.track == track for o in mine) else 1.0,
+                1.0 if track in parked else 0.0,
+                1.0 if track in parked and parked[track].line == target_line else 0.0,
+                1.0 if own_platform == track else 0.0,
+                (
+                    min((when - parked[track].since).total_seconds(), PARKED_HORIZON)
+                    / PARKED_HORIZON
+                    if track in parked
+                    else 0.0
+                ),
             ]
         )
     return rows
@@ -194,9 +231,17 @@ class Learned(NamedTuple):
 
     A weight that swings between folds is the model disagreeing with itself,
     and averaging it away would present that as a finding."""
+    by_day: dict[date, tuple[int, int, int]]
+    """(hits, top3, total) per held-out day.
+
+    The signalling log covers a few days out of a month, so the score on the
+    days it covers is a different number from the score overall -- and the
+    one that says what the feed is worth."""
 
 
-def score(observations: list[Observation]) -> Learned | None:
+def score(
+    observations: list[Observation], occupancy: Occupancy | None = None
+) -> Learned | None:
     """Fit and score leave-one-day-out.
 
     Separated from printing for the same reason as `analyze_tracks.score`:
@@ -212,6 +257,7 @@ def score(observations: list[Observation]) -> Learned | None:
 
     hits = top3 = total = 0
     learned = []
+    by_day: dict[date, tuple[int, int, int]] = {}
     for held_out in days:
         train_days = [d for d in days if d != held_out]
         examples = []
@@ -227,7 +273,7 @@ def score(observations: list[Observation]) -> Learned | None:
                 context = [o for o in board if o.train_id != target.train_id]
                 examples.append(
                     (
-                        candidates(history, context, target),
+                        candidates(history, context, target, occupancy),
                         TRACKS.index(target.track),
                     )
                 )
@@ -239,25 +285,39 @@ def score(observations: list[Observation]) -> Learned | None:
 
         history = [o for o in observations if o.day != held_out]
         board = [o for o in observations if o.day == held_out]
+        day_hits = day_top3 = day_total = 0
         for target in board:
             if not target.track or target.track not in TRACKS:
                 continue
             context = [o for o in board if o.train_id != target.train_id]
-            ranked = rank(weights, candidates(history, context, target))
-            total += 1
-            hits += ranked[0] == target.track
-            top3 += target.track in ranked[:3]
+            ranked = rank(weights, candidates(history, context, target, occupancy))
+            day_total += 1
+            day_hits += ranked[0] == target.track
+            day_top3 += target.track in ranked[:3]
+        hits += day_hits
+        top3 += day_top3
+        total += day_total
+        by_day[held_out] = (day_hits, day_top3, day_total)
 
-    return Learned(hits=hits, top3=top3, total=total, weights=learned)
+    return Learned(hits=hits, top3=top3, total=total, weights=learned, by_day=by_day)
 
 
-def evaluate(observations: list[Observation]) -> None:
-    """Score the ranker and print what it learned."""
-    result = score(observations)
+def evaluate(
+    observations: list[Observation],
+    occupancy: Occupancy | None = None,
+    covered: set[date] | None = None,
+) -> None:
+    """Score the ranker and print what it learned.
+
+    `covered` is the set of days the signalling log spans; those days are
+    reported on their own, because they are the only ones on which the
+    signalling features are anything other than zero.
+    """
+    result = score(observations, occupancy)
     if result is None:
         print("need at least three days to train on two and test on one")
         return
-    hits, top3, total, learned = result
+    hits, top3, total, learned, _ = result
     if not total:
         print("nothing to score")
         return
@@ -267,6 +327,17 @@ def evaluate(observations: list[Observation]) -> None:
     print(
         f"  {'ml conditional logit':<22}{hits / total:>8.0%}{top3 / total:>8.0%}{1:>10.0%}"
     )
+
+    if covered:
+        c_hits = sum(h for d, (h, _, _) in result.by_day.items() if d in covered)
+        c_top3 = sum(t for d, (_, t, _) in result.by_day.items() if d in covered)
+        c_total = sum(n for d, (_, _, n) in result.by_day.items() if d in covered)
+        if c_total:
+            print(
+                f"\n  on the {len(covered)} day(s) the signalling log covers "
+                f"({c_total} departures):"
+            )
+            print(f"    top-1 {c_hits / c_total:.1%}   top-3 {c_top3 / c_total:.1%}")
 
     print("\n  what it learned (mean weight across folds, larger is stronger)")
     mean = [statistics.fmean(fold[i] for fold in learned) for i in range(len(FEATURES))]
@@ -289,6 +360,13 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("paths", nargs="+", type=Path, help="diagnostics JSON files")
     parser.add_argument("--station", default=NY_PENN, help="station to model")
+    parser.add_argument(
+        "--raildata",
+        type=Path,
+        nargs="*",
+        default=[],
+        help="collect_raildata.py logs; adds the signalling features",
+    )
     args = parser.parse_args()
 
     observations = [o for o in load(args.paths) if o.station == args.station]
@@ -296,8 +374,18 @@ def main() -> int:
         print(f"no observations for {args.station}", file=sys.stderr)
         return 1
 
+    occupancy = covered = None
+    if args.raildata:
+        import occupancy as occ
+
+        occupancy = occ.load(*args.raildata)
+        covered = {s.at.date() for s in occupancy.sightings}
+        print(
+            f"signalling log: {len(occupancy.sightings)} sightings over {len(covered)} day(s)"
+        )
+
     print(f"\n{args.station}: {len(observations)} observations")
-    evaluate(observations)
+    evaluate(observations, occupancy, covered)
     return 0
 
 

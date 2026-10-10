@@ -4,9 +4,15 @@ permissions:
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "research/**"]
   pull_request:
-    branches: ["main"]
+    # The research branches too, not just `main`. The analysis scripts under
+    # `scripts/` are covered by the same suite as the integration -- and by
+    # their own mutation entries -- so leaving them ungated was a leftover
+    # from when that tree was a scratchpad, not a decision. A pull request
+    # into a research branch previously ran the labeller and nothing else,
+    # which reads exactly like a green build.
+    branches: ["main", "research/**"]
 
 jobs:
   test:
