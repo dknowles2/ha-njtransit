@@ -227,3 +227,40 @@ def test_ci_workflow_invariants() -> None:
         if "pytest" in step.get("run", "")
     ]
     assert any("-W error::DeprecationWarning" in run for run in pytest_steps)
+
+
+def test_the_release_draft_is_numbered_by_calver() -> None:
+    """The draft's version comes from `next_calver.py`, not the resolver.
+
+    Release-drafter alone bumps a position on the previous tag and so proposed
+    `2026.9.4` in November. Dropping the `version` input, or the step feeding
+    it, puts that back -- with nothing failing, since a wrong number is still
+    a number.
+    """
+    drafter = yaml.safe_load((WORKFLOWS_DIR / "release-drafter.yml").read_text())
+    steps = drafter["jobs"]["update_release_draft"]["steps"]
+    calver = [step for step in steps if step.get("id") == "calver"]
+    assert calver, "no step computes the CalVer version"
+    assert "scripts/next_calver.py" in calver[0]["run"]
+    assert "|| true" not in calver[0]["run"], "a failed lookup must fail the job"
+
+    action = [
+        step
+        for step in steps
+        if "release-drafter/release-drafter@" in step.get("uses", "")
+    ]
+    assert action[0]["with"]["version"] == "${{ steps.calver.outputs.version }}"
+    assert steps.index(calver[0]) < steps.index(action[0])
+
+
+def test_the_release_draft_rolls_over_on_the_first() -> None:
+    """A draft last written in October must not still read October in November."""
+    drafter = yaml.safe_load((WORKFLOWS_DIR / "release-drafter.yml").read_text())
+    crons = [entry["cron"] for entry in drafter["on"]["schedule"]]
+    assert any(cron.split()[2] == "1" for cron in crons)
+    # The job must run on that schedule, not only on pushes -- it was gated
+    # on `push` alone before, which would have made the cron a no-op.
+    assert (
+        drafter["jobs"]["update_release_draft"]["if"]
+        == "github.event_name != 'pull_request'"
+    )

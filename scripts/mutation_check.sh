@@ -399,6 +399,19 @@ run "disruption: an unset window blocks everything" \
   "{{ windows | count == 0" \
   "{{ false"
 
+# Release numbering. Both of these still produce a valid-looking version,
+# which is why they need a test rather than a glance at the draft.
+
+run "calver: a new month keeps counting the old month's patches" \
+  scripts/next_calver.py \
+  "    if (year, month) == (today.year, today.month):" \
+  "    if True:"
+
+run "calver: a release dated ahead is numbered backwards" \
+  scripts/next_calver.py \
+  "    if (year, month) > (today.year, today.month):" \
+  "    if False:"
+
 # The weekly report. Its failure mode is a section that looks current and
 # is not.
 

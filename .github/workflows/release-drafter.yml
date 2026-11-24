@@ -6,6 +6,14 @@ name: Release Drafter
       - main
   pull_request:
     types: [opened, reopened, synchronize, edited]
+  # The draft's version depends on the month, and it is only rewritten when
+  # this runs. Without a run on the 1st, a draft last touched by an October
+  # merge still reads 2026.10.x in November until something else merges.
+  # 06:05 UTC is after midnight in New York in both standard and daylight
+  # time, which is the month `scripts/next_calver.py` counts in.
+  schedule:
+    - cron: "5 6 1 * *"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -32,12 +40,33 @@ jobs:
 
   update_release_draft:
     name: Update the release draft
-    if: github.event_name == 'push'
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: read
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      # release-drafter can only bump a semver position on the previous tag,
+      # so by itself it proposes 2026.9.4 in November. The CalVer rule --
+      # this month's .0, then the next patch -- is worked out here and passed
+      # in, and the action's `version` input overrides what it resolved.
+      # A failure to read the latest release fails the job rather than
+      # falling back to `.0`: a wrong number on the draft is the outcome
+      # this step exists to prevent.
+      - name: Work out the CalVer version
+        id: calver
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          latest=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name)
+          version=$(python3 scripts/next_calver.py --latest "$latest")
+          echo "latest release ${latest}; drafting ${version}"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
       - uses: release-drafter/release-drafter@34d80673e067bdc0c24568d3af899c216adcfaa9 # v7.7.0
+        with:
+          version: ${{ steps.calver.outputs.version }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

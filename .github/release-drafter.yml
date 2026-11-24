@@ -41,16 +41,18 @@ autolabeler:
     title:
       - '/^(build|chore)\(deps\)/'
 
-# Every release is a patch bump, deliberately. Tags here are CalVer --
-# year.month.patch -- so the "minor" position is the *month*, and mapping
-# `enhancement` onto it the way a semver project would means a `feat:` merged
-# in August proposes 2026.9.0. That is a September release, in August.
+# The version is not resolved here. Tags are CalVer -- year.month.patch --
+# and this action can only bump a semver position on the previous tag, which
+# rolls neither the year nor the month. `scripts/next_calver.py` works the
+# number out in the workflow and passes it as the action's `version` input,
+# which overrides anything resolved below.
 #
-# There is therefore no major/minor label mapping, and adding one back is not
-# the fix for anything. The first release of each month is tagged by hand
-# (AGENTS.md, "Releases"); within a month, patch is the only correct bump.
-# Breaking changes still get their own changelog section above -- CalVer
-# simply does not encode compatibility in the version.
+# The resolver stays at patch so that, if the input were ever dropped, the
+# draft would at least propose the same month's next patch rather than a
+# label-driven minor bump: in CalVer the "minor" position is the month, and
+# mapping `enhancement` onto it means a `feat:` merged in August proposes
+# 2026.9.0, a September release in August. Breaking changes still get their
+# own changelog section above; CalVer does not encode compatibility.
 version-resolver:
   default: patch
 
