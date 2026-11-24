@@ -537,10 +537,6 @@ class TestSetup:
         assert store_for(hass, "raildata:someone") is not None
         assert isinstance(commute.runtime_data.client, RailDataClient)
 
-        # One track history between them: its storage key is not per source,
-        # and two writers would each discard the other's stations.
-        assert website.runtime_data.history is commute.runtime_data.history
-
         # Unloading the commute alone must not take the store from the
         # account entry, which still claims it.
         assert await hass.config_entries.async_unload(commute.entry_id)
@@ -551,7 +547,7 @@ class TestSetup:
         assert store_for(hass, SOURCE_WEBSITE) is not None
         remaining = store_for(hass, SOURCE_WEBSITE)
         assert remaining is not None
-        assert website.runtime_data.history is remaining.history
+        assert website.runtime_data.status is remaining.status
 
     async def test_a_commute_waits_for_its_account(
         self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker

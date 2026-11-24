@@ -43,8 +43,7 @@ from custom_components.njtransit.const import (
     DOMAIN,
     MIN_INTERVAL,
 )
-from custom_components.njtransit.coordinator import store_for
-from custom_components.njtransit.track_history import TrackHistory
+from custom_components.njtransit.coordinator import NJTransitCoordinator, store_for
 
 from .conftest import install_api_mock, load_fixture
 
@@ -96,6 +95,41 @@ class TestSetup:
         assert entry.state is ConfigEntryState.LOADED
         assert entry.runtime_data.origin == SHORT_HILLS
         assert entry.runtime_data.destination == NY_PENN
+
+    async def test_deletes_the_retired_track_history(
+        self,
+        hass: HomeAssistant,
+        aioclient_mock: AiohttpClientMocker,
+        hass_storage: dict[str, Any],
+    ) -> None:
+        """The removed recorder's file does not outlive it.
+
+        It was the largest thing the integration ever wrote -- 30 days of
+        every board, per station -- and nothing reads it any more.
+        """
+        hass_storage["njtransit.track_history"] = {
+            "version": 1,
+            "key": "njtransit.track_history",
+            "data": {"stations": {"Short Hills Station": {}}},
+        }
+        install_api_mock(aioclient_mock)
+        await setup_entry(hass, make_entry())
+
+        assert "njtransit.track_history" not in hass_storage
+
+    async def test_sets_up_with_no_retired_history_to_delete(
+        self,
+        hass: HomeAssistant,
+        aioclient_mock: AiohttpClientMocker,
+        hass_storage: dict[str, Any],
+    ) -> None:
+        """A fresh install, or every start after the first, has no file."""
+        assert "njtransit.track_history" not in hass_storage
+        install_api_mock(aioclient_mock)
+        entry = make_entry()
+        await setup_entry(hass, entry)
+
+        assert entry.state is ConfigEntryState.LOADED
 
     async def test_resolves_the_destination_train_set(
         self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
@@ -270,9 +304,8 @@ class TestCoordinatorSharing:
         assignment wins -- leaving the loser holding an orphan.
 
         The damage is not theoretical. It means duplicate polling of the
-        system-wide alert feed, no board sharing between commutes out of one
-        station, and two TrackHistory objects writing to a single storage key
-        where each save silently discards the other station's collection.
+        system-wide alert feed and no board sharing between commutes out of
+        one station.
         """
         install_api_mock(aioclient_mock)
 
@@ -280,14 +313,16 @@ class TestCoordinatorSharing:
         # gather runs each setup start to finish and the race cannot happen.
         # Real setup awaits the network here. Forcing one yield inside the
         # critical section is what makes this test able to fail at all --
-        # without it, it passes with the lock removed.
-        original = TrackHistory.async_load
+        # without it, it passes with the lock removed. The first refresh of
+        # the shared coordinators is inside that section, and is exactly where
+        # real setup waits on the network.
+        original = NJTransitCoordinator.async_first_refresh
 
-        async def slow_load(self: TrackHistory) -> None:
+        async def slow_refresh(self: NJTransitCoordinator[Any]) -> None:
             await asyncio.sleep(0)
             await original(self)
 
-        monkeypatch.setattr(TrackHistory, "async_load", slow_load)
+        monkeypatch.setattr(NJTransitCoordinator, "async_first_refresh", slow_refresh)
 
         outbound = make_entry()
         inbound = make_entry(
@@ -333,7 +368,6 @@ class TestCoordinatorSharing:
 
         await asyncio.gather(setup(outbound), setup(inbound))
 
-        assert outbound.runtime_data.history is inbound.runtime_data.history
         assert outbound.runtime_data.status is inbound.runtime_data.status
         assert outbound.runtime_data.static is inbound.runtime_data.static
 
@@ -760,7 +794,6 @@ async def test_failed_board_refresh_does_not_poison_cache_and_rolls_back(
     store = store_for(hass)
     assert store is not None
     assert entry.runtime_data.origin in store.boards
-    assert entry.runtime_data.origin in store._recorders
 
 
 async def test_concurrent_setup_sharing_origin_builds_one_board(

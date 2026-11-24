@@ -302,27 +302,16 @@ run "a rejected credential retries instead of asking for reauth" \
             raise self._reject_credentials(err) from err" \
   "            return await self.client.departures(self.station)"
 
-run "assigned_at measured backwards" \
-  custom_components/njtransit/track_history.py \
-  "_seconds_before(departure.scheduled, now)" \
-  "_seconds_before(now, departure.scheduled)"
+run "the retired track history is left in storage" \
+  custom_components/njtransit/__init__.py \
+  "    await _async_remove_retired_history(hass)
+    if is_account_entry(entry):" \
+  "    if is_account_entry(entry):"
 
 run "favourite matching becomes case-sensitive" \
   custom_components/njtransit/__init__.py \
   "departure.train_id.upper() in favorites" \
   "departure.train_id in favorites"
-
-run "a blank delay overwrites a recorded one" \
-  custom_components/njtransit/track_history.py \
-  "            if delay is not None:" "            if True:"
-
-run "worst_delay follows the last value instead of the peak" \
-  custom_components/njtransit/track_history.py \
-  "if worst is None or delay > worst:" "if True:"
-
-run "a cancellation can be overwritten" \
-  custom_components/njtransit/track_history.py \
-  "if current == TrainStatus.CANCELLED.value:" "if False:"
 
 run "alert train ids keep the prose's casing" \
   custom_components/njtransit/api/parsing.py \

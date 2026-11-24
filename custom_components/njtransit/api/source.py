@@ -4,7 +4,7 @@ Two sources exist. :class:`~.client.NJTransitClient` talks to the private
 GraphQL endpoint behind njtransit.com, anonymously.
 :class:`~.raildata.RailDataClient` talks to the registration-gated RailData
 API with a developer account. Everything above this layer -- coordinators,
-entities, the card, the track history -- sees only the models in
+entities, the card, the blueprints -- sees only the models in
 :mod:`.models`, so it neither knows nor cares which one is answering.
 
 This is a :class:`~typing.Protocol` rather than a base class because the two

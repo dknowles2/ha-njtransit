@@ -38,7 +38,6 @@ from .api.models import (
 from .api.parsing import TZ, now_local
 from .api.source import RailSource
 from .const import DOMAIN, ROUTE_INTERVAL, SOURCE_WEBSITE, STATIC_INTERVAL
-from .track_history import TrackHistory
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -381,7 +380,6 @@ class CoordinatorStore:
 
     static: StaticCoordinator
     status: SystemStatusCoordinator
-    history: TrackHistory
     account_entry_id: str | None = None
     """The RailData account entry that owns this store, if any.
 
@@ -392,7 +390,6 @@ class CoordinatorStore:
     boards: dict[str, DepartureCoordinator] = field(default_factory=dict)
     _board_users: dict[str, set[str]] = field(default_factory=dict)
     _users: set[str] = field(default_factory=set)
-    _recorders: dict[str, Callable[[], None]] = field(default_factory=dict)
     """Detach callbacks for the track recorder, one per station board.
 
     Held here rather than on the entry, because the board is shared: the
@@ -461,13 +458,6 @@ class CoordinatorStore:
                     await coordinator.async_shutdown()
                     raise
                 self.boards[station] = coordinator
-                self._recorders[station] = self.history.attach(coordinator)
-                # The listener fires on subsequent updates only, so the board that
-                # setup just fetched would otherwise go unrecorded until the next
-                # poll -- and on a restart during the ten minutes when a terminal
-                # publishes its tracks, that is the interesting one.
-                if coordinator.data is not None:
-                    self.history.record(coordinator.data)
 
             self._board_users.setdefault(station, set()).add(entry_id)
             return coordinator
@@ -489,9 +479,6 @@ class CoordinatorStore:
                 return
 
             self._board_users.pop(station, None)
-            detach = self._recorders.pop(station, None)
-            if detach is not None:
-                detach()
             coordinator = self.boards.pop(station, None)
             if coordinator is not None:
                 await coordinator.async_shutdown()
@@ -505,16 +492,12 @@ class CoordinatorStore:
         belong to the account, not to any one commute, so a commute claim
         must never keep this store, or a client about to be replaced by a
         reauth, alive on its own."""
-        for detach in list(self._recorders.values()):
-            detach()
-        self._recorders.clear()
         for coordinator in list(self.boards.values()):
             await coordinator.async_shutdown()
         self.boards.clear()
         self._board_users.clear()
         await self.static.async_shutdown()
         await self.status.async_shutdown()
-        await self.history.async_flush()
 
 
 def store_for(
@@ -538,12 +521,6 @@ def store_for(
 def register_store(hass: HomeAssistant, key: str, store: CoordinatorStore) -> None:
     """Make ``store`` the shared store for a data source."""
     hass.data.setdefault(DOMAIN, {})[key] = store
-
-
-def store_count(hass: HomeAssistant) -> int:
-    """Return how many data sources currently have a store."""
-    stores = hass.data.get(DOMAIN)
-    return len(stores) if isinstance(stores, dict) else 0
 
 
 def forget_store(hass: HomeAssistant, key: str) -> None:
@@ -620,7 +597,6 @@ class EntryRuntime:
     board: DepartureCoordinator
     route: RouteCoordinator
     progress: ProgressCoordinator
-    history: TrackHistory
     origin: str
     destination: str | None
     store_key: str

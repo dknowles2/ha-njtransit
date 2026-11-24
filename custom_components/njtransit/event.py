@@ -289,9 +289,11 @@ class TrainEvent(NJTransitEntity, EventEntity):
 
         # Nothing is wrong on the board yet -- that is the point. The track is
         # simply not there when it should be, which a regular traveller reads
-        # as trouble well before anything is announced. Whether it genuinely
-        # leads a disruption or merely restates one is what `track_history`
-        # is collecting the evidence to settle.
+        # as trouble well before anything is announced. Measured over 30 days
+        # at Penn (Oct-Nov 2026), it mostly restates a delay already showing:
+        # of trains still on time when their track came late, 4 in 195 went
+        # on to run 5+ minutes late or be cancelled, against 15 in 3,515
+        # posted on time. A real difference, but a weak warning (SPEC 7.2).
         if now.track_overdue and not was.track_overdue:
             self._fire(
                 EVENT_TRACK_OVERDUE,

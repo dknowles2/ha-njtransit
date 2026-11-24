@@ -11,6 +11,7 @@ from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.storage import Store
 
 from .account import async_create_account_entry, find_account_entry, is_account_entry
 from .api.client import NJTransitClient
@@ -53,7 +54,6 @@ from .coordinator import (
     SystemStatusCoordinator,
     forget_store,
     register_store,
-    store_count,
     store_for,
 )
 from .entity import normalize_train_ids, usable_departures
@@ -65,7 +65,6 @@ from .sources import (
     store_key,
     website_client,
 )
-from .track_history import TrackHistory
 
 # Guards construction of the shared store against concurrent entry setup.
 _SETUP_LOCK: Final = f"{DOMAIN}_setup_lock"
@@ -75,10 +74,14 @@ _SETUP_LOCK: Final = f"{DOMAIN}_setup_lock"
 # each create one -- see `async_migrate_entry`.
 _MIGRATION_LOCK: Final = f"{DOMAIN}_migration_lock"
 
-# The one track history, whichever sources are in use. Stores are per source
-# (SPEC 2.9) but the history's storage key is not, and two objects writing to
-# it would each discard the other's stations on every save.
-_HISTORY: Final = f"{DOMAIN}_history"
+# Track history was recorded here from August to November 2026, to test
+# whether the board's past could predict a track or a late posting could warn
+# of a bad commute. Neither held up (SPEC 7.2), so the recorder was removed.
+# Its file is the largest thing the integration ever wrote and would otherwise
+# sit in `.storage` for good; it is deleted once per start. Safe to drop this
+# after a few releases, once installs have upgraded past it.
+_RETIRED_HISTORY_KEY: Final = f"{DOMAIN}.track_history"
+_RETIRED_HISTORY_CLEARED: Final = f"{DOMAIN}_retired_history_cleared"
 
 # How long a train can stay latched, measured from when following began.
 #
@@ -104,22 +107,22 @@ def _interval(entry: NJTransitConfigEntry, key: str, default: int) -> timedelta:
     return timedelta(seconds=max(MIN_INTERVAL, int(seconds)))
 
 
-async def _shared_history(hass: HomeAssistant) -> TrackHistory:
-    """Return the one track history, loading it on first use.
+async def _async_remove_retired_history(hass: HomeAssistant) -> None:
+    """Delete the retired track history's file, once per start.
 
-    Not per source or per account: its storage key is not, and two writers
-    would each discard the other's stations on every save.
+    Claimed before the await, so entries set up concurrently do not each
+    schedule the deletion. A missing file is the normal case after the first
+    start and is not an error -- `Store.async_remove` ignores it.
     """
-    history = hass.data.get(_HISTORY)
-    if not isinstance(history, TrackHistory):
-        history = TrackHistory(hass)
-        await history.async_load()
-        hass.data[_HISTORY] = history
-    return history
+    if hass.data.get(_RETIRED_HISTORY_CLEARED):
+        return
+    hass.data[_RETIRED_HISTORY_CLEARED] = True
+    await Store[dict[str, Any]](hass, 1, _RETIRED_HISTORY_KEY).async_remove()
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up a config entry -- a commute, or a RailData account."""
+    await _async_remove_retired_history(hass)
     if is_account_entry(entry):
         return await _async_setup_account_entry(hass, entry)
     return await _async_setup_commute_entry(hass, entry)
@@ -226,12 +229,10 @@ async def _async_setup_account_entry(
                 await status.async_shutdown()
                 await static.async_shutdown()
                 raise
-            history = await _shared_history(hass)
             store = CoordinatorStore(
                 client=client,
                 static=static,
                 status=status,
-                history=history,
                 account_entry_id=entry.entry_id,
             )
             store.adopt(hass, static)
@@ -269,8 +270,6 @@ async def _async_unload_account_entry(
 
     await store.async_shutdown()
     forget_store(hass, key)
-    if store_count(hass) == 0:
-        hass.data.pop(_HISTORY, None)
 
     if hass.is_stopping:
         # Every commute is being unloaded right along with this account at
@@ -418,7 +417,6 @@ async def _async_setup_commute_entry(
             board=board,
             route=route,
             progress=progress,
-            history=store.history,
             origin=origin,
             destination=destination,
             store_key=key,
@@ -437,8 +435,6 @@ async def _async_setup_commute_entry(
         if store.release(entry.entry_id) and store.account_entry_id is None:
             await store.async_shutdown()
             forget_store(hass, key)
-            if store_count(hass) == 0:
-                hass.data.pop(_HISTORY, None)
         raise
 
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
@@ -524,10 +520,7 @@ async def _client_for_website_commute(
                 await status.async_shutdown()
                 await static.async_shutdown()
                 raise
-            history = await _shared_history(hass)
-            store = CoordinatorStore(
-                client=client, static=static, status=status, history=history
-            )
+            store = CoordinatorStore(client=client, static=static, status=status)
             store.adopt(hass, static)
             store.adopt(hass, status)
             register_store(hass, key, store)
@@ -561,8 +554,6 @@ async def _async_unload_commute_entry(
         # entry`), whether or not a commute is still claiming it.
         await store.async_shutdown()
         forget_store(hass, key)
-        if store_count(hass) == 0:
-            hass.data.pop(_HISTORY, None)
 
     return True
 

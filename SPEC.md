@@ -467,9 +467,9 @@ This is exactly the "which track is occupied" signal §3.8 declared unobtainable
 is: unobtainable *from the website*. The client attaches it as
 `Departure.signaled_track`, matched on train number and scheduled origin departure so a
 set standing under yesterday's number is not this train. It is deliberately **not** folded
-into `Departure.track`: the board is the official answer, the track history (§7.2) is
-measured against the board's posting time, and a signaled platform recorded as a posting
-would corrupt the one measurement that makes that history worth keeping.
+into `Departure.track`: the board is the official answer, it is what the signal is scored
+against (`scripts/signal_accuracy.py`), and a signaled platform recorded as a posting
+would make that score measure itself.
 `Departure.track_source` (`board` / `signaled` / `None`) is what a consumer wanting one
 answer reads. Decoders are per station in `api/circuits.py`; only `NY` exists, and any
 other station answers `None` rather than a guess.
@@ -710,7 +710,6 @@ custom_components/njtransit/
 ├── binary_sensor.py
 ├── calendar.py
 ├── event.py              # discrete changes to a train (§9)
-├── track_history.py      # records track assignments (§7.2)
 ├── diagnostics.py
 ├── strings.json
 ├── brand/                # generated icons, original artwork only
@@ -1040,61 +1039,39 @@ The store key an entry was set up against is remembered on its runtime data rath
 recomputed at unload: a reconfigure rewrites the entry's data *before* reloading it, and
 computing the key from the new data would release the wrong store.
 
-### 7.2 Track history is recorded but not predicted from
+### 7.2 Track prediction from history was tried, and retired
 
-`track_history.py` listens to each board coordinator and persists every track assignment it
-watches being made. It attaches to the *shared* board rather than to a config entry, so two
-commutes out of one station record one copy, and it is detached when the board itself is
-released.
+From August to November 2026 a recorder (`track_history.py`) persisted every track the
+board posted, so one question could be settled with data: can the board's own past say
+which track a train will leave from, early enough to matter? It could not, and the
+recorder and the models were removed. This section is the record of why, so the question
+is not reopened without new evidence.
 
-**It records; it does not predict, and that ordering is the design.** Two days of the
-integration's own recorder history at New York Penn showed 8 of 10 trains departing from a
-different track than the same train used the previous weekday, with no disruption on either
-evening. `scripts/analyze_tracks.py` reproduces this from a diagnostics download:
+**The bar was set before the data existed: 60% top-1 accuracy**, on the grounds that below
+it a prediction does not change what anyone does on a platform. It had to be more than nine
+minutes early to be worth anything, because that is when the board itself posts (§3.8: a
+median of 8.8 minutes before departure, quartile range 1.9).
 
-```
-model                    top-1   top-3  answered
-m0 global mode              7%     28%      100%
-m1 by train                 9%      9%       52%
-m4 m1 - conflicts          11%     26%      100%
-```
-
-That sample came from three rotating departure sensors, and it understated the problem.
-The first full day of whole-board recording found New York Penn using **16** tracks, not
-the ten those three slots ever saw — so a uniform guess is nearer 6% than 10%, and there
-are half again as many candidates to choose between.
-
-The same day measured what the feature would actually be worth, over 164 timed
-assignments: the board publishes a track a median of 9.0 minutes before departure. At
-n=236 that settled at a **median of 8.8 minutes** (§3.8). That is the number a prediction
-has to beat — and it is a demanding one, because it is not merely an average wait but a
-tight one, so a prediction has to be right *and* more than about nine minutes early to be
-worth anything at all.
-
-One further observation, from 164 assignments: exactly **one** was later changed. Track
-reassignment at Penn is rare, so a prediction made at T-30 would not be undermined by
-churn after the board posts — the difficulty is entirely in making it, not in it going
-stale.
+**Nothing came close.** Eight hand-written models (the train's usual track, by weekday, by
+time slot, minus tracks already taken, the free track, the last track used, combinations)
+and a fitted conditional-logit ranker were scored leave-one-day-out, weekly, for ten weeks
+while the history behind them tripled. The best held between **23% and 28%** top-1 the
+whole time; the ranker between **19% and 21%**. Collapsing tracks to the island platform
+each pair shares lifted the ranker to 35% -- the models are disproportionately wrong by one
+track, onto the other face of the same platform -- and that is still well short. More data
+did not move any of them, which is the answer the weekly series existed to give: a
+ceiling, not a shortage. nypenn.live's freely visible predictions scored the same ~20%.
 
 The structural reason is §3.8: departure track at a terminal follows from which equipment
-turned into the train and where it berthed, and arrival track is unavailable at any price.
-Every reachable signal is a proxy for a hidden variable.
+turned into the train and where it berthed. Every signal the board offers is a proxy for
+that hidden variable. The signalling feed is not a proxy -- it observes where the set
+actually is -- which is why §2.9 succeeds where this failed, and why it replaces this
+rather than feeding it.
 
-So a bar was set before the data existed — **60% top-1 accuracy** — on the grounds that
-below it a prediction does not change what anyone does on a platform. If nothing clears it,
-the honest outcome is exclusion hints or nothing.
-
-Two details in the recorder exist to keep that judgement honest:
-
-- `assigned_at` is `null` unless the train was seen on the board *without* a track first.
-  Home Assistant starting mid-window would otherwise manufacture a plausible, wrong lead
-  time — and lead time is the number that decides whether predicting beats waiting.
-- `first_track` is set only on reassignment, so its absence means "assigned once" rather
-  than "unknown".
-
-Retention is 30 days (`TRACK_HISTORY_DAYS`), matching what choochootracker.com states it
-analyses. Writes are coalesced via `Store.async_delay_save`; Home Assistant flushes pending
-saves at shutdown, and `async_flush` covers the last entry being removed.
+**What was removed.** The recorder, its 30 days of storage, the diagnostics export, and the
+offline models and their scripts. The recorder's file (`.storage/njtransit.track_history`)
+is deleted on start, once per run; that cleanup can go after a few releases. Git history
+has all of it; the last commit carrying the models is the merge of #80.
 
 ### 7.3 A late track is the signal worth having
 
@@ -1117,40 +1094,28 @@ unobservable through this API — every candidate signal is a proxy for a hidden
   drops the field — reports every train as permanently overdue. The signal is "late while
   others are getting theirs", which is meaningless where nobody is.
 
-**Whether it is a warning or a restatement is not yet known, and at a terminal it may not
-be answerable at all.** `assigned_at` is measured against the *scheduled* time, so a train
-already running late has its track posted late by definition. If the late assignments turn
-out to be exactly the already-delayed trains, this says nothing the board did not.
-`delay_at_assignment` exists to settle it — but §3.8 establishes that New York Penn
-publishes no lateness whatsoever, so that field is null for every row recorded there and
-the confound cannot be controlled from the departure board alone. The outcome has to be
-recovered by matching the train against a downstream station's board, where the same
-service does carry a delay. `scripts/analyze_tracks.py` does that, on train and service
-day, searching adjacent days because each station files a departure under its own
-scheduled date -- a train leaving Penn at 23:50 reaches Short Hills after midnight. Over
-the first three days it recovered 44 outcomes that were otherwise unobservable, which is
-the difference between the hypothesis being testable and not. Recovered outcomes are
-labelled as borrowed wherever they are reported: second-hand evidence is a different
-thing from a direct observation and a reader deciding whether to trust a rate is entitled
-to know which it is.
+**It is mostly a restatement, and a weak warning.** `assigned_at` is measured against the
+*scheduled* time, so a train already running late has its track posted late by definition;
+the question was always whether a late track says anything the delay does not. Measured
+over 30 days at New York Penn (October-November 2026, 4,679 departures, outcomes read
+directly from the RailData board, which unlike the website does publish lateness at Penn):
 
-Two ways this measurement erased itself before the design was right, both worth keeping in
-mind because neither looked like a failure:
+```
+                                        went wrong (5+ min late, or cancelled)
+all trains, track posted >= 6 min out       234 / 3,789     6%
+all trains, track posted <  6 min out       288 /   485    59%
+on time when posted, track >= 6 min out      15 / 3,515   0.4%
+on time when posted, track <  6 min out       4 /   195     2%
+```
 
-- **Outcomes were sampled at the worst moment.** Keeping "whatever the board last said"
-  sounds like the definition of a final state, but the last sighting is systematically the
-  emptiest — a train counts down `15 min late` for half an hour, flips to `ALL ABOARD`
-  with no delay field, and the final poll overwrites the measurement with null. Every
-  delay in the first three days of collection was lost this way. The recorder now keeps
-  the worst value seen (`worst_delay`) alongside the last known one (`final_delay`), and
-  treats `cancelled` as terminal.
-- **An absence was reported as a finding.** The analysis guarded on "does any row carry a
-  final status", which every row does, and so printed `0/27 = 0% went wrong` for a station
-  that had never published a single delay. It now requires an outcome to be *observable*
-  before counting it, and says so plainly when none are.
+The 59% is the delay talking. Among trains still on time when their track went up late,
+the risk is about five times higher (Fisher p = 0.015), but 191 of those 195 departures
+were fine: as an alert it would be a false alarm almost every time, and it catches 4 of the
+19 bad commutes in that group. The decision was not to build a prediction on it.
 
 The event ships regardless, because it is actionable on its own terms — you are told the
-track is not up when it should be, which is a fact whatever it turns out to correlate with.
+track is not up when it should be, which is a fact even though, as above, it rarely
+foretells anything the board is not already saying.
 
 ## 8. Config flow
 
