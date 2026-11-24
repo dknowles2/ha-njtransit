@@ -25,7 +25,7 @@ jobs:
       contents: write
     steps:
       - name: Check out the repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ github.event.release.tag_name || inputs.tag }}
 
@@ -34,23 +34,43 @@ jobs:
       # deliberately not a plausible version -- substituting "0.0.0" would
       # silently no-op if someone ever set a real one.
       - name: Stamp the release version into the manifest
+        env:
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
         run: |
-          version="${{ github.event.release.tag_name || inputs.tag }}"
-          version="${version,,}"
-          version="${version#v}"
-          manifest="custom_components/njtransit/manifest.json"
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import sys
+          from pathlib import Path
 
-          grep -q '"version": "0000.0.0"' "$manifest" || {
-            echo "::error::$manifest no longer carries the 0000.0.0 placeholder"
-            exit 1
-          }
-          sed -i "s/0000\.0\.0/${version}/" "$manifest"
-          python3 -c "
-          import json, sys
-          v = json.load(open('$manifest'))['version']
-          print(f'manifest version is now {v}')
-          sys.exit(0 if v == '${version}' else 1)
-          "
+          tag = os.environ["TAG"]
+          if not re.fullmatch(r"^v?[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z]+)?$", tag):
+              print(f"::error::invalid release tag: {tag!r}", file=sys.stderr)
+              sys.exit(1)
+
+          version = tag.removeprefix("v")
+          manifest_path = Path("custom_components/njtransit/manifest.json")
+          with manifest_path.open("r", encoding="utf-8") as handle:
+              manifest = json.load(handle)
+
+          if manifest.get("version") != "0000.0.0":
+              print(
+                  f"::error::{manifest_path} no longer carries the 0000.0.0 placeholder",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+
+          manifest["version"] = version
+          with manifest_path.open("w", encoding="utf-8") as handle:
+              json.dump(manifest, handle, indent=2)
+              handle.write("\n")
+
+          with manifest_path.open("r", encoding="utf-8") as handle:
+              stamped = json.load(handle)["version"]
+          print(f"manifest version is now {stamped}")
+          sys.exit(0 if stamped == version else 1)
+          PY
 
       - name: Build the release zip
         run: |
