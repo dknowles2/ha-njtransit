@@ -4,13 +4,20 @@ import { customElement, property, state } from "lit/decorators.js";
 import { classMap } from "lit/directives/class-map.js";
 
 import {
+  boardStatus,
   isPostingTracks,
   pickHero,
   readBoard,
   readDeparture,
   resolveCommute,
 } from "./commute.js";
-import { countdown, formatClock, formatShortClock, minutesUntil } from "./format.js";
+import {
+  countdown,
+  effectiveDeparture,
+  formatClock,
+  formatShortClock,
+  minutesUntil,
+} from "./format.js";
 import {
   cardMood,
   crowdingPill,
@@ -41,8 +48,8 @@ export class NJTransitDeparturesCard extends LitElement {
   private _timer?: ReturnType<typeof setInterval>;
 
   public setConfig(config: DeparturesCardConfig): void {
-    if (!config?.entity) {
-      throw new Error("Set `entity` to the commute's next departure sensor");
+    if (!config) {
+      throw new Error("Invalid configuration");
     }
     this._config = config;
   }
@@ -66,6 +73,10 @@ export class NJTransitDeparturesCard extends LitElement {
 
   public override connectedCallback(): void {
     super.connectedCallback();
+    if (this._timer) {
+      clearInterval(this._timer);
+    }
+    this._now = new Date();
     this._timer = setInterval(() => {
       this._now = new Date();
     }, TICK_MS);
@@ -80,11 +91,51 @@ export class NJTransitDeparturesCard extends LitElement {
   }
 
   protected override render(): TemplateResult | typeof nothing {
-    if (!this.hass || !this._config?.entity) {
+    if (!this.hass || !this._config) {
       return nothing;
     }
 
+    const heading = this._config.title
+      ? html`<h1 class="card-header">${this._config.title}</h1>`
+      : nothing;
+
+    if (!this._config.entity) {
+      return html`
+        <ha-card class="muted">
+          ${heading}
+          ${this._renderMessage(
+            "Select a commute",
+            "Choose a departure sensor in the card configuration.",
+          )}
+        </ha-card>
+      `;
+    }
+
     const commute = resolveCommute(this.hass, this._config.entity);
+    const availability = boardStatus(this.hass, this._config.entity, commute);
+    if (availability === "missing") {
+      return html`
+        <ha-card class="warn">
+          ${heading}
+          ${this._renderMessage(
+            "Entity not found",
+            "Check the card configuration and select a commute departure sensor.",
+          )}
+        </ha-card>
+      `;
+    }
+    if (availability === "unavailable") {
+      return html`
+        <ha-card class="warn">
+          ${heading}
+          ${this._renderMessage(
+            "Departure board unavailable",
+            "Unable to reach NJ Transit. Check the integration or your connection.",
+          )}
+        </ha-card>
+      `;
+    }
+
     const board = readBoard(this.hass, commute);
     const favorite = commute.favorite
       ? readDeparture(this.hass, commute.favorite)
@@ -97,9 +148,7 @@ export class NJTransitDeparturesCard extends LitElement {
 
     return html`
       <ha-card class=${classMap({ [mood]: true })}>
-        ${this._config.title
-          ? html`<h1 class="card-header">${this._config.title}</h1>`
-          : nothing}
+        ${heading}
         ${departure
           ? this._renderHero(departure, pills, {
               tracking,
@@ -115,7 +164,7 @@ export class NJTransitDeparturesCard extends LitElement {
 
   /** Everything the hero has to say about this train, in reading order. */
   private _pillsFor(departure: Departure, posting: boolean): Pill[] {
-    const minutes = minutesUntil(departure.scheduled, this._now);
+    const minutes = minutesUntil(effectiveDeparture(departure), this._now);
     return [
       trackPill(departure, minutes, posting),
       statusPill(departure),
@@ -123,17 +172,22 @@ export class NJTransitDeparturesCard extends LitElement {
     ].filter((pill): pill is Pill => pill !== null);
   }
 
-  private _renderEmpty(allCancelled: boolean): TemplateResult {
+  private _renderMessage(titleText: string, body: string): TemplateResult {
     return html`
       <div class="hero empty">
-        <h3>Nothing on the board</h3>
-        <p>
-          ${allCancelled
-            ? "Every upcoming departure is cancelled."
-            : "No departures in the next couple of hours."}
-        </p>
+        <h2>${titleText}</h2>
+        <p>${body}</p>
       </div>
     `;
+  }
+
+  private _renderEmpty(allCancelled: boolean): TemplateResult {
+    return this._renderMessage(
+      "Nothing on the board",
+      allCancelled
+        ? "Every upcoming departure is cancelled."
+        : "No departures in the next couple of hours.",
+    );
   }
 
   private _renderHero(
@@ -147,39 +201,41 @@ export class NJTransitDeparturesCard extends LitElement {
     },
   ): TemplateResult {
     const { tracking, progress, favoriteEntity } = context;
-    const minutes = minutesUntil(departure.scheduled, this._now);
-    const { value, unit } = countdown(minutes);
+    const minutes = minutesUntil(effectiveDeparture(departure), this._now);
+    const { value, unit } =
+      departure.status === "cancelled"
+        ? { value: "Cancelled", unit: false }
+        : countdown(minutes);
     const emptiest = emptiestCars(departure.cars);
 
     return html`
-      <div
-        class="hero"
-        role="button"
-        tabindex="0"
-        @click=${() => this._moreInfo(departure.entityId)}
-        @keydown=${(event: KeyboardEvent) => {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            this._moreInfo(departure.entityId);
-          }
-        }}
-      >
-        <div class="countdown">
-          ${value}${unit ? html`<span class="unit">min</span>` : nothing}
-        </div>
-        <h2>
-          <span class="clock">${formatClock(departure.scheduled)}</span>
-          ${departure.trainId
-            ? html`<span class="train">Train ${departure.trainId}</span>`
+      <div class="hero">
+        <div
+          class="hero-main"
+          role="button"
+          tabindex="0"
+          aria-label=${this._departureLabel(departure)}
+          @click=${() => this._moreInfo(departure.entityId)}
+          @keydown=${(event: KeyboardEvent) =>
+            this._activate(event, departure.entityId)}
+        >
+          <div class="countdown">
+            ${value}${unit ? html`<span class="unit">min</span>` : nothing}
+          </div>
+          <h2>
+            <span class="clock">${formatClock(departure.scheduled)}</span>
+            ${departure.trainId
+              ? html`<span class="train">Train ${departure.trainId}</span>`
+              : nothing}
+          </h2>
+          <div class="pills">${pills.map((pill) => this._renderPill(pill))}</div>
+          ${emptiest
+            ? html`<p class="hint">${title(emptiest)} cars are emptier</p>`
             : nothing}
-        </h2>
-        <div class="pills">${pills.map((pill) => this._renderPill(pill))}</div>
-        ${emptiest
-          ? html`<p class="hint">${title(emptiest)} cars are emptier</p>`
-          : nothing}
-        ${tracking ? this._renderProgress(progress) : nothing}
+          ${tracking ? this._renderProgress(progress) : nothing}
+        </div>
         ${departure.alerts.map(
-          (message) => html`<blockquote>${message}</blockquote>`,
+          (message) => html`<div class="alert" role="note">${message}</div>`,
         )}
         ${tracking ? nothing : this._renderWaiting(favoriteEntity)}
       </div>
@@ -197,7 +253,9 @@ export class NJTransitDeparturesCard extends LitElement {
     return html`
       <hr />
       <p class="progress">
-        ${stops === 0 ? "Arriving now" : html`<strong>${stops}</strong> stops away`}
+        ${stops === 0
+          ? "Arriving now"
+          : html`<strong>${stops}</strong> ${stops === 1 ? "stop" : "stops"} away`}
         ${typeof next === "string" && next ? html` · next ${next}` : nothing}
       </p>
     `;
@@ -208,7 +266,7 @@ export class NJTransitDeparturesCard extends LitElement {
    *
    * Without this the fallback is indistinguishable from the favourite, and
    * the countdown at the top is for a service the reader was never going to
-   * board.
+   * board. Riders who have not configured any favourites are not nagged.
    */
   private _renderWaiting(
     favoriteEntity: string | null,
@@ -217,14 +275,12 @@ export class NJTransitDeparturesCard extends LitElement {
       ? this.hass!.states[favoriteEntity]?.attributes.favorites
       : undefined;
 
-    if (!Array.isArray(favorites)) {
+    if (!Array.isArray(favorites) || favorites.length === 0) {
       return nothing;
     }
     return html`
       <p class="hint">
-        ${favorites.length
-          ? `Waiting for ${favorites.join(", ")} — not on the board yet.`
-          : "No favourite set. Pick one in this commute's options."}
+        Waiting for ${favorites.join(", ")} — not on the board yet.
       </p>
     `;
   }
@@ -235,10 +291,10 @@ export class NJTransitDeparturesCard extends LitElement {
         <table>
           <thead>
             <tr>
-              <th>Departs</th>
-              <th>Train</th>
-              <th>Trk</th>
-              <th></th>
+              <th scope="col">Departs</th>
+              <th scope="col">Train</th>
+              <th scope="col"><abbr title="Track">Trk</abbr></th>
+              <th scope="col"><span class="sr-only">Status</span></th>
             </tr>
           </thead>
           <tbody>
@@ -250,16 +306,29 @@ export class NJTransitDeparturesCard extends LitElement {
   }
 
   private _renderRow(departure: Departure, posting: boolean): TemplateResult {
-    const minutes = minutesUntil(departure.scheduled, this._now);
+    const minutes = minutesUntil(effectiveDeparture(departure), this._now);
     const status = statusPill(departure);
+    const relative =
+      minutes > 0 ? `${minutes}m` : minutes === 0 ? "now" : "dep";
 
     return html`
-      <tr @click=${() => this._moreInfo(departure.entityId)}>
+      <tr
+        tabindex="0"
+        aria-label=${this._departureLabel(departure)}
+        @click=${() => this._moreInfo(departure.entityId)}
+        @keydown=${(event: KeyboardEvent) =>
+          this._activate(event, departure.entityId)}
+      >
         <td>
           <strong>${formatShortClock(departure.scheduled)}</strong>
-          <span class="relative">${minutes > 0 ? `${minutes}m` : "now"}</span>
+          <span class="relative">${relative}</span>
         </td>
-        <td>${departure.trainId}${departure.favorite ? " ⭐" : ""}</td>
+        <td>
+          ${departure.trainId}${departure.favorite
+            ? html`<span aria-hidden="true"> ⭐</span
+                ><span class="sr-only"> (favourite)</span>`
+            : nothing}
+        </td>
         <td>${this._renderPill(trackCell(departure, minutes, posting))}</td>
         <td>${status ? this._renderPill(status) : nothing}</td>
       </tr>
@@ -269,8 +338,39 @@ export class NJTransitDeparturesCard extends LitElement {
   private _renderPill(pill: Pill): TemplateResult {
     return html`<span
       class=${classMap({ pill: true, [pill.tone]: true })}
+      aria-label=${pill.label ?? nothing}
+      title=${pill.label ?? nothing}
       >${pill.text}</span
     >`;
+  }
+
+  private _departureLabel(departure: Departure): string {
+    const parts: string[] = [];
+    if (departure.trainId) {
+      parts.push(`Train ${departure.trainId}`);
+    }
+    parts.push(formatClock(departure.scheduled));
+    if (departure.favorite) {
+      parts.push("favourite");
+    }
+    if (departure.track) {
+      parts.push(`Track ${departure.track}`);
+    } else if (departure.signaledTrack && departure.status !== "cancelled") {
+      parts.push(`Track ${departure.signaledTrack} (likely)`);
+    }
+    if (departure.statusText) {
+      parts.push(departure.statusText);
+    } else if (departure.status === "cancelled") {
+      parts.push("Cancelled");
+    }
+    return parts.join(", ");
+  }
+
+  private _activate(event: KeyboardEvent, entityId: string): void {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      this._moreInfo(entityId);
+    }
   }
 
   private _moreInfo(entityId: string): void {
@@ -297,6 +397,14 @@ export class NJTransitDeparturesCard extends LitElement {
 
       --njt-radius: 18px;
       --njt-gutter: 18px;
+      /* Secondary text mixed toward primary so text over the 13% corner wash
+         clears WCAG AA (4.5:1) in every mood across both light and dark HA
+         themes (lowest is 4.56:1 in dark warn, 8.26:1+ in light). */
+      --njt-secondary: color-mix(
+        in oklab,
+        var(--secondary-text-color) 50%,
+        var(--primary-text-color)
+      );
       display: block;
       container-type: inline-size;
     }
@@ -315,7 +423,7 @@ export class NJTransitDeparturesCard extends LitElement {
        needs far more of the text colour than the others, because a light hue
        can only be darkened by borrowing from it. */
     .pill,
-    blockquote {
+    .alert {
       --ink: 58%;
       background: color-mix(in oklab, var(--tone) 14%, transparent);
       color: color-mix(
@@ -333,6 +441,13 @@ export class NJTransitDeparturesCard extends LitElement {
       border-radius: var(--njt-radius);
       overflow: hidden;
       background: var(--card-background-color);
+      /* Focus outline mixed with primary text so WCAG 1.4.11 (3:1) clears in
+         all moods including light-theme warn (4.66:1 over wash). */
+      --njt-focus: color-mix(
+        in oklab,
+        var(--mood) 55%,
+        var(--primary-text-color)
+      );
     }
 
     ha-card.warn {
@@ -391,18 +506,17 @@ export class NJTransitDeparturesCard extends LitElement {
     .hero {
       position: relative;
       padding: 18px var(--njt-gutter) 20px;
+    }
+
+    .hero-main {
       cursor: pointer;
       -webkit-tap-highlight-color: transparent;
+      border-radius: 10px;
     }
 
-    .hero.empty {
-      cursor: default;
-    }
-
-    .hero:focus-visible {
-      outline: 2px solid var(--mood);
-      outline-offset: -3px;
-      border-radius: var(--njt-radius);
+    .hero-main:focus-visible {
+      outline: 2px solid var(--njt-focus);
+      outline-offset: 4px;
     }
 
     .countdown {
@@ -427,7 +541,7 @@ export class NJTransitDeparturesCard extends LitElement {
       font-weight: 650;
       letter-spacing: 0.08em;
       text-transform: uppercase;
-      color: var(--secondary-text-color);
+      color: var(--njt-secondary);
       transform: translateY(-0.55em);
     }
 
@@ -442,13 +556,21 @@ export class NJTransitDeparturesCard extends LitElement {
       font-variant-numeric: tabular-nums;
     }
 
+    .hero.empty h2 {
+      display: block;
+      margin: 0 0 6px;
+      font-size: 1.15rem;
+      font-weight: 650;
+      letter-spacing: -0.01em;
+    }
+
     .clock {
       color: var(--primary-text-color);
       font-weight: 650;
     }
 
     .train {
-      color: var(--secondary-text-color);
+      color: var(--njt-secondary);
     }
 
     /* Separator between the two, drawn rather than typed, so it never lands
@@ -465,13 +587,6 @@ export class NJTransitDeparturesCard extends LitElement {
       opacity: 0.55;
     }
 
-    h3 {
-      margin: 0 0 6px;
-      font-size: 1.15rem;
-      font-weight: 650;
-      letter-spacing: -0.01em;
-    }
-
     p {
       margin: 0;
       line-height: 1.55;
@@ -479,7 +594,7 @@ export class NJTransitDeparturesCard extends LitElement {
 
     .hint {
       margin-top: 12px;
-      color: var(--secondary-text-color);
+      color: var(--njt-secondary);
       font-size: 0.9rem;
     }
 
@@ -524,7 +639,7 @@ export class NJTransitDeparturesCard extends LitElement {
       font-weight: 600;
     }
 
-    blockquote {
+    .alert {
       --tone: var(--error-color);
       margin: 14px 0 0;
       padding: 10px 13px;
@@ -536,6 +651,7 @@ export class NJTransitDeparturesCard extends LitElement {
     .board {
       position: relative;
       padding: 0 var(--njt-gutter) 8px;
+      overflow-x: auto;
     }
 
     table {
@@ -554,6 +670,22 @@ export class NJTransitDeparturesCard extends LitElement {
       letter-spacing: 0.14em;
       text-transform: uppercase;
       color: var(--secondary-text-color);
+    }
+
+    abbr {
+      text-decoration: none;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
     }
 
     td {
@@ -582,6 +714,11 @@ export class NJTransitDeparturesCard extends LitElement {
         calc(var(--njt-gutter) * -1) 0 0 0
           color-mix(in oklab, var(--mood) 8%, transparent),
         var(--njt-gutter) 0 0 0 color-mix(in oklab, var(--mood) 8%, transparent);
+    }
+
+    tbody tr:focus-visible {
+      outline: 2px solid var(--njt-focus);
+      outline-offset: -2px;
     }
 
     tbody tr:last-child td {
@@ -625,9 +762,18 @@ export class NJTransitDeparturesCard extends LitElement {
         --njt-gutter: 14px;
       }
 
-      td,
       th {
+        padding-right: 4px;
+      }
+
+      td {
         font-size: 0.9rem;
+        padding: 9px 4px 9px 0;
+      }
+
+      .board .pill {
+        font-size: 0.72rem;
+        padding: 2px 7px;
       }
 
       .relative {

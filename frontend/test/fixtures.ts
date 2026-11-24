@@ -41,6 +41,17 @@ export function empty(entityId: string): HassEntity {
   };
 }
 
+/** A sensor whose coordinator failed or whose auth was rejected. */
+export function unavailable(entityId: string): HassEntity {
+  return {
+    entity_id: entityId,
+    state: "unavailable",
+    attributes: {},
+    last_changed: "",
+    last_updated: "",
+  };
+}
+
 interface Options {
   /** Give the entities a device and translation keys, as the registry would. */
   registry?: boolean;
