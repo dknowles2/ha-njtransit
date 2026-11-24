@@ -64,17 +64,6 @@ MIN_INTERVAL: Final = 30
 STATIC_INTERVAL: Final = timedelta(hours=24)
 ROUTE_INTERVAL: Final = timedelta(hours=24)
 
-# How much track-assignment history to keep. Thirty days is what
-# choochootracker.com states it analyses, and it covers four of each weekday,
-# which is the shortest window that can tell a weekday pattern from a run of
-# coincidences.
-TRACK_HISTORY_DAYS: Final = 30
-
-# Writes are coalesced rather than issued per assignment: this file is the
-# largest thing the integration owns, and Home Assistant flushes a pending
-# delayed save on shutdown, so a long delay costs nothing but a crash.
-TRACK_HISTORY_SAVE_DELAY: Final = 600
-
 # Storage key for what the RailData client must not fetch twice: its token
 # (ten a day) and each station's schedule (five a day). One file per account.
 RAILDATA_STORAGE_KEY: Final = f"{DOMAIN}.raildata"

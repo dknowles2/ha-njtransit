@@ -93,8 +93,8 @@ class Departure:
     Only the RailData source can fill this, and only at stations whose track
     circuits have been decoded (SPEC 2.9). It is independent of :attr:`track`
     rather than a fallback for it: the board is the official answer and the
-    track history is measured against it, so nothing here pretends a
-    signaled platform is a posted one. Consumers wanting a single answer
+    signal is scored against it, so nothing here pretends a signaled
+    platform is a posted one. Consumers wanting a single answer
     read :attr:`track_source`."""
 
     delay_minutes: int | None = None

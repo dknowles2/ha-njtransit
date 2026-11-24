@@ -26,9 +26,9 @@ never log, print or assert on a credential. In return it carries the one
 thing the website cannot: the signaling system's view of which platform a
 train is standing on, decoded per station in `api/circuits.py`. Only New York
 Penn is decoded. **`Departure.signaled_track` is kept apart from
-`Departure.track` on purpose** -- the track history is measured against the
-board's posting time, and folding the signal in would corrupt that
-measurement.
+`Departure.track` on purpose** -- the board is what the signal is scored
+against (`scripts/signal_accuracy.py`), and folding the signal into it would
+make that score measure itself.
 
 Everything above `api/` sees only the models. Both clients satisfy the
 `RailSource` protocol in `api/source.py`; do not make a coordinator or entity
@@ -274,7 +274,7 @@ line-length reflow with everything else green.
 `./scripts/mutation_check.sh` breaks one real behaviour at a time and checks
 the suite notices. It is not part of CI and is not a routine step -- run it
 after changing behaviour in `event.py`, `coordinator.py`, `binary_sensor.py`,
-`track_history.py`, the Live Activity blueprint, or the card. Card mutations
+`api/circuits.py`, the Live Activity blueprint, or the card. Card mutations
 are judged by vitest rather than pytest, via `run_card`; running the wrong
 suite against a broken card passes and reads as a gap in the Python tests. Every gap it has found so
 far was a fully covered line sitting under a test that could not fail:
