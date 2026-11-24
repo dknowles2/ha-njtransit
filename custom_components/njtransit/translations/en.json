@@ -32,7 +32,7 @@
           "destination": "Destination station"
         },
         "data_description": {
-          "destination": "Optional. Narrows departures to trains that actually reach this station, including ones requiring a transfer."
+          "destination": "Optional. Narrows departures to direct trains serving this station, falling back to transfers only when no direct service runs."
         }
       },
       "reconfigure": {
@@ -43,9 +43,17 @@
           "raildata": "RailData API (developer account; shows tracks earlier)"
         }
       },
+      "reconfigure_account": {
+        "title": "Update RailData credentials",
+        "description": "Enter the current password for {username}. Every commute on this account picks it up once updated.",
+        "data": {
+          "username": "Username",
+          "password": "Password"
+        }
+      },
       "reauth_confirm": {
         "title": "RailData credentials rejected",
-        "description": "NJ Transit no longer accepts this account's stored username and password. Enter the current ones -- every commute on this account picks them up once this is fixed.",
+        "description": "NJ Transit no longer accepts this account's stored credentials. Enter the current password for {username} -- every commute on this account picks it up once fixed.",
         "data": {
           "username": "Username",
           "password": "Password"
@@ -65,7 +73,8 @@
       "cannot_connect": "Could not reach NJ Transit.",
       "unknown": "Unexpected error.",
       "reauth_successful": "Credentials updated.",
-      "reconfigure_successful": "Data source changed."
+      "reconfigure_successful": "Configuration updated.",
+      "wrong_account": "The username must match the existing RailData account."
     }
   },
   "options": {
@@ -84,10 +93,13 @@
         "data_description": {
           "departure_interval": "NJ Transit caches responses for 30 seconds, so polling faster gains nothing.",
           "lookahead": "Departures beyond this window are ignored by the disruption sensor.",
-          "favorite_trains": "Train numbers you usually catch, e.g. 6662. Leave empty to skip the favorite sensor entirely.",
+          "favorite_trains": "Train numbers you usually catch, e.g. 6662. Leave empty if you do not track specific trains.",
           "status_interval": "On the RailData source, the alert feed is polled per account at a fixed interval rather than this one -- see Choosing a data source in the README."
         }
       }
+    },
+    "abort": {
+      "account_no_options": "Options are configured per commute, not on the RailData account."
     }
   },
   "entity": {

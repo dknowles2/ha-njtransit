@@ -53,6 +53,7 @@ from .account import (
     account_unique_id,
     async_create_account_entry,
     find_account_entry,
+    is_account_entry,
 )
 from .api.client import NJTransitClient
 from .api.exceptions import (
@@ -91,7 +92,7 @@ from .const import (
     SOURCE_RAILDATA,
     SOURCE_WEBSITE,
 )
-from .coordinator import AccountRuntime, NJTransitConfigEntry
+from .coordinator import AccountRuntime, EntryRuntime, NJTransitConfigEntry
 from .raildata_store import RailDataStorage
 
 SOURCES = (SOURCE_WEBSITE, SOURCE_RAILDATA)
@@ -415,12 +416,18 @@ class NJTransitConfigFlow(ConfigFlow, domain=DOMAIN):
                         data=self._data(origin, destination),
                     )
 
-        if self._suggested_origin is None:
-            self._suggested_origin = await self._suggest_origin(stations)
+        if user_input is not None:
+            suggested_origin: str | None = user_input.get(CONF_ORIGIN)
+            suggested_destination: str | None = user_input.get(CONF_DESTINATION)
+        else:
+            if self._suggested_origin is None:
+                self._suggested_origin = await self._suggest_origin(stations)
+            suggested_origin = self._suggested_origin
+            suggested_destination = None
 
         return self.async_show_form(
             step_id="commute",
-            data_schema=self._schema(stations, self._suggested_origin),
+            data_schema=self._schema(stations, suggested_origin, suggested_destination),
             errors=errors,
         )
 
@@ -429,8 +436,21 @@ class NJTransitConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Switch an existing commute to the other source."""
+        """Switch a commute's source, or update a RailData account's password."""
+        if is_account_entry(self._get_reconfigure_entry()):
+            return await self.async_step_reconfigure_account()
         return self.async_show_menu(step_id="reconfigure", menu_options=list(SOURCES))
+
+    async def async_step_reconfigure_account(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Update credentials for an existing RailData account."""
+        return await self._async_update_account_credentials(
+            entry=self._get_reconfigure_entry(),
+            step_id="reconfigure_account",
+            reason="reconfigure_successful",
+            user_input=user_input,
+        )
 
     async def _reconfigure(self) -> ConfigFlowResult:
         """Move the entry being reconfigured onto the chosen source.
@@ -480,26 +500,53 @@ class NJTransitConfigFlow(ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Ask for new credentials and check them."""
-        entry = self._get_reauth_entry()
+        return await self._async_update_account_credentials(
+            entry=self._get_reauth_entry(),
+            step_id="reauth_confirm",
+            reason="reauth_successful",
+            user_input=user_input,
+        )
+
+    async def _async_update_account_credentials(
+        self,
+        *,
+        entry: NJTransitConfigEntry,
+        step_id: str,
+        reason: str,
+        user_input: dict[str, Any] | None,
+    ) -> ConfigFlowResult:
+        """Validate and save updated credentials for an existing account entry.
+
+        Locked to the existing account's unique ID so `entry.unique_id`,
+        `entry.title`, and the account's storage key can never diverge.
+        """
+        existing_username = str(entry.data.get(CONF_USERNAME, ""))
         errors: dict[str, str] = {}
         if user_input is not None:
+            username = user_input[CONF_USERNAME].strip()
+            await self.async_set_unique_id(account_unique_id(username))
+            self._abort_if_unique_id_mismatch(reason="wrong_account")
+
             self._source = SOURCE_RAILDATA
             self._credentials = {
-                CONF_USERNAME: user_input[CONF_USERNAME].strip(),
+                CONF_USERNAME: existing_username,
                 CONF_PASSWORD: user_input[CONF_PASSWORD],
             }
             self._client = None
             errors = await self._check_credentials()
             if not errors:
                 return self.async_update_reload_and_abort(
-                    entry, data_updates=self._credentials
+                    entry,
+                    data_updates={CONF_PASSWORD: user_input[CONF_PASSWORD]},
+                    reason=reason,
                 )
 
-        suggested = user_input or {CONF_USERNAME: entry.data.get(CONF_USERNAME, "")}
+        suggested = user_input or {CONF_USERNAME: existing_username}
         return self.async_show_form(
-            step_id="reauth_confirm",
+            step_id=step_id,
             data_schema=_credentials_schema(suggested),
             errors=errors,
+            description_placeholders={"username": existing_username},
         )
 
     async def _suggest_origin(self, stations: list[Station]) -> str | None:
@@ -522,9 +569,13 @@ class NJTransitConfigFlow(ConfigFlow, domain=DOMAIN):
 
         # Always the website. RailData publishes no coordinates, and this is
         # an anonymous lookup of a public fact, not a feed (SPEC 2.9).
+        # Round to 2 decimal places (~1.1 km) so exact home coordinates are not
+        # sent to an unauthenticated third-party endpoint.
         client = NJTransitClient(async_get_clientsession(self.hass))
         try:
-            nearby = await client.nearest_stations(latitude, longitude)
+            nearby = await client.nearest_stations(
+                round(latitude, 2), round(longitude, 2)
+            )
         except NJTransitError:
             # Never block setup for a nicety.
             return None
@@ -548,7 +599,11 @@ class NJTransitConfigFlow(ConfigFlow, domain=DOMAIN):
         await self._source_client.departures(title)
 
     @staticmethod
-    def _schema(stations: list[Station], suggested: str | None = None) -> vol.Schema:
+    def _schema(
+        stations: list[Station],
+        suggested_origin: str | None = None,
+        suggested_destination: str | None = None,
+    ) -> vol.Schema:
         """Return the origin/destination form schema."""
         options = station_options(stations)
         selector = SelectSelector(
@@ -558,14 +613,20 @@ class NJTransitConfigFlow(ConfigFlow, domain=DOMAIN):
         # leaving it required, so a wrong guess is corrected rather than
         # silently accepted by someone pressing submit.
         origin: Any = vol.Required(CONF_ORIGIN)
-        if suggested is not None:
+        if suggested_origin is not None:
             origin = vol.Required(
-                CONF_ORIGIN, description={"suggested_value": suggested}
+                CONF_ORIGIN, description={"suggested_value": suggested_origin}
+            )
+        destination: Any = vol.Optional(CONF_DESTINATION)
+        if suggested_destination:
+            destination = vol.Optional(
+                CONF_DESTINATION,
+                description={"suggested_value": suggested_destination},
             )
         return vol.Schema(
             {
                 origin: selector,
-                vol.Optional(CONF_DESTINATION): selector,
+                destination: selector,
             }
         )
 
@@ -609,6 +670,9 @@ class NJTransitOptionsFlow(OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Adjust poll intervals and disruption thresholds."""
+        if is_account_entry(self.config_entry):
+            return self.async_abort(reason="account_no_options")
+
         if user_input is not None:
             return self.async_create_entry(data=user_input)
 
@@ -640,11 +704,11 @@ class NJTransitOptionsFlow(OptionsFlow):
                         default=options.get(
                             CONF_DELAY_THRESHOLD, DEFAULT_DELAY_THRESHOLD
                         ),
-                    ): _count(1, 60),
+                    ): _minutes(1, 60),
                     vol.Optional(
                         CONF_LOOKAHEAD,
                         default=options.get(CONF_LOOKAHEAD, DEFAULT_LOOKAHEAD),
-                    ): _count(15, 240),
+                    ): _minutes(15, 240),
                     vol.Optional(
                         CONF_FAVORITE_TRAINS,
                         default=list(options.get(CONF_FAVORITE_TRAINS, [])),
@@ -667,9 +731,11 @@ class NJTransitOptionsFlow(OptionsFlow):
         an unvalidated one.
         """
         entry = self.config_entry
+        runtime = getattr(entry, "runtime_data", None)
         route = (
-            entry.runtime_data.route.data
-            if entry.state is ConfigEntryState.LOADED and hasattr(entry, "runtime_data")
+            runtime.route.data
+            if entry.state is ConfigEntryState.LOADED
+            and isinstance(runtime, EntryRuntime)
             else None
         )
         if route is None or not route.trips:
@@ -730,6 +796,19 @@ def _seconds(low: int, high: int) -> NumberSelector:
             step=10,
             mode=NumberSelectorMode.BOX,
             unit_of_measurement="s",
+        )
+    )
+
+
+def _minutes(low: int, high: int) -> NumberSelector:
+    """Return a selector for a duration in minutes."""
+    return NumberSelector(
+        NumberSelectorConfig(
+            min=low,
+            max=high,
+            step=1,
+            mode=NumberSelectorMode.BOX,
+            unit_of_measurement="min",
         )
     )
 
