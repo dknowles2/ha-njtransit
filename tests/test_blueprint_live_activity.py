@@ -24,6 +24,7 @@ import pytest
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.setup import async_setup_component
+from homeassistant.util.unit_system import US_CUSTOMARY_SYSTEM
 from pytest_homeassistant_custom_component.common import async_mock_service
 
 from custom_components.njtransit.api.parsing import TZ
@@ -613,3 +614,140 @@ async def test_being_in_a_named_zone_still_counts(
     await hass.async_block_till_done()
 
     assert pushes(notifications), "being at home in the home zone was not enough"
+
+
+async def test_a_delayed_train_past_scheduled_time_stays_on_screen(
+    hass: HomeAssistant,
+    notifications: list[ServiceCall],
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """A delayed train must count down to its estimated departure, not vanish.
+
+    When a train is 15 minutes late and its timetable time passed 5 minutes
+    ago, it is still 10 minutes away. Driving `minutes_out` and `when` from
+    `scheduled + delay_minutes` keeps the Live Activity alive on the Lock
+    Screen until it actually leaves.
+    """
+    freezer.move_to(MORNING)
+    scheduled = MORNING - timedelta(minutes=5)
+    estimated = scheduled + timedelta(minutes=15)
+    await install(hass)
+
+    hass.states.async_set(
+        FAVORITE,
+        *departure(
+            scheduled,
+            status="delayed",
+            status_text="15 min late",
+            delay=15,
+        ),
+    )
+    await hass.async_block_till_done()
+
+    sent = pushes(notifications)
+    assert sent, "a train 15 min late vanished once its scheduled time passed"
+    activity = sent[0]
+    assert activity["data"]["live_update"] is True
+    assert activity["data"]["chronometer"] is True
+    assert activity["data"]["when"] == int(estimated.timestamp())
+    assert "15 min late" in activity["title"]
+
+
+async def test_a_departed_delayed_train_does_not_keep_counting_down(
+    hass: HomeAssistant,
+    notifications: list[ServiceCall],
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Once the board says departed, do not add delay_minutes back on."""
+    freezer.move_to(MORNING)
+    scheduled = MORNING - timedelta(minutes=5)
+    await install(hass)
+
+    hass.states.async_set(
+        FAVORITE,
+        *departure(
+            scheduled,
+            status="departed",
+            status_text="Departed",
+            delay=15,
+        ),
+    )
+    await hass.async_block_till_done()
+
+    assert pushes(notifications) == []
+
+
+async def test_a_cancelled_favourite_omits_chronometer_and_when(
+    hass: HomeAssistant,
+    notifications: list[ServiceCall],
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """A cancelled favourite is still worth showing, but never with a timer.
+
+    A chronometer ticking down toward a cancelled train reads as a service
+    that is coming. Omit `chronometer` and `when` (and any signaled track)
+    so the Lock Screen reports the cancellation without a countdown.
+    """
+    freezer.move_to(MORNING)
+    leaves = MORNING + timedelta(minutes=12)
+    await install(hass)
+
+    hass.states.async_set(
+        FAVORITE,
+        *departure(
+            leaves,
+            track=None,
+            signaled_track="3",
+            status="cancelled",
+            status_text="Cancelled",
+            delay=None,
+        ),
+    )
+    await hass.async_block_till_done()
+
+    sent = pushes(notifications)
+    assert sent, "a cancelled favourite should still notify the rider"
+    activity = sent[0]
+    assert activity["data"]["live_update"] is True
+    assert "chronometer" not in activity["data"]
+    assert "when" not in activity["data"]
+    assert "Cancelled" in activity["title"]
+    assert "Track" not in activity["title"]
+
+
+async def test_zone_radius_is_honoured_under_us_customary_units(
+    hass: HomeAssistant,
+    notifications: list[ServiceCall],
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """`distance()` returns miles on US installs, while zone radius is metres.
+
+    Multiplying miles by 1000 instead of 1609.344 inflated every zone radius
+    by 61%: 130 m (~0.081 mi) from a 100 m zone looked like 81 m and matched.
+    """
+    hass.config.units = US_CUSTOMARY_SYSTEM
+    freezer.move_to(MORNING)
+    leaves = MORNING + timedelta(minutes=12)
+
+    # 0.00117 deg latitude is ~130 m north of HOME: outside a 100 m zone,
+    # yet 130 m in miles (~0.0808) * 1000 = 80.8 <= 100 under the old bug.
+    just_outside = (HOME[0] + 0.00117, HOME[1])
+    place(hass, just_outside)
+    await install(hass, presence_entity=PERSON, presence_zones=["zone.home"])
+
+    hass.states.async_set(FAVORITE, *departure(leaves, origin=FAR_AWAY))
+    await hass.async_block_till_done()
+
+    assert pushes(notifications) == [], (
+        "130 m from a 100 m zone matched under US_CUSTOMARY_SYSTEM"
+    )
+
+    # 0.00072 deg latitude is ~80 m north of HOME: genuinely inside the 100 m zone.
+    just_inside = (HOME[0] + 0.00072, HOME[1])
+    hass.states.async_set(
+        PERSON, "home", {"latitude": just_inside[0], "longitude": just_inside[1]}
+    )
+    hass.states.async_set(FAVORITE, *departure(leaves, track="5", origin=FAR_AWAY))
+    await hass.async_block_till_done()
+
+    assert pushes(notifications), "80 m from a 100 m zone did not match under US units"

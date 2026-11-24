@@ -72,6 +72,7 @@ def departure(
     minutes: int | None,
     train_id: str = "6320",
     track: str | None = "4",
+    signaled_track: str | None = None,
     status: str = "on_time",
     status_text: str = "On time",
     delay: int | None = 0,
@@ -91,6 +92,7 @@ def departure(
         {
             "train_id": train_id,
             "track": track,
+            "signaled_track": signaled_track,
             "status": status,
             "status_text": status_text,
             "delay_minutes": delay,
@@ -246,6 +248,51 @@ class TestTheTrackPill:
         minutes = int(TRACK_OVERDUE_LEAD.total_seconds() // 60)
         assert f"mins <= {minutes} %}}**`⚠️ Track overdue`**" in card(HERO)
 
+    async def test_a_cancelled_train_suppresses_track_and_overdue_pills(
+        self, hass: HomeAssistant
+    ) -> None:
+        """Cancelled trains never get a track and must not show Track overdue."""
+        departure(hass, ROWS[0], minutes=4, track="7")
+        departure(
+            hass,
+            FAVORITE,
+            minutes=4,
+            track=None,
+            signaled_track="3",
+            status="cancelled",
+            status_text="Cancelled",
+            delay=None,
+        )
+
+        output = render(hass, card(HERO))
+
+        assert "**`Cancelled`**" in output
+        assert "Track overdue" not in output
+        assert "Track not posted" not in output
+        assert "Track 3 (likely)" not in output
+
+    async def test_a_signaled_track_shows_as_likely(self, hass: HomeAssistant) -> None:
+        """Before the board posts, a RailData signaled track stands in."""
+        departure(hass, ROWS[0], minutes=12, track=None, signaled_track="3")
+        departure(hass, FAVORITE, minutes=12, track=None, signaled_track="3")
+
+        assert "`Track 3 (likely)`" in render(hass, card(HERO))
+
+    async def test_stops_away_is_singular_for_one_stop(
+        self, hass: HomeAssistant
+    ) -> None:
+        """'1 stop away', not '1 stops away'."""
+        departure(hass, ROWS[0], minutes=12, track="4")
+        departure(hass, FAVORITE, minutes=12, track="4")
+        hass.states.async_set(f"{PREFIX}_stops_away", "1", {"next_stop": "Summit"})
+
+        output = render(hass, card(HERO))
+        assert "**1** stop away" in output
+        assert "stops away" not in output
+
+        hass.states.async_set(f"{PREFIX}_stops_away", "2", {"next_stop": "Chatham"})
+        assert "**2** stops away" in render(hass, card(HERO))
+
 
 class TestCrowding:
     """Where to stand, and only when standing elsewhere would help."""
@@ -303,6 +350,57 @@ class TestTheDeparturesTable:
             departure(hass, entity, minutes=None)
 
         assert "Nothing scheduled" in render(hass, card(TABLE))
+
+    async def test_a_cancelled_row_is_not_flagged_overdue_or_signaled(
+        self, hass: HomeAssistant
+    ) -> None:
+        departure(
+            hass,
+            ROWS[0],
+            minutes=4,
+            train_id="6320",
+            track=None,
+            signaled_track="3",
+            status="cancelled",
+            status_text="Cancelled",
+            delay=None,
+        )
+        departure(hass, ROWS[1], minutes=60, train_id="6322", track="7")
+        departure(hass, ROWS[2], minutes=None)
+
+        output = render(hass, card(TABLE))
+
+        assert "| 6320 | *`—`* | **`Cancelled`** |" in output
+        assert "⚠️" not in output
+        assert "3?" not in output
+
+    async def test_a_signaled_track_shows_with_question_mark(
+        self, hass: HomeAssistant
+    ) -> None:
+        departure(
+            hass,
+            ROWS[0],
+            minutes=12,
+            train_id="6320",
+            track=None,
+            signaled_track="3",
+        )
+        departure(hass, ROWS[1], minutes=None)
+        departure(hass, ROWS[2], minutes=None)
+
+        assert "| 6320 | `3?` |" in render(hass, card(TABLE))
+
+    async def test_a_past_departure_shows_departed_instead_of_now(
+        self, hass: HomeAssistant
+    ) -> None:
+        departure(hass, ROWS[0], minutes=-3, train_id="6320", track="4")
+        departure(hass, ROWS[1], minutes=0, train_id="6322", track="7")
+        departure(hass, ROWS[2], minutes=None)
+
+        output = render(hass, card(TABLE))
+
+        assert "*departed* | 6320 |" in output
+        assert "*now* | 6322 |" in output
 
 
 class TestServiceNotices:
