@@ -225,6 +225,19 @@ class TestRealtimeOverlay:
         cancelled = [e for e in events if e.summary.startswith(CANCELLED_PREFIX)]
         assert cancelled, "a cancelled train was not marked in the calendar"
         assert all("6328" in event.summary for event in cancelled)
+        assert len(cancelled) == 1
+        assert isinstance(cancelled[0].start, datetime)
+        assert cancelled[0].start.date() == CAPTURED_AT.date()
+
+        tomorrows_6328 = [
+            e
+            for e in events
+            if "6328" in e.summary
+            and isinstance(e.start, datetime)
+            and e.start.date() == CAPTURED_AT.date() + timedelta(days=1)
+        ]
+        assert tomorrows_6328, "expected tomorrow's run of 6328 in the timetable"
+        assert not any(e.summary.startswith(CANCELLED_PREFIX) for e in tomorrows_6328)
 
     async def test_timetable_events_survive_a_clean_board(
         self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker

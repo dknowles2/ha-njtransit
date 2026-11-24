@@ -9,7 +9,7 @@ much realtime as there is to apply.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 from homeassistant.components.calendar import CalendarEntity, CalendarEvent
 from homeassistant.core import HomeAssistant
@@ -56,9 +56,11 @@ class DepartureCalendar(NJTransitEntity, CalendarEntity):
         route = self.runtime.route.data
         return route.trips if route else ()
 
-    def _cancelled_trains(self) -> frozenset[str]:
+    def _cancelled_trains(self) -> frozenset[tuple[date, str]]:
         """Return trains the live board currently shows as cancelled.
 
+        Keyed by ``(service_date, train_id)`` so a train cancelled today does
+        not also mark tomorrow's run of the same train number as cancelled.
         Only covers the board's own window -- roughly the next couple of
         hours. Beyond that there is no realtime signal to apply.
         """
@@ -66,17 +68,17 @@ class DepartureCalendar(NJTransitEntity, CalendarEntity):
         if board is None:
             return frozenset()
         return frozenset(
-            departure.train_id
+            (departure.scheduled.date(), departure.train_id)
             for departure in board.departures
             if departure.status is TrainStatus.CANCELLED
         )
 
     def _event_for(
-        self, trip: ScheduledTrip, cancelled: frozenset[str]
+        self, trip: ScheduledTrip, cancelled: frozenset[tuple[date, str]]
     ) -> CalendarEvent:
         """Build a calendar event for one timetabled journey."""
         summary = f"Train {trip.train_id} to {self._destination}"
-        if trip.train_id in cancelled:
+        if (trip.departure.date(), trip.train_id) in cancelled:
             summary = f"{CANCELLED_PREFIX}{summary}"
 
         description = (

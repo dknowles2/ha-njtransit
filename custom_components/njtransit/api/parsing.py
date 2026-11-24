@@ -117,12 +117,13 @@ def resolve_time(value: str | None, reference: datetime) -> datetime | None:
         minute=clock.minute,
         second=0,
         microsecond=0,
+        fold=0,
     )
 
     # A time well behind the reference belongs to the following day. `fold=0`
     # leaves ambiguous times during the autumn DST transition resolving to the
     # first occurrence, which is the earlier and therefore safer reading.
-    if resolved < reference - _ROLLOVER_GRACE:
+    if resolved.astimezone(UTC) < reference.astimezone(UTC) - _ROLLOVER_GRACE:
         resolved += timedelta(days=1)
     return resolved
 
@@ -175,8 +176,8 @@ def compute_delay(
     if countdown is None or scheduled is None:
         return None
 
-    actual = reference.astimezone(TZ) + timedelta(minutes=countdown)
-    delay = (actual - scheduled).total_seconds() / 60
+    actual = reference.astimezone(UTC) + timedelta(minutes=countdown)
+    delay = (actual - scheduled.astimezone(UTC)).total_seconds() / 60
     return max(0, round(delay))
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import date, datetime, time, timedelta
 from typing import Any
@@ -55,6 +56,7 @@ from .queries import (
 _LOGGER = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = 30.0
+MAX_RESPONSE_BYTES = 10 * 1024 * 1024
 
 # The planner returns exactly three trips per call, so a service day takes
 # roughly two dozen. The cap is a backstop against a window that never
@@ -66,6 +68,23 @@ _MAX_PAGES = 40
 # When a page returns nothing later than where it started, step forward by
 # this much rather than looping on the same window forever.
 _PAGE_NUDGE = timedelta(minutes=30)
+
+
+async def _read_json(response: aiohttp.ClientResponse, label: str) -> Any:
+    """Read a bounded response body and decode it as JSON."""
+    stream = response.content
+    chunks = bytearray()
+    while True:
+        remaining = MAX_RESPONSE_BYTES + 1 - len(chunks)
+        chunk = await stream.read(remaining)
+        if not chunk:
+            break
+        chunks.extend(chunk)
+        if len(chunks) > MAX_RESPONSE_BYTES:
+            raise NJTransitConnectionError(
+                f"{label} response exceeded {MAX_RESPONSE_BYTES} bytes"
+            )
+    return json.loads(chunks)
 
 
 class NJTransitClient:
@@ -119,7 +138,7 @@ class NJTransitClient:
                 # Errors come back as JSON with a non-200 status, so read the
                 # body before deciding -- `raise_for_status()` here would
                 # discard the only useful diagnostic.
-                payload = await response.json(content_type=None)
+                payload = await _read_json(response, operation.name)
         except aiohttp.ClientError as err:
             raise NJTransitConnectionError(
                 f"{operation.name} could not reach the endpoint: {err}"
@@ -150,7 +169,10 @@ class NJTransitClient:
         # the top level for validation failures.
         errors = data.get("errors") or payload.get("errors")
         if errors:
-            message = errors[0].get("message", "unknown error")
+            if isinstance(errors, list) and isinstance(errors[0], dict):
+                message = errors[0].get("message", "unknown error")
+            else:
+                message = str(errors)
             raise NJTransitAPIError(f"{operation.name}: {message}")
 
         result = data.get(operation.root_field)

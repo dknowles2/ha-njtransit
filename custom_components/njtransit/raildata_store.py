@@ -9,6 +9,7 @@ daily limits from being spent twice.
 
 from __future__ import annotations
 
+import hashlib
 from typing import Any
 
 from homeassistant.core import HomeAssistant
@@ -39,7 +40,8 @@ class RailDataStorage:
 
 
 def _slug(username: str) -> str:
-    """Return a filename-safe form of an account name."""
-    return "".join(
-        character if character.isalnum() else "_" for character in username.casefold()
-    )
+    """Return a filename-safe, collision-resistant form of an account name."""
+    folded = username.casefold()
+    safe = "".join(character if character.isalnum() else "_" for character in folded)
+    digest = hashlib.sha256(folded.encode("utf-8")).hexdigest()[:12]
+    return f"{safe}_{digest}"

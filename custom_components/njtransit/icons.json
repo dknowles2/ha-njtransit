@@ -1,0 +1,48 @@
+{
+  "entity": {
+    "sensor": {
+      "next_departure": {
+        "default": "mdi:train"
+      },
+      "departure": {
+        "default": "mdi:train"
+      },
+      "delay": {
+        "default": "mdi:clock-alert-outline"
+      },
+      "crowding": {
+        "default": "mdi:account-group"
+      },
+      "alerts": {
+        "default": "mdi:alert-circle-outline"
+      },
+      "advisories": {
+        "default": "mdi:information-outline"
+      },
+      "next_favorite": {
+        "default": "mdi:train-variant"
+      },
+      "stops_away": {
+        "default": "mdi:map-marker-distance"
+      }
+    },
+    "binary_sensor": {
+      "disrupted": {
+        "default": "mdi:train",
+        "state": {
+          "on": "mdi:alert"
+        }
+      }
+    },
+    "calendar": {
+      "departures": {
+        "default": "mdi:calendar-clock"
+      }
+    },
+    "event": {
+      "train": {
+        "default": "mdi:bell-ring-outline"
+      }
+    }
+  }
+}

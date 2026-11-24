@@ -7,7 +7,7 @@ they exercise real upstream quirks -- inconsistent casing, doubled spaces,
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -32,6 +32,7 @@ from custom_components.njtransit.api.parsing import (
     parse_trips,
     resolve_time,
 )
+from custom_components.njtransit.coordinator import until_next
 
 from .conftest import load_payload
 
@@ -571,3 +572,36 @@ class TestStationCoordinates:
 
     def test_no_payload_is_none(self) -> None:
         assert parse_station_coordinates(None, "Short Hills Station") is None
+
+
+class TestDSTArithmetic:
+    """Elapsed-time math across America/New_York DST transitions."""
+
+    def test_compute_delay_across_spring_forward(self) -> None:
+        """2:00 AM EST jumps to 3:00 AM EDT on 2026-03-08."""
+        reference = datetime(2026, 3, 8, 1, 50, tzinfo=TZ)
+        scheduled = datetime(2026, 3, 8, 3, 10, tzinfo=TZ)
+        # 20 real minutes until scheduled; "in 25 Min" is 5 minutes late.
+        assert compute_delay("in 25 Min", scheduled, reference) == 5
+
+    def test_compute_delay_across_fall_back(self) -> None:
+        """2:00 AM EDT falls back to 1:00 AM EST on 2026-11-01."""
+        reference = datetime(2026, 11, 1, 1, 50, tzinfo=TZ, fold=0)
+        scheduled = datetime(2026, 11, 1, 2, 10, tzinfo=TZ)
+        # 80 real minutes until scheduled; "in 85 Min" is 5 minutes late.
+        assert compute_delay("in 85 Min", scheduled, reference) == 5
+
+    def test_resolve_time_uses_fold_zero_during_fall_back(self) -> None:
+        """Ambiguous fall-back wall times resolve to fold=0 even from fold=1."""
+        reference = datetime(2026, 11, 1, 1, 30, tzinfo=TZ, fold=1)
+        resolved = resolve_time("1:45 AM", reference)
+        assert resolved is not None
+        assert resolved.fold == 0
+
+    def test_until_next_across_spring_forward_and_fall_back(self) -> None:
+        """Daily schedule wait uses elapsed UTC hours across DST boundaries."""
+        spring = datetime(2026, 3, 8, 1, 45, tzinfo=TZ)
+        assert until_next(time(1, 45), spring) == timedelta(hours=23)
+
+        fall = datetime(2026, 11, 1, 1, 45, tzinfo=TZ, fold=0)
+        assert until_next(time(1, 45), fall) == timedelta(hours=25)

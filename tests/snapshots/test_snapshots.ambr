@@ -205,7 +205,7 @@
         <SensorEntityCapabilityAttribute.STATE_CLASS: 'state_class'>: <SensorStateClass.MEASUREMENT: 'measurement'>,
         'train_ids': list([
         ]),
-        <EntityStateAttribute.UNIT_OF_MEASUREMENT: 'unit_of_measurement'>: 'alerts',
+        <EntityStateAttribute.UNIT_OF_MEASUREMENT: 'unit_of_measurement'>: 'advisories',
         'urls': list([
           'https://www.njtransit.com/service-advisory/2063193',
         ]),
@@ -457,7 +457,7 @@
         <SensorEntityCapabilityAttribute.STATE_CLASS: 'state_class'>: <SensorStateClass.MEASUREMENT: 'measurement'>,
         'train_ids': list([
         ]),
-        <EntityStateAttribute.UNIT_OF_MEASUREMENT: 'unit_of_measurement'>: 'alerts',
+        <EntityStateAttribute.UNIT_OF_MEASUREMENT: 'unit_of_measurement'>: 'advisories',
         'urls': list([
           'https://www.njtransit.com/service-advisory/2063193',
         ]),
@@ -755,7 +755,7 @@
         <SensorEntityCapabilityAttribute.STATE_CLASS: 'state_class'>: <SensorStateClass.MEASUREMENT: 'measurement'>,
         'train_ids': list([
         ]),
-        <EntityStateAttribute.UNIT_OF_MEASUREMENT: 'unit_of_measurement'>: 'alerts',
+        <EntityStateAttribute.UNIT_OF_MEASUREMENT: 'unit_of_measurement'>: 'advisories',
         'urls': list([
           'https://www.njtransit.com/service-advisory/2063193',
         ]),
@@ -956,7 +956,7 @@
         <SensorEntityCapabilityAttribute.STATE_CLASS: 'state_class'>: <SensorStateClass.MEASUREMENT: 'measurement'>,
         'train_ids': list([
         ]),
-        <EntityStateAttribute.UNIT_OF_MEASUREMENT: 'unit_of_measurement'>: 'alerts',
+        <EntityStateAttribute.UNIT_OF_MEASUREMENT: 'unit_of_measurement'>: 'advisories',
         'urls': list([
           'https://www.njtransit.com/service-advisory/2063193',
         ]),

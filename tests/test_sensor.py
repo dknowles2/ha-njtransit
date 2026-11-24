@@ -628,3 +628,45 @@ class TestProgress:
         assert state is not None
         assert state.state == "1"
         assert state.attributes["stops_remaining"] == ["Millburn", "Short Hills"]
+
+
+async def test_advisories_unit_and_status_availability(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """Advisories use the 'advisories' unit and track status coordinator health."""
+    install_api_mock(aioclient_mock)
+    entry = make_entry()
+    await setup_entry(hass, entry)
+
+    alerts = hass.states.get(f"{PREFIX}_service_alerts")
+    advisories = hass.states.get(f"{PREFIX}_planned_advisories")
+    assert alerts is not None and advisories is not None
+    assert alerts.attributes["unit_of_measurement"] == "alerts"
+    assert advisories.attributes["unit_of_measurement"] == "advisories"
+
+    aioclient_mock.clear_requests()
+    install_api_mock(aioclient_mock, {"SystemStatus": TimeoutError()})
+    await entry.runtime_data.status.async_refresh()
+    await hass.async_block_till_done()
+
+    alerts_after = hass.states.get(f"{PREFIX}_service_alerts")
+    advisories_after = hass.states.get(f"{PREFIX}_planned_advisories")
+    assert alerts_after is not None and alerts_after.state == "unavailable"
+    assert advisories_after is not None and advisories_after.state == "unavailable"
+
+
+def test_icons_json_covers_all_entities() -> None:
+    """Every entity translation key in strings.json has an MDI icon in icons.json."""
+    import json
+    from pathlib import Path
+
+    component_dir = Path("custom_components/njtransit")
+    strings = json.loads((component_dir / "strings.json").read_text(encoding="utf-8"))
+    icons = json.loads((component_dir / "icons.json").read_text(encoding="utf-8"))
+
+    for platform, entities in strings["entity"].items():
+        assert platform in icons["entity"], f"missing platform {platform} in icons.json"
+        for key in entities:
+            entry = icons["entity"][platform].get(key)
+            assert isinstance(entry, dict), f"missing {platform}.{key} in icons.json"
+            assert entry.get("default", "").startswith("mdi:")

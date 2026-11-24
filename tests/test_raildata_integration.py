@@ -691,6 +691,99 @@ class TestSetup:
 
         assert account.state is ConfigEntryState.SETUP_RETRY
 
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            {"errorMessage": "Daily usage limit:10."},
+            {"errorMessage": "Unexpected backend error"},
+        ],
+    )
+    async def test_quota_or_api_error_during_account_setup_retries(
+        self,
+        hass: HomeAssistant,
+        aioclient_mock: AiohttpClientMocker,
+        payload: dict[str, Any],
+    ) -> None:
+        install_api_mock(aioclient_mock)
+        install_raildata_mock(aioclient_mock, {"getToken": payload})
+        account = await setup_account(hass)
+
+        assert account.state is ConfigEntryState.SETUP_RETRY
+
+    async def test_account_setup_shuts_down_static_if_status_fails(
+        self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+    ) -> None:
+        from unittest.mock import AsyncMock
+
+        from custom_components.njtransit.coordinator import StaticCoordinator
+
+        install_api_mock(aioclient_mock)
+        install_raildata_mock(aioclient_mock, {"getStationMSG": TimeoutError()})
+        with patch.object(
+            StaticCoordinator, "async_shutdown", new_callable=AsyncMock
+        ) as shutdown:
+            account = await setup_account(hass)
+
+        assert account.state is ConfigEntryState.SETUP_RETRY
+        assert shutdown.await_count >= 1
+
+    async def test_route_and_progress_auth_error_reauths_account_not_commute(
+        self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+    ) -> None:
+        from unittest.mock import AsyncMock
+
+        from custom_components.njtransit.api.exceptions import NJTransitAuthError
+
+        install_api_mock(aioclient_mock)
+        install_raildata_mock(aioclient_mock)
+        entry, account = await setup_raildata_commute(hass)
+
+        with patch.object(
+            entry.runtime_data.client,
+            "scheduled_trips",
+            new_callable=AsyncMock,
+            side_effect=NJTransitAuthError("rejected"),
+        ):
+            await entry.runtime_data.route.async_refresh()
+            await hass.async_block_till_done()
+
+        assert entry.runtime_data.route.last_update_success is False
+        flows = hass.config_entries.flow.async_progress_by_handler(DOMAIN)
+        assert len(flows) == 1
+        assert flows[0]["context"]["entry_id"] == account.entry_id
+        assert flows[0]["context"]["source"] == "reauth"
+
+        # Abort the reauth flow and verify ProgressCoordinator also routes to account.
+        hass.config_entries.flow.async_abort(flows[0]["flow_id"])
+        entry.runtime_data.progress._pick = lambda _run: "6624"
+        with patch.object(
+            entry.runtime_data.client,
+            "train_run",
+            new_callable=AsyncMock,
+            side_effect=NJTransitAuthError("rejected"),
+        ):
+            await entry.runtime_data.progress.async_refresh()
+            await hass.async_block_till_done()
+
+        assert entry.runtime_data.progress.last_update_success is False
+        flows = hass.config_entries.flow.async_progress_by_handler(DOMAIN)
+        assert len(flows) == 1
+        assert flows[0]["context"]["entry_id"] == account.entry_id
+        assert flows[0]["context"]["source"] == "reauth"
+
+    def test_storage_keys_do_not_collide_on_punctuation(
+        self, hass: HomeAssistant
+    ) -> None:
+        from custom_components.njtransit.raildata_store import RailDataStorage
+
+        dot = RailDataStorage(hass, "alice.smith")._store.key
+        under = RailDataStorage(hass, "alice_smith")._store.key
+        dash = RailDataStorage(hass, "alice-smith")._store.key
+        upper = RailDataStorage(hass, "Alice.Smith")._store.key
+
+        assert len({dot, under, dash}) == 3
+        assert dot == upper
+
     async def test_diagnostics_name_the_source_and_not_the_password(
         self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
     ) -> None:

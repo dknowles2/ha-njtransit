@@ -400,13 +400,18 @@ class AlertSensor(NJTransitEntity, SensorEntity):
     """
 
     _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = "alerts"
 
     def __init__(self, entry: NJTransitConfigEntry, *, advisories: bool) -> None:
         """Initialize the sensor."""
         super().__init__(entry, "advisories" if advisories else "alerts")
         self._advisories = advisories
         self._attr_translation_key = "advisories" if advisories else "alerts"
+        self._attr_native_unit_of_measurement = "advisories" if advisories else "alerts"
+
+    @property
+    def available(self) -> bool:
+        """Require both the departure board and the alert feed to be healthy."""
+        return super().available and self.runtime.status.last_update_success
 
     async def async_added_to_hass(self) -> None:
         """Also follow the status feed, which is a different coordinator."""
