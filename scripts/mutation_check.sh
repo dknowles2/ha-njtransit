@@ -247,6 +247,13 @@ run "the signal overrides the board" \
   '        if False:
             return "board"'
 
+# The weekly signal score decodes with this file too, so a regression here
+# shows up both on phones and in the number that says how good they are.
+run "circuits: a Penn circuit with no half-suffix stops decoding" \
+  custom_components/njtransit/api/circuits.py \
+  '_PENN_AJO = re.compile(r"AJO(\d+)[AB]?TK$")' \
+  '_PENN_AJO = re.compile(r"AJO(\d+)[AB]TK$")'
+
 run "a circuit outside the platform range decodes to a platform" \
   custom_components/njtransit/api/circuits.py \
   "return str(platform) if platform in _PENN_PLATFORMS else None" \
@@ -403,125 +410,22 @@ run "disruption: an unset window blocks everything" \
   "{{ windows | count == 0" \
   "{{ false"
 
-# The analysis tool decides whether the whole track-prediction feature ships.
-# Its failure mode is a number that looks like a result.
+# The weekly report. Its failure mode is a section that looks current and
+# is not.
 
 run "report: a frozen collection is reported as current" \
   scripts/weekly_report.py \
-  "        if behind > STALE_AFTER:" \
-  "        if False:"
+  "    elif run_at - max(newest) > STALE_AFTER:" \
+  "    elif False:"
 
-# The nypenn.live comparison. Both of these produce a *better* looking number,
-# which is the direction that gets believed.
-
-run "nypenn: the board's own answer is scored as their prediction" \
-  scripts/nypenn.py \
-  "        if standing is None or standing.source not in TIERS or not standing.track:" \
-  "        if standing is None or not standing.track:"
-
-run "nypenn: an hour nobody watched counts as an hour they said nothing" \
-  scripts/nypenn.py \
-  "    return any(abs(poll - when) <= OBSERVED_WITHIN for poll in polls)" \
-  "    return True"
-
-run "nypenn: a single confident guess is padded into a top-3" \
-  scripts/nypenn.py \
-  "        return [self.track] if self.track else []" \
-  "        return [self.track, self.track, self.track] if self.track else []"
-
-# Their paywall, which arrived after the three above were already guarded. These
-# produce a *worse* looking number for them -- a site that goes quiet exactly
-# when it is confident -- and a comparison we win because of it is the one
-# nobody checks.
-
-run "nypenn: a prediction behind their paywall counts as one they refused" \
-  scripts/nypenn.py \
-  "        if state is not None and state.withheld:" \
-  "        if False:"
-
-run "nypenn: a withheld prediction drops out of the tier it was made at" \
-  scripts/nypenn.py \
-  "        if claim is not None and claim.source in TIERS:" \
-  "        if False:"
-
-run "nypenn: the recorded lock is second-guessed from the payload shape" \
-  scripts/nypenn.py \
-  "    if \"withheld\" in record:" \
-  "    if False:"
-
-run "nypenn: a prediction the poller saw was withheld is scored anyway" \
-  scripts/nypenn.py \
-  "        if standing.withheld:" \
-  "        if False:"
-
-run "collect: their lock is not recorded, only its shape" \
-  scripts/collect_nypenn.py \
-  "    return row.get(\"track_source\") in TIERS and not row.get(\"track\")" \
-  "    return False"
-
-run "analysis: elimination reads tracks the board has not posted yet" \
-  scripts/analyze_tracks.py \
-  "        and o.scheduled - timedelta(seconds=o.assigned_at) <= cutoff" \
-  "        and True"
-
-run "analysis: the recency model reads days after the target" \
-  scripts/analyze_tracks.py \
-  "        if o.track and o.train_id == target.train_id and o.day < target.day" \
-  "        if o.track and o.train_id == target.train_id"
-
-run "analysis: the combination reads days after the target" \
-  scripts/analyze_tracks.py \
-  "        if not o.track or o.day >= target.day:" \
-  "        if not o.track:"
-
-# The fitted ranker. A leak here is worse than in a hand-written model: the
-# weights reorganise around whatever leaked and produce an explanation for the
-# number as well as the number.
-run "ml: the ranker's features read days after the target" \
-  scripts/learn_tracks.py \
-  "    prior = [o for o in history if o.track and o.day < target.day]" \
-  "    prior = [o for o in history if o.track]"
-
-run "ml: the vacancy feature reads assignments that were still secret" \
-  scripts/learn_tracks.py \
-  "    known = _known_by(same_day, target, PREDICT_LEAD)" \
-  "    known = [o for o in same_day if o.track]"
-
-run "analysis: the held-out day leaks into history" \
-  scripts/analyze_tracks.py \
-  "history = [o for o in observations if o.day != held_out]" \
-  "history = list(observations)"
-
-run "analysis: the target stays in its own day's context" \
-  scripts/analyze_tracks.py \
-  "context = [o for o in day if o.train_id != target.train_id]" \
-  "context = list(day)"
-
-run "analysis: an unanswered target counts as answered" \
-  scripts/analyze_tracks.py \
-  "                if not ranked:
-                    continue" \
-  "                if False:
-                    continue"
-
-run "analysis: the station filter runs before the join" \
-  scripts/analyze_tracks.py \
-  "    direct = sum(1 for o in observations if o.outcome_known)
-    observations = join_outcomes(observations)" \
-  "    direct = sum(1 for o in observations if o.outcome_known)
-    if args.station:
-        observations = [o for o in observations if o.station == args.station]
-    observations = join_outcomes(observations)"
-
-run "analysis: an absence is reported as a rate again" \
-  scripts/analyze_tracks.py \
-  "if not any(o.outcome_known for o in njt):" \
-  "if not any(o.final_status is not None for o in njt):"
-
-run "analysis: the cut label stops following the constant" \
-  scripts/analyze_tracks.py \
-  'f"assigned late (< {cutoff} min)",' \
-  '"assigned late (< 8 min)",'
+run "report: a half-written last line hides the newest record" \
+  scripts/weekly_report.py \
+  "        except ValueError:
+            continue
+        if isinstance(record, dict)" \
+  "        except ValueError:
+            return None
+        if isinstance(record, dict)"
 
 # The example dashboard. Not shipped code, but it is the surface a commuter
 # actually reads, and every bug it has had was visible only on a screen.
@@ -662,10 +566,10 @@ run "signal: the window is applied after the whole log is grouped" \
   'and datetime.fromtimestamp(when, TZ).date() < since' \
   'and False'
 
-run "occupancy: a circuit with no half-suffix stops decoding" \
-  scripts/occupancy.py \
-  'AJO(\d+)[AB]?TK$' \
-  'AJO(\d+)[AB]TK$'
+run "signal: the scorer stops decoding circuits" \
+  scripts/signal_accuracy.py \
+  '    return _decode_platform(STATION, circuit)' \
+  '    return None'
 
 echo
 if [ $failures -eq 0 ]; then

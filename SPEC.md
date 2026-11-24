@@ -733,7 +733,9 @@ tests/
 scripts/
 ├── extract_ops.py        # re-extract operations from site bundles (§2)
 ├── generate_brand.py     # regenerate brand/
-└── analyze_tracks.py     # score track predictions offline (§7.2)
+├── collect_raildata.py   # record the circuit feed beside the Penn board (§2.9)
+├── signal_accuracy.py    # score the signalled platform against the board (§2.9)
+└── weekly_report.py      # run signal_accuracy weekly, keep the answers
 hacs.json
 ```
 

@@ -38,23 +38,68 @@ Usage:
     python scripts/signal_accuracy.py --log ~/nypenn/raildata.jsonl
     python scripts/signal_accuracy.py --log ~/nypenn/raildata.jsonl --days 7
 
-Everything below is stdlib. This is an analysis tool, not shipped code.
+Everything below is stdlib, plus the integration's own `api/circuits.py`,
+which is stdlib too. This is an analysis tool, not shipped code.
 """
 
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import statistics
-import sys
 from collections import defaultdict
+from collections.abc import Callable
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, NamedTuple
+from zoneinfo import ZoneInfo
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+TZ = ZoneInfo("America/New_York")
 
-from occupancy import TZ, decode
+# The station whose departures the collector records.
+STATION = "NY"
+
+# The integration's own decoder, loaded by path rather than imported.
+#
+# This module used to carry a copy of the decode formula, and the copy drifted:
+# the shipped decoder learned in 2026.9.1 that one Penn circuit in eight
+# carries no `A`/`B` suffix, the copy did not, and for a month the research
+# numbers measured a decoder nobody was running. Reading the shipped file
+# makes the score a statement about what is on people's phones.
+#
+# By path because importing `custom_components.njtransit.api.circuits` runs the
+# integration's package `__init__`, which needs Home Assistant, and the
+# collector host runs this on a plain stdlib Python. `circuits.py` itself is
+# pure stdlib -- `test_signal_accuracy` checks that this load works without
+# Home Assistant importable, so a future import there fails here first.
+_CIRCUITS = (
+    Path(__file__).resolve().parent.parent
+    / "custom_components"
+    / "njtransit"
+    / "api"
+    / "circuits.py"
+)
+
+
+def _load_decoder() -> Callable[[str, str | None], str | None]:
+    """Return the shipped `decode_platform`, without importing the integration."""
+    spec = importlib.util.spec_from_file_location("_njt_circuits", _CIRCUITS)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"cannot load the circuit decoder from {_CIRCUITS}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    decoder: Callable[[str, str | None], str | None] = module.decode_platform
+    return decoder
+
+
+_decode_platform = _load_decoder()
+
+
+def decode(circuit: str | None) -> str | None:
+    """Return the Penn platform a track circuit stands for, or None."""
+    return _decode_platform(STATION, circuit)
+
 
 # The feed's own format for a scheduled departure, e.g. `14-Sep-2026 09:27:00
 # PM`.
