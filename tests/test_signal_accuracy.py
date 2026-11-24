@@ -16,14 +16,14 @@ the feed never showed has to come back as no answer rather than a guess.
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from datetime import date, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
-from occupancy import TZ
-from signal_accuracy import by_day, load, report, summarize
+from signal_accuracy import TZ, by_day, load, report, summarize
 
 SCHEDULED = "06-Oct-2026 05:31:00 PM"
 DAY = date(2026, 10, 6)
@@ -466,3 +466,52 @@ class TestRunBoundaries:
         )
         assert runs[0].scheduled.strftime("%H:%M") == "17:31"
         assert runs[0].lead_minutes == 45
+
+
+class TestTheDecoderIsTheShippedOne:
+    def test_a_circuit_without_a_half_suffix_decodes(self, tmp_path: Path) -> None:
+        """The form the research copy of the decoder missed for a month.
+
+        `JO-AJO16TK` carries no `A`/`B` suffix. The shipped decoder learned
+        that in 2026.9.1; a scorer with its own copy did not, and measured a
+        decoder nobody was running.
+        """
+        runs = load(
+            _log(
+                tmp_path,
+                _change(_at(16, 46), circuit="JO-AJO16TK"),
+                _change(_at(17, 21), board="6"),
+            )
+        )
+        assert runs[0].signal == "6"
+        assert runs[0].agreed
+
+    def test_it_loads_without_home_assistant(self) -> None:
+        """The collector host runs this on plain stdlib Python.
+
+        Importing the decoder through the package would run the integration's
+        `__init__` and need Home Assistant. If `circuits.py` ever grows such an
+        import, this fails here rather than on the host on a Monday morning.
+        """
+        scripts = Path(__file__).resolve().parent.parent / "scripts"
+        blocker = (
+            "import sys\n"
+            "class Block:\n"
+            "    def find_spec(self, name, path=None, target=None):\n"
+            "        if name == 'homeassistant' or name.startswith('homeassistant.'):\n"
+            "            raise ImportError('homeassistant is not available here')\n"
+            "        return None\n"
+            "sys.meta_path.insert(0, Block())\n"
+            f"sys.path.insert(0, {str(scripts)!r})\n"
+            "import signal_accuracy\n"
+            "print(signal_accuracy.decode('JO-AJO13ATK'))\n"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", blocker],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.strip() == "9"
