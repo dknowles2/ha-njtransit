@@ -17,9 +17,17 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
-from weekly_report import nypenn_section
+import weekly_report
+from weekly_report import (
+    ENTRIES_CMD,
+    diagnostics_command,
+    fetch_diagnostics,
+    nypenn_section,
+)
 
 RUN_AT = datetime(2026, 8, 28, 11, 0, tzinfo=UTC)
 DEPARTURE = datetime(2026, 8, 26, 18, 30, tzinfo=UTC)
@@ -116,3 +124,89 @@ def test_a_missing_log_is_not_silently_empty(tmp_path: Path) -> None:
     assert "No nypenn.live logs found" in nypenn_section(
         [tmp_path / "absent.jsonl"], RUN_AT
     )
+
+
+@pytest.mark.parametrize("entry_id", ["01J2K3L4M5N6P7Q8R9S0T1U2V3", "abc_123-XYZ"])
+def test_diagnostics_command_uses_stdin_config_and_safe_entry_id(entry_id: str) -> None:
+    """Bearer tokens go to curl via `-K -` rather than argv, and valid IDs pass."""
+    cmd = diagnostics_command(entry_id)
+
+    for remote_cmd in (ENTRIES_CMD, cmd):
+        assert "| curl -s -K -" in remote_cmd
+        assert " -H " not in remote_cmd
+        assert "Authorization: Bearer %s" in remote_cmd
+
+    assert cmd.endswith(f"/api/diagnostics/config_entry/{entry_id}")
+
+
+@pytest.mark.parametrize(
+    "bad_entry_id",
+    [
+        "",
+        "../etc/passwd",
+        "a/b",
+        "..",
+        "abc; id",
+        "$(id)",
+        "`id`",
+        'abc"def',
+        "abc'def",
+        "abc123\n",
+        "abc 123",
+        None,
+        123,
+    ],
+)
+def test_diagnostics_command_rejects_invalid_entry_id(bad_entry_id: Any) -> None:
+    """Shell metacharacters, path traversal, and non-strings are rejected."""
+    with pytest.raises(ValueError, match="invalid entry_id"):
+        diagnostics_command(bad_entry_id)
+
+
+def test_fetch_diagnostics_rejects_malicious_entry_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An untrusted entry_id fails before issuing a second SSH call or writing files."""
+    calls: list[tuple[str, str]] = []
+
+    def fake_ssh(host: str, command: str) -> str:
+        calls.append((host, command))
+        return json.dumps([{"domain": "njtransit", "entry_id": "../evil; id"}])
+
+    monkeypatch.setattr(weekly_report, "_ssh", fake_ssh)
+
+    with pytest.raises(ValueError, match="invalid entry_id"):
+        fetch_diagnostics("root@hass", tmp_path)
+
+    assert calls == [("root@hass", ENTRIES_CMD)]
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_fetch_diagnostics_writes_valid_entries(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Valid njtransit entries are fetched safely and written under `into`."""
+    calls: list[tuple[str, str]] = []
+    entry_id = "01J2K3_abc-9"
+
+    def fake_ssh(host: str, command: str) -> str:
+        calls.append((host, command))
+        if command == ENTRIES_CMD:
+            return json.dumps(
+                [
+                    {"domain": "other", "entry_id": "../ignored"},
+                    {"domain": "njtransit", "entry_id": entry_id},
+                ]
+            )
+        return '{"data": {"ok": true}}'
+
+    monkeypatch.setattr(weekly_report, "_ssh", fake_ssh)
+
+    written = fetch_diagnostics("root@hass", tmp_path)
+
+    assert calls == [
+        ("root@hass", ENTRIES_CMD),
+        ("root@hass", diagnostics_command(entry_id)),
+    ]
+    assert written == [tmp_path / f"{entry_id}.json"]
+    assert written[0].read_text(encoding="utf-8") == '{"data": {"ok": true}}'

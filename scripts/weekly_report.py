@@ -35,6 +35,8 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import re
+import shlex
 import subprocess
 import sys
 from datetime import UTC, datetime, timedelta
@@ -50,14 +52,19 @@ from analyze_tracks import score as score_models
 
 # Asking the Home Assistant host to curl itself, rather than reaching its API
 # from here. The long-lived token lives on that box and stays there; this one
-# needs nothing but ssh access it already has.
+# needs nothing but ssh access it already has. The bearer header goes to curl
+# on stdin (`-K -`) via the shell's `printf` builtin so the token never shows
+# up in `/proc/<pid>/cmdline`.
+ENTRY_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 ENTRIES_CMD = (
-    'T=$(cat /config/.claude-token); curl -s -H "Authorization: Bearer $T" '
-    "http://localhost:8123/api/config/config_entries/entry"
+    "T=$(cat /config/.claude-token); "
+    'printf \'header = "Authorization: Bearer %s"\\n\' "$T" '
+    "| curl -s -K - http://localhost:8123/api/config/config_entries/entry"
 )
 DIAGNOSTICS_CMD = (
-    'T=$(cat /config/.claude-token); curl -s -H "Authorization: Bearer $T" '
-    "http://localhost:8123/api/diagnostics/config_entry/{entry}"
+    "T=$(cat /config/.claude-token); "
+    'printf \'header = "Authorization: Bearer %s"\\n\' "$T" '
+    "| curl -s -K - http://localhost:8123/api/diagnostics/config_entry/{entry}"
 )
 
 CSV_COLUMNS = [
@@ -98,6 +105,19 @@ def _ssh(host: str, command: str) -> str:
     return result.stdout
 
 
+def _validate_entry_id(entry_id: Any) -> str:
+    """Return `entry_id` if it is a safe Home Assistant config entry ID."""
+    if not isinstance(entry_id, str) or not ENTRY_ID_RE.fullmatch(entry_id):
+        raise ValueError(f"invalid entry_id: {entry_id!r}")
+    return entry_id
+
+
+def diagnostics_command(entry_id: Any) -> str:
+    """Build the remote command to fetch diagnostics for a validated entry."""
+    validated = _validate_entry_id(entry_id)
+    return DIAGNOSTICS_CMD.format(entry=shlex.quote(validated))
+
+
 def fetch_diagnostics(host: str, into: Path) -> list[Path]:
     """Download one diagnostics dump per commute, and return the paths.
 
@@ -110,11 +130,12 @@ def fetch_diagnostics(host: str, into: Path) -> list[Path]:
     for entry in entries:
         if entry.get("domain") != "njtransit":
             continue
-        dump = _ssh(host, DIAGNOSTICS_CMD.format(entry=entry["entry_id"]))
+        entry_id = _validate_entry_id(entry.get("entry_id"))
+        dump = _ssh(host, diagnostics_command(entry_id))
         if not dump.strip():
-            print(f"no diagnostics for {entry['entry_id']}", file=sys.stderr)
+            print(f"no diagnostics for {entry_id}", file=sys.stderr)
             continue
-        path = into / f"{entry['entry_id']}.json"
+        path = into / f"{entry_id}.json"
         path.write_text(dump, encoding="utf-8")
         written.append(path)
     return written
