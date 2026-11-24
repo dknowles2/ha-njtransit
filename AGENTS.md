@@ -223,12 +223,14 @@ merged pull requests start arriving unlabelled again, check for
 **Tags are bare CalVer: `2026.8.0`, no `v` prefix.** This matches ha-pitboss
 and pyschlage, and Home Assistant's own scheme.
 
-CalVer is not automatic. release-drafter increments the *previous* tag, so the
-first release of each month has to be tagged by hand -- `2026.9.0` when
-September comes -- after which patch releases resolve on their own
-(`2026.9.1`, `2026.9.2`). If a draft ever proposes something that is not
-year.month.patch, that is release-drafter counting from the wrong baseline,
-not a version to accept.
+The draft numbers itself. release-drafter on its own can only bump a position
+on the previous tag, so it proposed `2026.9.4` in November; instead the
+workflow runs `scripts/next_calver.py`, which gives this month's `.0` or the
+next patch, and passes that as the action's `version` input. A scheduled run
+on the 1st of each month re-numbers a draft that no merge has touched since
+the month turned. The month is New York's. If a draft ever proposes something
+that is not this year.month, check that run's log rather than retagging by
+hand -- the step fails loudly if it cannot read the latest release.
 
 The release workflow strips a leading `v` before stamping the manifest, so a
 `v`-prefixed tag would still produce a clean version. That is insurance
