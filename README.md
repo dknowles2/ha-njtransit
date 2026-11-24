@@ -97,6 +97,18 @@ end in `Station` or `Terminal`, but `MetLife Stadium` and
 `Penn Station New York` do not. The config flow presents them as a dropdown, so
 there is nothing to type.
 
+**Setup suggests your station.** The origin dropdown comes pre-filled with the
+rail station nearest your Home Assistant home location. It is only a
+suggestion — the field stays required and the full list of 167 is still there —
+and it disappears silently if home is unset or the lookup fails, because a
+convenience must never be able to block setup.
+
+The station list itself carries no coordinates and cannot be made to: SPEC 3.1
+records that asking for `latitude` there nulls the entire response. The
+proximity search is a separate operation that takes a point and answers in
+feet, and it does **not** sort — a reply recorded standing on the Short Hills
+platform lists Millburn first. See SPEC 3.9.
+
 ### Omitting the destination
 
 An entry with no destination reports the **whole board** for that station,
@@ -116,6 +128,7 @@ way.
 | Status | private, undocumented, can change without notice | documented, versioned |
 | Track at New York Penn | when the board posts it, about 10 min before departure | **also from the signaling system, about 20 min before departure** |
 | Planned advisories sensor | populated | always 0 — the feed carries live messages only |
+| Service alert poll interval | per-commute option (default 120 s) | fixed at 120 s per account, shared by every commute on it |
 | Transfer itineraries | shown where nothing runs direct | not available; such a commute falls back to label matching |
 
 **The signaling track is the reason to bother.** At New York Penn, RailData's
@@ -166,7 +179,7 @@ commute, so directions can differ.
 | Option | Default | Range | Notes |
 |---|---|---|---|
 | Departure board poll interval | 60 s | 30–3600 | NJ Transit caches for 30 s; polling faster gains nothing |
-| Service alert poll interval | 120 s | 30–3600 | |
+| Service alert poll interval | 120 s | 30–3600 | `njtransit.com` only; RailData polls alerts per account at a fixed 120 s interval |
 | Upcoming departures to show | 3 | 1–10 | Number of `departure_*` sensors created |
 | Delay before disrupted | 10 min | 1–60 | How late counts as disrupted |
 | Lookahead | 90 min | 15–240 | Departures beyond this are ignored by the disruption sensor |
@@ -267,7 +280,7 @@ Discrete things that happen to a train, as opposed to the binary sensor's
 | `track_changed` | A train is moved **after** a track was published |
 | `alerted` | A train is newly named in a live alert |
 | `line_cancellation` | A train on your line that you **cannot** use, running shortly ahead of one you can, is cancelled |
-| `track_overdue` | Eight minutes to departure and still no track |
+| `track_overdue` | Six minutes to departure and still no track |
 
 Only transitions fire. An ongoing problem does not re-fire every poll, and
 nothing fires for the state that existed at startup — otherwise every restart
@@ -278,11 +291,11 @@ simply had no track yet. Being *moved* is the actionable case, and the event
 carries `previous_track` alongside the new one.
 
 `track_overdue` comes from something regular riders already do. At New York
-Penn, NJ Transit publishes a track a median of **9.0 minutes** before
-departure, and the middle half of departures fall between 8.9 and 9.1 — a
-scheduled process rather than a tendency, which is exactly why a deviation from
-it is felt. A train still without a track inside six minutes is in the
-slowest tenth, and nothing else on the board says so yet.
+Penn, NJ Transit publishes a track a median of **8.8 minutes** before
+departure, with an interquartile range of **1.9 minutes** — a scheduled process
+rather than a tendency, which is exactly why a deviation from it is felt. A
+train still without a track inside six minutes is in the slowest tenth, and
+nothing else on the board says so yet.
 
 Two things it will not do. It stays quiet for cancelled trains, which were
 never getting a track. And it stays quiet unless the station is publishing
@@ -333,6 +346,8 @@ automation need not care which entity it read a train from, plus:
 | Attribute | Description |
 |---|---|
 | `favorites` | The configured train numbers, normalized |
+| `origin_latitude` | Latitude of the origin station (absent if unknown) |
+| `origin_longitude` | Longitude of the origin station (absent if unknown) |
 
 Every departure sensor also gains a `favorite` boolean, so a dashboard can
 highlight your train in a list without a second lookup.
@@ -355,6 +370,10 @@ passed, is not running today, or no favourite is close enough to follow.
 | `next_stop` | Where it is heading |
 | `due_at_origin` | Scheduled time at your station |
 | `due_at_destination` | Scheduled time at the other end |
+| `eta_at_destination` | Estimated arrival at the other end (`due_at_destination` shifted by `minutes_late`) |
+| `minutes_late` | Peak observed lateness on this run, in minutes, or `null` when unknown |
+| `stops_to_destination` | Stops remaining until your destination |
+| `on_board` | `true` once the train has passed your origin with your destination still ahead |
 | `stops_total` | Stops on the whole run |
 | `stops_remaining` | Names of the stops still ahead |
 
@@ -523,10 +542,11 @@ The window's end also resets the dismissed flag, which is what it did before
 it gated anything. If you set a schedule expecting notifications outside it,
 that behaviour changed.
 
-Deliberately **not** applied once you are aboard. A window ending at 10:00
-while you are on a train arriving at 10:30 must not take the arrival countdown
-with it — the window is about whether to board, not about a journey already
-under way.
+It gates the arrival countdown too, so set it wide enough to cover the
+journey — a window closing at 10:00 ends the countdown of a train arriving at
+10:15. Letting the arrival half ignore the window put a countdown on the Lock
+Screen on a day off, because the integration can see that a train left your
+station (`on_board`) but not whether you were actually on it.
 
 **Using where you are.** Two optional inputs, **Where you are** (a person or
 device tracker) and **Only when you are in one of these** (zones), stop the
@@ -642,18 +662,6 @@ just opens Home Assistant wherever it was and everything else works unchanged.
 
 [`dashboards/trains.yaml`](dashboards/trains.yaml) is a ready-made one to copy
 if you want the tap to land somewhere useful — see below.
-
-**Setup suggests your station.** The origin dropdown comes pre-filled with the
-rail station nearest your Home Assistant home location. It is only a
-suggestion — the field stays required and the full list of 167 is still there —
-and it disappears silently if home is unset or the lookup fails, because a
-convenience must never be able to block setup.
-
-The station list itself carries no coordinates and cannot be made to: SPEC 3.1
-records that asking for `latitude` there nulls the entire response. The
-proximity search is a separate operation that takes a point and answers in
-feet, and it does **not** sort — a reply recorded standing on the Short Hills
-platform lists Millburn first. See SPEC 3.9.
 
 ### The departures card
 
