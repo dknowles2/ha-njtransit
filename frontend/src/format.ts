@@ -1,3 +1,25 @@
+import type { Departure } from "./types.js";
+
+/**
+ * Estimated departure time, accounting for a reported delay.
+ *
+ * Keeps delayed trains counting down instead of flipping to "Departed" or
+ * "now" once the original scheduled time passes while the train is still on
+ * its way. Once the operator marks the train departed, stop shifting it.
+ */
+export function effectiveDeparture(departure: Departure): Date {
+  if (
+    departure.delayMinutes !== null &&
+    departure.delayMinutes > 0 &&
+    departure.status !== "departed"
+  ) {
+    return new Date(
+      departure.scheduled.getTime() + departure.delayMinutes * 60_000,
+    );
+  }
+  return departure.scheduled;
+}
+
 /** Whole minutes from `now` until `when`, negative once it has passed. */
 export function minutesUntil(when: Date, now: Date): number {
   return Math.round((when.getTime() - now.getTime()) / 60000);

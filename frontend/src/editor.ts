@@ -4,16 +4,22 @@ import { customElement, property, state } from "lit/decorators.js";
 
 import type { DeparturesCardConfig, HomeAssistant } from "./types.js";
 
-// The picker cannot narrow to "the next departure sensor" -- an entity
-// selector filters by domain and integration, not by translation key -- so it
-// offers every sensor this integration made and the card sorts out the rest.
-// Picking `..._departure_3` still works: the commute is resolved from the
-// device, not from which of its sensors was named.
+// Departure sensors (`DepartureSensor` and `FavoriteDepartureSensor`) are the
+// integration's only timestamp sensors, so filtering by `device_class` hides
+// Delay, Crowding, Alerts, and Stops away. Picking `..._departure_3` still
+// works: the commute is resolved from the device, not from which of its
+// sensors was named.
 const SCHEMA = [
   {
     name: "entity",
     required: true,
-    selector: { entity: { integration: "njtransit", domain: "sensor" } },
+    selector: {
+      entity: {
+        integration: "njtransit",
+        domain: "sensor",
+        device_class: "timestamp",
+      },
+    },
   },
   { name: "title", selector: { text: {} } },
 ];
