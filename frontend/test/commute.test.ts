@@ -10,13 +10,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  boardStatus,
   isPostingTracks,
   pickHero,
   readBoard,
   readDeparture,
   resolveCommute,
 } from "../src/commute.js";
-import { PREFIX, departure, empty, fakeHass } from "./fixtures.js";
+import { PREFIX, departure, empty, fakeHass, unavailable } from "./fixtures.js";
 
 const AT_631 = "2026-08-09T22:31:00.000Z";
 const AT_651 = "2026-08-09T22:51:00.000Z";
@@ -216,5 +217,48 @@ describe("choosing the train the card counts down to", () => {
 
   it("does not claim cancellations when the board is simply empty", () => {
     expect(pickHero(null, []).allCancelled).toBe(false);
+  });
+});
+
+describe("board availability", () => {
+  it("reports missing when the configured entity is not in hass", () => {
+    const hass = fakeHass([]);
+    const commute = resolveCommute(hass, `${PREFIX}_next_departure`);
+
+    expect(boardStatus(hass, `${PREFIX}_next_departure`, commute)).toBe(
+      "missing",
+    );
+  });
+
+  it("reports unavailable when every departure sensor is unavailable", () => {
+    const hass = fakeHass([
+      unavailable(`${PREFIX}_next_departure`),
+      unavailable(`${PREFIX}_departure_2`),
+    ]);
+    const commute = resolveCommute(hass, `${PREFIX}_next_departure`);
+
+    expect(boardStatus(hass, `${PREFIX}_next_departure`, commute)).toBe(
+      "unavailable",
+    );
+  });
+
+  it("reports ok when sensors are unknown (quiet overnight board)", () => {
+    const hass = fakeHass([
+      empty(`${PREFIX}_next_departure`),
+      empty(`${PREFIX}_departure_2`),
+    ]);
+    const commute = resolveCommute(hass, `${PREFIX}_next_departure`);
+
+    expect(boardStatus(hass, `${PREFIX}_next_departure`, commute)).toBe("ok");
+  });
+
+  it("reports ok when at least one departure sensor has a train", () => {
+    const hass = fakeHass([
+      departure(`${PREFIX}_next_departure`, AT_631),
+      unavailable(`${PREFIX}_departure_2`),
+    ]);
+    const commute = resolveCommute(hass, `${PREFIX}_next_departure`);
+
+    expect(boardStatus(hass, `${PREFIX}_next_departure`, commute)).toBe("ok");
   });
 });

@@ -27,6 +27,7 @@ function train(overrides: Partial<Departure> = {}): Departure {
     trainId: "6613",
     favorite: false,
     track: null,
+    signaledTrack: null,
     status: "on_time",
     statusText: null,
     delayMinutes: null,
@@ -43,6 +44,34 @@ describe("the track pill", () => {
       text: "Track 4",
       tone: "accent",
     });
+  });
+
+  it("shows the signaled platform as likely before the board posts", () => {
+    expect(trackPill(train({ signaledTrack: "7" }), 20, true)).toEqual({
+      text: "Track 7 (likely)",
+      tone: "accent",
+    });
+  });
+
+  it("lets the board win over the signal", () => {
+    // 2 of 231 disagreed. The board is the official answer and the one
+    // the platform signs match.
+    expect(trackPill(train({ track: "8", signaledTrack: "7" }), 20, true)).toEqual({
+      text: "Track 8",
+      tone: "accent",
+    });
+  });
+
+  it("does not call a track overdue when the signal already has it", () => {
+    // The board being late is not news to someone who can see the train.
+    const pill = trackPill(
+      train({ signaledTrack: "7" }),
+      TRACK_OVERDUE_MINUTES,
+      true,
+    );
+
+    expect(pill?.text).toBe("Track 7 (likely)");
+    expect(pill?.tone).toBe("accent");
   });
 
   it("stays quiet when the station is posting no tracks at all", () => {
@@ -97,25 +126,75 @@ describe("the track pill", () => {
 
     expect(trackPill(scrapped, 2, true)?.text).toBe("Track 4");
   });
+
+  it("suppresses a stale signaled track when the train is cancelled", () => {
+    // RailData remembers platform sightings until a train leaves the board;
+    // showing green "Track 7 (likely)" next to red "Cancelled" contradicts it.
+    const scrapped = train({
+      status: "cancelled",
+      statusText: "Cancelled",
+      signaledTrack: "7",
+    });
+
+    expect(trackPill(scrapped, 10, true)).toBeNull();
+  });
 });
 
 describe("the board's track cell", () => {
-  it("carries the bare number", () => {
-    expect(trackCell(train({ track: "4" }), 20, true).text).toBe("4");
+  it("carries the bare number with an accessible label", () => {
+    expect(trackCell(train({ track: "4" }), 20, true)).toEqual({
+      text: "4",
+      tone: "accent",
+      label: "Track 4",
+    });
+  });
+
+  it("carries a signaled platform with a question mark and label", () => {
+    expect(trackCell(train({ signaledTrack: "7" }), 20, true)).toEqual({
+      text: "7?",
+      tone: "accent",
+      label: "Track 7 (likely)",
+    });
   });
 
   it("warns when the track is overdue", () => {
-    expect(trackCell(train(), 1, true)).toEqual({ text: "⚠️", tone: "bad" });
+    expect(trackCell(train(), 1, true)).toEqual({
+      text: "⚠️",
+      tone: "bad",
+      label: "Track overdue",
+    });
+  });
+
+  it("does not warn when the signal already has the platform", () => {
+    expect(trackCell(train({ signaledTrack: "7" }), 1, true).text).toBe("7?");
   });
 
   it("shows a dash rather than a warning when nothing is posted", () => {
-    expect(trackCell(train(), 1, false).text).toBe("—");
+    expect(trackCell(train(), 1, false)).toEqual({
+      text: "—",
+      tone: "muted",
+      label: "Track not posted",
+    });
   });
 
   it("does not call a cancelled train's missing track overdue", () => {
     const scrapped = train({ status: "cancelled" });
 
-    expect(trackCell(scrapped, 1, true).text).toBe("—");
+    expect(trackCell(scrapped, 1, true)).toEqual({
+      text: "—",
+      tone: "muted",
+      label: "Track not posted",
+    });
+  });
+
+  it("suppresses a stale signaled track on a cancelled train", () => {
+    const scrapped = train({ status: "cancelled", signaledTrack: "7" });
+
+    expect(trackCell(scrapped, 10, true)).toEqual({
+      text: "—",
+      tone: "muted",
+      label: "Track not posted",
+    });
   });
 });
 

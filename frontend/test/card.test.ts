@@ -9,9 +9,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import "../src/departures-card.js";
+import "../src/editor.js";
 import type { NJTransitDeparturesCard } from "../src/departures-card.js";
+import type { NJTransitDeparturesEditor } from "../src/editor.js";
 import type { HomeAssistant } from "../src/types.js";
-import { PREFIX, departure, empty, fakeHass } from "./fixtures.js";
+import { PREFIX, departure, empty, fakeHass, unavailable } from "./fixtures.js";
 
 const NOW = new Date("2026-08-09T22:00:00.000Z");
 const IN_31_MINUTES = "2026-08-09T22:31:00.000Z";
@@ -52,14 +54,42 @@ afterEach(() => {
 });
 
 describe("configuration", () => {
-  it("refuses a config with no entity", () => {
+  it("renders a setup prompt instead of throwing when entity is empty", async () => {
     const card = document.createElement(
       "njtransit-departures",
     ) as NJTransitDeparturesCard;
+    card.setConfig({ type: "custom:njtransit-departures", entity: "" });
+    card.hass = fakeHass([]);
+    document.body.append(card);
+    await card.updateComplete;
 
-    expect(() =>
-      card.setConfig({ type: "custom:njtransit-departures" }),
-    ).toThrow(/next departure sensor/);
+    expect(text(card, ".hero.empty h2")).toBe("Select a commute");
+    expect(card.shadowRoot?.querySelector("ha-card")?.className.trim()).toBe(
+      "muted",
+    );
+  });
+
+  it("editor filters entity picker to timestamp sensors", async () => {
+    const editor = document.createElement(
+      "njtransit-departures-editor",
+    ) as NJTransitDeparturesEditor;
+    editor.setConfig({ type: "custom:njtransit-departures", entity: "" });
+    editor.hass = fakeHass([]);
+    document.body.append(editor);
+    await editor.updateComplete;
+
+    const form = editor.shadowRoot?.querySelector("ha-form") as unknown as {
+      schema: Array<{
+        name: string;
+        selector: { entity?: Record<string, string> };
+      }>;
+    };
+    const entityField = form.schema.find((field) => field.name === "entity");
+    expect(entityField?.selector.entity).toEqual({
+      integration: "njtransit",
+      domain: "sensor",
+      device_class: "timestamp",
+    });
   });
 });
 
@@ -109,6 +139,58 @@ describe("the hero", () => {
     expect(text(card, ".countdown")).toBe("Departed");
   });
 
+  it("keeps counting down for a delayed train past its scheduled time", async () => {
+    // Scheduled 5 minutes ago, running 15 minutes late -> still 10 minutes out.
+    const pastScheduled = "2026-08-09T21:55:00.000Z";
+    const card = await mount(
+      fakeHass([
+        departure(`${PREFIX}_next_departure`, pastScheduled, {
+          status: "delayed",
+          status_text: "15 min late",
+          delay_minutes: 15,
+        }),
+      ]),
+    );
+
+    expect(text(card, ".countdown")).toBe("10min");
+    // Subtitle keeps the scheduled clock time so riders match the station sign.
+    expect(text(card, "h2 .clock")).toBe("5:55 PM");
+    expect(text(card, "tbody tr .relative")).toBe("10m");
+  });
+
+  it("shows Departed when a delayed train is marked departed", async () => {
+    const pastScheduled = "2026-08-09T21:55:00.000Z";
+    const card = await mount(
+      fakeHass([
+        departure(`${PREFIX}_next_departure`, pastScheduled, {
+          status: "departed",
+          status_text: "Departed",
+          delay_minutes: 15,
+        }),
+      ]),
+    );
+
+    expect(text(card, ".countdown")).toBe("Departed");
+  });
+
+  it("shows Cancelled as the hero headline when the favourite is cancelled", async () => {
+    const card = await mount(
+      fakeHass([
+        departure(`${PREFIX}_next_departure`, IN_31_MINUTES, {
+          train_id: "6611",
+        }),
+        departure(`${PREFIX}_next_favorite`, IN_51_MINUTES, {
+          train_id: "6615",
+          status: "cancelled",
+          status_text: "Cancelled",
+        }),
+      ]),
+    );
+
+    expect(text(card, ".countdown")).toBe("Cancelled");
+    expect(card.shadowRoot?.querySelector(".countdown .unit")).toBeNull();
+  });
+
   it("never counts down to a cancelled train", async () => {
     // Observed during a line suspension: a five-centimetre countdown to a
     // train that was not running, with "Cancelled" underneath it in
@@ -142,12 +224,63 @@ describe("the hero", () => {
   it("says so when there is simply no train", async () => {
     const card = await mount(fakeHass([empty(`${PREFIX}_next_departure`)]));
 
-    expect(text(card, ".hero.empty h3")).toBe("Nothing on the board");
+    expect(text(card, ".hero.empty h2")).toBe("Nothing on the board");
+    expect(card.shadowRoot?.querySelector(".hero.empty h3")).toBeNull();
     expect(text(card, ".hero.empty p")).toContain("next couple of hours");
+  });
+
+  it("distinguishes an unavailable feed from an empty board", async () => {
+    const card = await mount(
+      fakeHass([unavailable(`${PREFIX}_next_departure`)]),
+    );
+
+    expect(text(card, ".hero.empty h2")).toBe("Departure board unavailable");
+    expect(card.shadowRoot?.querySelector("ha-card")?.className.trim()).toBe(
+      "warn",
+    );
+  });
+
+  it("distinguishes a missing entity from an empty board", async () => {
+    const card = await mount(fakeHass([]));
+
+    expect(text(card, ".hero.empty h2")).toBe("Entity not found");
+    expect(card.shadowRoot?.querySelector("ha-card")?.className.trim()).toBe(
+      "warn",
+    );
+  });
+
+  it("keeps alerts outside the hero button role and uses role=note", async () => {
+    const card = await mount(
+      fakeHass([
+        departure(`${PREFIX}_next_departure`, IN_31_MINUTES, {
+          alerts: ["Switch problem near Newark."],
+        }),
+      ]),
+    );
+
+    const trigger = card.shadowRoot?.querySelector(".hero-main");
+    const alert = card.shadowRoot?.querySelector('.alert[role="note"]');
+    expect(trigger?.getAttribute("role")).toBe("button");
+    expect(trigger?.getAttribute("aria-label")).toContain("Train 6613");
+    expect(alert?.textContent?.trim()).toBe("Switch problem near Newark.");
+    expect(trigger?.contains(alert ?? null)).toBe(false);
+    expect(card.shadowRoot?.querySelector("blockquote")).toBeNull();
   });
 });
 
 describe("the pills", () => {
+  it("shows the signaled platform as likely until the board posts", async () => {
+    const card = await mount(
+      fakeHass([
+        departure(`${PREFIX}_next_departure`, IN_31_MINUTES, {
+          signaled_track: "7",
+        }),
+      ]),
+    );
+
+    expect(pills(card)).toContain("Track 7 (likely)");
+  });
+
   it("shows the track once it is posted", async () => {
     const card = await mount(
       fakeHass([
@@ -322,6 +455,28 @@ describe("following a favourite", () => {
     expect(text(card, ".progress")).toContain("Millburn");
   });
 
+  it("singularizes 1 stop away", async () => {
+    const hass = fakeHass([
+      departure(`${PREFIX}_next_departure`, IN_31_MINUTES),
+      departure(`${PREFIX}_next_favorite`, IN_51_MINUTES, {
+        train_id: "6615",
+        favorite: true,
+      }),
+      {
+        entity_id: `${PREFIX}_stops_away`,
+        state: "1",
+        attributes: { next_stop: "Short Hills" },
+        last_changed: "",
+        last_updated: "",
+      },
+    ]);
+
+    const card = await mount(hass);
+
+    expect(text(card, ".progress")).toContain("1 stop away");
+    expect(text(card, ".progress")).not.toContain("1 stops away");
+  });
+
   it("explains itself when showing somebody else's train", async () => {
     // Without this the fallback is indistinguishable from the favourite, and
     // the number at the top is for a service the reader was never catching.
@@ -335,7 +490,7 @@ describe("following a favourite", () => {
     expect(text(card, ".hint")).toContain("Waiting for 6615");
   });
 
-  it("says how to set one when none is configured", async () => {
+  it("stays quiet when no favourites are configured", async () => {
     const hass = fakeHass([
       departure(`${PREFIX}_next_departure`, IN_31_MINUTES),
       { ...empty(`${PREFIX}_next_favorite`), attributes: { favorites: [] } },
@@ -343,7 +498,7 @@ describe("following a favourite", () => {
 
     const card = await mount(hass);
 
-    expect(text(card, ".hint")).toContain("No favourite set");
+    expect(card.shadowRoot?.querySelector(".hint")).toBeNull();
   });
 
   it("does not report progress for a train it is not following", async () => {
@@ -397,12 +552,73 @@ describe("the board", () => {
       opened((event as CustomEvent).detail.entityId);
     });
 
-    card.shadowRoot?.querySelector<HTMLElement>("tbody tr")?.click();
+    const row = card.shadowRoot?.querySelector<HTMLElement>("tbody tr");
+    row?.click();
+    expect(opened).toHaveBeenCalledWith(`${PREFIX}_next_departure`);
 
+    opened.mockClear();
+    expect(row?.getAttribute("tabindex")).toBe("0");
+    expect(row?.getAttribute("aria-label")).toContain("Train 6613");
+    row?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+    );
+    expect(opened).toHaveBeenCalledWith(`${PREFIX}_next_departure`);
+
+    opened.mockClear();
+    row?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: " ", bubbles: true }),
+    );
     expect(opened).toHaveBeenCalledWith(`${PREFIX}_next_departure`);
   });
 
-  it("stops ticking once it is off the page", async () => {
+  it("labels table columns, track symbols, and favourite stars accessibly", async () => {
+    const card = await mount(
+      fakeHass([
+        departure(`${PREFIX}_next_departure`, IN_31_MINUTES, {
+          signaled_track: "7",
+          favorite: true,
+        }),
+      ]),
+    );
+
+    const headers = [...(card.shadowRoot?.querySelectorAll("thead th") ?? [])];
+    expect(headers).toHaveLength(4);
+    for (const th of headers) {
+      expect(th.getAttribute("scope")).toBe("col");
+    }
+    expect(headers[2].querySelector("abbr")?.getAttribute("title")).toBe(
+      "Track",
+    );
+    expect(headers[3].querySelector(".sr-only")?.textContent).toBe("Status");
+
+    const row = card.shadowRoot?.querySelector("tbody tr");
+    expect(row?.querySelector('[aria-hidden="true"]')?.textContent).toContain(
+      "⭐",
+    );
+    expect(row?.querySelector(".sr-only")?.textContent).toContain("favourite");
+
+    const track = row?.querySelector(".pill");
+    expect(track?.getAttribute("aria-label")).toBe("Track 7 (likely)");
+    expect(track?.getAttribute("title")).toBe("Track 7 (likely)");
+  });
+
+  it("shows dep instead of now for already-departed rows", async () => {
+    const card = await mount(
+      fakeHass([
+        departure(`${PREFIX}_next_departure`, "2026-08-09T21:57:00.000Z"),
+        departure(`${PREFIX}_departure_2`, NOW.toISOString(), {
+          train_id: "6615",
+        }),
+      ]),
+    );
+
+    const badges = [
+      ...(card.shadowRoot?.querySelectorAll("tbody tr .relative") ?? []),
+    ].map((el) => el.textContent?.trim());
+    expect(badges).toEqual(["dep", "now"]);
+  });
+
+  it("stops ticking once it is off the page and refreshes on reconnect", async () => {
     // A dashboard left open on a wall tablet would otherwise accumulate a
     // timer per card rebuild, forever.
     const card = await mount(
@@ -410,8 +626,17 @@ describe("the board", () => {
     );
     const cleared = vi.spyOn(globalThis, "clearInterval");
 
-    card.remove();
+    // Calling connectedCallback while already connected clears the prior timer.
+    card.connectedCallback();
+    expect(cleared).toHaveBeenCalledTimes(1);
 
-    expect(cleared).toHaveBeenCalled();
+    card.remove();
+    expect(cleared).toHaveBeenCalledTimes(2);
+
+    // Advancing system time while detached refreshes `_now` on reconnect.
+    vi.setSystemTime(new Date("2026-08-09T22:10:00.000Z"));
+    document.body.append(card);
+    await card.updateComplete;
+    expect(text(card, ".countdown")).toBe("21min");
   });
 });

@@ -1,0 +1,1040 @@
+[
+  {
+    "STATION_2CHAR": "AM",
+    "STATIONNAME": "Aberdeen-Matawan",
+    "STATION_14CHAR": "Matawan",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "AB",
+    "STATIONNAME": "Absecon",
+    "STATION_14CHAR": "Absecon",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "AZ",
+    "STATIONNAME": "Allendale",
+    "STATION_14CHAR": "Allendale",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "AH",
+    "STATIONNAME": "Allenhurst",
+    "STATION_14CHAR": "Allenhurst",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "AS",
+    "STATIONNAME": "Anderson Street",
+    "STATION_14CHAR": "Anderson St.",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "AN",
+    "STATIONNAME": "Annandale",
+    "STATION_14CHAR": "Annandale",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "AP",
+    "STATIONNAME": "Asbury Park",
+    "STATION_14CHAR": "Asbury Park",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "AO",
+    "STATIONNAME": "Atco",
+    "STATION_14CHAR": "Atco",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "AC",
+    "STATIONNAME": "Atlantic City Rail Terminal",
+    "STATION_14CHAR": "Atlantic City",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "AV",
+    "STATIONNAME": "Avenel",
+    "STATION_14CHAR": "Avenel",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "BA",
+    "STATIONNAME": "BWI Thurgood Marshall Airport",
+    "STATION_14CHAR": "BWI Airport",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "BL",
+    "STATIONNAME": "Baltimore Station",
+    "STATION_14CHAR": "Baltimore",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "BI",
+    "STATIONNAME": "Basking Ridge",
+    "STATION_14CHAR": "Basking Ridge",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "BH",
+    "STATIONNAME": "Bay Head",
+    "STATION_14CHAR": "Bay Head",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "MC",
+    "STATIONNAME": "Bay Street",
+    "STATION_14CHAR": "Bay Street",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "BS",
+    "STATIONNAME": "Belmar",
+    "STATION_14CHAR": "Belmar",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "BY",
+    "STATIONNAME": "Berkeley Heights",
+    "STATION_14CHAR": "Berkeley Hts",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "BV",
+    "STATIONNAME": "Bernardsville",
+    "STATION_14CHAR": "Bernardsville",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "BM",
+    "STATIONNAME": "Bloomfield",
+    "STATION_14CHAR": "Bloomfield",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "BN",
+    "STATIONNAME": "Boonton",
+    "STATION_14CHAR": "Boonton",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "BK",
+    "STATIONNAME": "Bound Brook",
+    "STATION_14CHAR": "Bound Brook",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "BB",
+    "STATIONNAME": "Bradley Beach",
+    "STATION_14CHAR": "Bradley Beach",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "BU",
+    "STATIONNAME": "Brick Church",
+    "STATION_14CHAR": "Brick Church",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "BW",
+    "STATIONNAME": "Bridgewater",
+    "STATION_14CHAR": "Bridgewater",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "BF",
+    "STATIONNAME": "Broadway Fair Lawn",
+    "STATION_14CHAR": "Broadway-Fl",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "CB",
+    "STATIONNAME": "Campbell Hall",
+    "STATION_14CHAR": "Campbell Hall",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "CM",
+    "STATIONNAME": "Chatham",
+    "STATION_14CHAR": "Chatham",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "CY",
+    "STATIONNAME": "Cherry Hill",
+    "STATION_14CHAR": "Cherry Hill",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "IF",
+    "STATIONNAME": "Clifton",
+    "STATION_14CHAR": "Clifton",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "CN",
+    "STATIONNAME": "Convent Station",
+    "STATION_14CHAR": "Convent Stn",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "XC",
+    "STATIONNAME": "Cranford",
+    "STATION_14CHAR": "Cranford",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "DL",
+    "STATIONNAME": "Delawanna",
+    "STATION_14CHAR": "Delawanna",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "DV",
+    "STATIONNAME": "Denville",
+    "STATION_14CHAR": "Denville",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "DO",
+    "STATIONNAME": "Dover",
+    "STATION_14CHAR": "Dover",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "DN",
+    "STATIONNAME": "Dunellen",
+    "STATION_14CHAR": "Dunellen",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "EO",
+    "STATIONNAME": "East Orange",
+    "STATION_14CHAR": "East Orange",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "ED",
+    "STATIONNAME": "Edison",
+    "STATION_14CHAR": "Edison",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "EH",
+    "STATIONNAME": "Egg Harbor City",
+    "STATION_14CHAR": "Egg Harbor",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "EL",
+    "STATIONNAME": "Elberon",
+    "STATION_14CHAR": "Elberon",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "EZ",
+    "STATIONNAME": "Elizabeth",
+    "STATION_14CHAR": "Elizabeth",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "EN",
+    "STATIONNAME": "Emerson",
+    "STATION_14CHAR": "Emerson",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "EX",
+    "STATIONNAME": "Essex Street",
+    "STATION_14CHAR": "Essex Street",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "FW",
+    "STATIONNAME": "Fanwood",
+    "STATION_14CHAR": "Fanwood",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "FH",
+    "STATIONNAME": "Far Hills",
+    "STATION_14CHAR": "Far Hills",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "GD",
+    "STATIONNAME": "Garfield",
+    "STATION_14CHAR": "Garfield",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "GW",
+    "STATIONNAME": "Garwood",
+    "STATION_14CHAR": "Garwood",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "GI",
+    "STATIONNAME": "Gillette",
+    "STATION_14CHAR": "Gillette",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "GL",
+    "STATIONNAME": "Gladstone",
+    "STATION_14CHAR": "Gladstone",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "GG",
+    "STATIONNAME": "Glen Ridge",
+    "STATION_14CHAR": "Glen Ridge",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "GK",
+    "STATIONNAME": "Glen Rock Boro Hall",
+    "STATION_14CHAR": "Glen Rock Boro",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "RS",
+    "STATIONNAME": "Glen Rock Main Line",
+    "STATION_14CHAR": "Glen Rock Main",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "HQ",
+    "STATIONNAME": "Hackettstown",
+    "STATION_14CHAR": "Hackettstown",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "HL",
+    "STATIONNAME": "Hamilton",
+    "STATION_14CHAR": "Hamilton",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "HN",
+    "STATIONNAME": "Hammonton",
+    "STATION_14CHAR": "Hammonton",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "RM",
+    "STATIONNAME": "Harriman",
+    "STATION_14CHAR": "Harriman",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "HW",
+    "STATIONNAME": "Hawthorne",
+    "STATION_14CHAR": "Hawthorne",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "HZ",
+    "STATIONNAME": "Hazlet",
+    "STATION_14CHAR": "Hazlet",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "HG",
+    "STATIONNAME": "High Bridge",
+    "STATION_14CHAR": "High Bridge",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "HI",
+    "STATIONNAME": "Highland Avenue",
+    "STATION_14CHAR": "Highland Ave.",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "HD",
+    "STATIONNAME": "Hillsdale",
+    "STATION_14CHAR": "Hillsdale",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "HB",
+    "STATIONNAME": "Hoboken",
+    "STATION_14CHAR": "Hoboken",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "UF",
+    "STATIONNAME": "Hohokus",
+    "STATION_14CHAR": "Hohokus",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "JA",
+    "STATIONNAME": "Jersey Avenue",
+    "STATION_14CHAR": "Jersey Ave.",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "HP",
+    "STATIONNAME": "Lake Hopatcong",
+    "STATION_14CHAR": "Lake Hopatcong",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "ON",
+    "STATIONNAME": "Lebanon",
+    "STATION_14CHAR": "Lebanon",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "LP",
+    "STATIONNAME": "Lincoln Park",
+    "STATION_14CHAR": "Lincoln Park",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "LI",
+    "STATIONNAME": "Linden",
+    "STATION_14CHAR": "Linden",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "LW",
+    "STATIONNAME": "Lindenwold",
+    "STATION_14CHAR": "Lindenwold",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "FA",
+    "STATIONNAME": "Little Falls",
+    "STATION_14CHAR": "Little Falls",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "LS",
+    "STATIONNAME": "Little Silver",
+    "STATION_14CHAR": "Little Silver",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "LB",
+    "STATIONNAME": "Long Branch",
+    "STATION_14CHAR": "Long Branch",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "LN",
+    "STATIONNAME": "Lyndhurst",
+    "STATION_14CHAR": "Lyndhurst",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "LY",
+    "STATIONNAME": "Lyons",
+    "STATION_14CHAR": "Lyons",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "MA",
+    "STATIONNAME": "Madison",
+    "STATION_14CHAR": "Madison",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "MZ",
+    "STATIONNAME": "Mahwah",
+    "STATION_14CHAR": "Mahwah",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "SQ",
+    "STATIONNAME": "Manasquan",
+    "STATION_14CHAR": "Manasquan",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "MW",
+    "STATIONNAME": "Maplewood",
+    "STATION_14CHAR": "Maplewood",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "XU",
+    "STATIONNAME": "Meadowlands",
+    "STATION_14CHAR": "Meadowlands",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "MP",
+    "STATIONNAME": "Metropark",
+    "STATION_14CHAR": "Metropark",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "MU",
+    "STATIONNAME": "Metuchen",
+    "STATION_14CHAR": "Metuchen",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "MI",
+    "STATIONNAME": "Middletown NJ",
+    "STATION_14CHAR": "Middletown NJ",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "MD",
+    "STATIONNAME": "Middletown NY",
+    "STATION_14CHAR": "Middletown NY",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "MB",
+    "STATIONNAME": "Millburn",
+    "STATION_14CHAR": "Millburn",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "GO",
+    "STATIONNAME": "Millington",
+    "STATION_14CHAR": "Millington",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "MK",
+    "STATIONNAME": "Monmouth Park",
+    "STATION_14CHAR": "Monmouth Park",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "HS",
+    "STATIONNAME": "Montclair Heights",
+    "STATION_14CHAR": "Montclair Hts.",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "UV",
+    "STATIONNAME": "Montclair State U",
+    "STATION_14CHAR": "MSU",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "ZM",
+    "STATIONNAME": "Montvale",
+    "STATION_14CHAR": "Montvale",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "MX",
+    "STATIONNAME": "Morris Plains",
+    "STATION_14CHAR": "Morris Plains",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "MR",
+    "STATIONNAME": "Morristown",
+    "STATION_14CHAR": "Morristown",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "HV",
+    "STATIONNAME": "Mount Arlington",
+    "STATION_14CHAR": "Mt. Arlington",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "OL",
+    "STATIONNAME": "Mount Olive",
+    "STATION_14CHAR": "Mount Olive",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "TB",
+    "STATIONNAME": "Mount Tabor",
+    "STATION_14CHAR": "Mount Tabor",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "MS",
+    "STATIONNAME": "Mountain Avenue",
+    "STATION_14CHAR": "Mountain Ave",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "ML",
+    "STATIONNAME": "Mountain Lakes",
+    "STATION_14CHAR": "Mountain Lakes",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "MT",
+    "STATIONNAME": "Mountain Station",
+    "STATION_14CHAR": "Mountain Stn",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "MV",
+    "STATIONNAME": "Mountain View",
+    "STATION_14CHAR": "Mountain View",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "MH",
+    "STATIONNAME": "Murray Hill",
+    "STATION_14CHAR": "Murray Hill",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "NN",
+    "STATIONNAME": "Nanuet",
+    "STATION_14CHAR": "Nanuet",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "NT",
+    "STATIONNAME": "Netcong",
+    "STATION_14CHAR": "Netcong",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "NE",
+    "STATIONNAME": "Netherwood",
+    "STATION_14CHAR": "Netherwood",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "NH",
+    "STATIONNAME": "New Bridge Landing",
+    "STATION_14CHAR": "New Bridge Ldg",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "NB",
+    "STATIONNAME": "New Brunswick",
+    "STATION_14CHAR": "New Brunswick",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "NC",
+    "STATIONNAME": "New Carrollton Station",
+    "STATION_14CHAR": "New Carrollton",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "NV",
+    "STATIONNAME": "New Providence",
+    "STATION_14CHAR": "New Providence",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "NY",
+    "STATIONNAME": "New York Penn Station",
+    "STATION_14CHAR": "New York",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "NA",
+    "STATIONNAME": "Newark Airport",
+    "STATION_14CHAR": "Newark Airport",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "ND",
+    "STATIONNAME": "Newark Broad Street",
+    "STATION_14CHAR": "Newark Broad",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "NP",
+    "STATIONNAME": "Newark Penn Station",
+    "STATION_14CHAR": "Newark Penn",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "OR",
+    "STATIONNAME": "North Branch",
+    "STATION_14CHAR": "North Branch",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "NZ",
+    "STATIONNAME": "North Elizabeth",
+    "STATION_14CHAR": "North Elizab.",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "NF",
+    "STATIONNAME": "North Philadelphia",
+    "STATION_14CHAR": "North Phil.",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "OD",
+    "STATIONNAME": "Oradell",
+    "STATION_14CHAR": "Oradell",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "OG",
+    "STATIONNAME": "Orange",
+    "STATION_14CHAR": "Orange",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "OS",
+    "STATIONNAME": "Otisville",
+    "STATION_14CHAR": "Otisville",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "PV",
+    "STATIONNAME": "Park Ridge",
+    "STATION_14CHAR": "Park Ridge",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "PS",
+    "STATIONNAME": "Passaic",
+    "STATION_14CHAR": "Passaic",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "RN",
+    "STATIONNAME": "Paterson",
+    "STATION_14CHAR": "Paterson",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "PC",
+    "STATIONNAME": "Peapack",
+    "STATION_14CHAR": "Peapack",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "PQ",
+    "STATIONNAME": "Pearl River",
+    "STATION_14CHAR": "Pearl River",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "PN",
+    "STATIONNAME": "Pennsauken",
+    "STATION_14CHAR": "Pennsauken",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "PE",
+    "STATIONNAME": "Perth Amboy",
+    "STATION_14CHAR": "Perth Amboy",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "PH",
+    "STATIONNAME": "Philadelphia",
+    "STATION_14CHAR": "Philadelphia",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "PF",
+    "STATIONNAME": "Plainfield",
+    "STATION_14CHAR": "Plainfield",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "PL",
+    "STATIONNAME": "Plauderville",
+    "STATION_14CHAR": "Plauderville",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "PP",
+    "STATIONNAME": "Point Pleasant Beach",
+    "STATION_14CHAR": "Point Pleasant",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "PO",
+    "STATIONNAME": "Port Jervis",
+    "STATION_14CHAR": "Port Jervis",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "PR",
+    "STATIONNAME": "Princeton",
+    "STATION_14CHAR": "Princeton",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "PJ",
+    "STATIONNAME": "Princeton Junction",
+    "STATION_14CHAR": "Princeton Jct.",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "FZ",
+    "STATIONNAME": "Radburn Fair Lawn",
+    "STATION_14CHAR": "Radburn-Fl",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "RH",
+    "STATIONNAME": "Rahway",
+    "STATION_14CHAR": "Rahway",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "RY",
+    "STATIONNAME": "Ramsey Main St",
+    "STATION_14CHAR": "Ramsey",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "17",
+    "STATIONNAME": "Ramsey Route 17",
+    "STATION_14CHAR": "Ramsey Rt 17",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "RA",
+    "STATIONNAME": "Raritan",
+    "STATION_14CHAR": "Raritan",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "RB",
+    "STATIONNAME": "Red Bank",
+    "STATION_14CHAR": "Red Bank",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "RW",
+    "STATIONNAME": "Ridgewood",
+    "STATION_14CHAR": "Ridgewood",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "RG",
+    "STATIONNAME": "River Edge",
+    "STATION_14CHAR": "River Edge",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "RL",
+    "STATIONNAME": "Roselle Park",
+    "STATION_14CHAR": "Roselle Park",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "RF",
+    "STATIONNAME": "Rutherford",
+    "STATION_14CHAR": "Rutherford",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "CW",
+    "STATIONNAME": "Salisbury Mills-Cornwall",
+    "STATION_14CHAR": "Salisbury Mls",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "SC",
+    "STATIONNAME": "Secaucus Concourse",
+    "STATION_14CHAR": "Secaucus",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "TS",
+    "STATIONNAME": "Secaucus Lower Lvl",
+    "STATION_14CHAR": "Secaucus",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "SE",
+    "STATIONNAME": "Secaucus Upper Lvl",
+    "STATION_14CHAR": "Secaucus",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "RT",
+    "STATIONNAME": "Short Hills",
+    "STATION_14CHAR": "Short Hills",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "XG",
+    "STATIONNAME": "Sloatsburg",
+    "STATION_14CHAR": "Sloatsburg",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "SM",
+    "STATIONNAME": "Somerville",
+    "STATION_14CHAR": "Somerville",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "CH",
+    "STATIONNAME": "South Amboy",
+    "STATION_14CHAR": "South Amboy",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "SO",
+    "STATIONNAME": "South Orange",
+    "STATION_14CHAR": "South Orange",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "LA",
+    "STATIONNAME": "Spring Lake",
+    "STATION_14CHAR": "Spring Lake",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "SV",
+    "STATIONNAME": "Spring Valley",
+    "STATION_14CHAR": "Spring Valley",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "SG",
+    "STATIONNAME": "Stirling",
+    "STATION_14CHAR": "Stirling",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "SF",
+    "STATIONNAME": "Suffern",
+    "STATION_14CHAR": "Suffern",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "ST",
+    "STATIONNAME": "Summit",
+    "STATION_14CHAR": "Summit",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "TE",
+    "STATIONNAME": "Teterboro",
+    "STATION_14CHAR": "Teterboro",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "TO",
+    "STATIONNAME": "Towaco",
+    "STATION_14CHAR": "Towaco",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "TR",
+    "STATIONNAME": "Trenton",
+    "STATION_14CHAR": "Trenton",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "TC",
+    "STATIONNAME": "Tuxedo",
+    "STATION_14CHAR": "Tuxedo",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "US",
+    "STATIONNAME": "Union",
+    "STATION_14CHAR": "Union",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "UM",
+    "STATIONNAME": "Upper Montclair",
+    "STATION_14CHAR": "Upp. Montclair",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "WK",
+    "STATIONNAME": "Waldwick",
+    "STATION_14CHAR": "Waldwick",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "WA",
+    "STATIONNAME": "Walnut Street",
+    "STATION_14CHAR": "Walnut Street",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "WS",
+    "STATIONNAME": "Washington Station",
+    "STATION_14CHAR": "Washington",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "WG",
+    "STATIONNAME": "Watchung Avenue",
+    "STATION_14CHAR": "Watchung Ave.",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "WT",
+    "STATIONNAME": "Watsessing Avenue",
+    "STATION_14CHAR": "Watsessing Ave",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "23",
+    "STATIONNAME": "Wayne-Route 23",
+    "STATION_14CHAR": "Wayne Route 23",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "WM",
+    "STATIONNAME": "Wesmont",
+    "STATION_14CHAR": "Wesmont",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "WF",
+    "STATIONNAME": "Westfield",
+    "STATION_14CHAR": "Westfield",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "WW",
+    "STATIONNAME": "Westwood",
+    "STATION_14CHAR": "Westwood",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "WH",
+    "STATIONNAME": "White House",
+    "STATION_14CHAR": "White House",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "WI",
+    "STATIONNAME": "Wilmington Station",
+    "STATION_14CHAR": "Wilmington",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "WR",
+    "STATIONNAME": "Wood Ridge",
+    "STATION_14CHAR": "Wood-Ridge",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  },
+  {
+    "STATION_2CHAR": "WB",
+    "STATIONNAME": "Woodbridge",
+    "STATION_14CHAR": "Woodbridge",
+    "WHEELCHAIR_ACCESSIBLE": "True"
+  },
+  {
+    "STATION_2CHAR": "WL",
+    "STATIONNAME": "Woodcliff Lake",
+    "STATION_14CHAR": "Woodcliff Lake",
+    "WHEELCHAIR_ACCESSIBLE": "False"
+  }
+]

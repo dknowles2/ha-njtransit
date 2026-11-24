@@ -104,9 +104,196 @@ run "knock-on window 30min -> 300min" \
   "KNOCK_ON_LEAD = timedelta(minutes=30)" \
   "KNOCK_ON_LEAD = timedelta(minutes=300)"
 
+run "a shared board is bound to the entry that built it" \
+  custom_components/njtransit/coordinator.py \
+  '        super().__init__(hass, client, f"departures {station}", interval, shared=True)' \
+  '        super().__init__(hass, client, f"departures {station}", interval)'
+
+run "the shared alert feed is bound to the entry that built it" \
+  custom_components/njtransit/coordinator.py \
+  "        super().__init__(hass, client, name, interval, shared=True)" \
+  "        super().__init__(hass, client, name, interval)"
+
+run "a rejected credential on a shared coordinator tells nobody" \
+  custom_components/njtransit/coordinator.py \
+  "        if self.auth_failed is not None:
+            self.auth_failed()" \
+  "        if False:
+            self.auth_failed()"
+
+run "a reconfigured entry releases the wrong store" \
+  custom_components/njtransit/__init__.py \
+  "    key = entry.runtime_data.store_key
+    store = store_for(hass, key)
+    if store is None:
+        return True
+
+    await store.release_board(entry.runtime_data.origin, entry.entry_id)" \
+  "    key = store_key(hass, entry)
+    store = store_for(hass, key)
+    if store is None:
+        return True
+
+    await store.release_board(entry.runtime_data.origin, entry.entry_id)"
+
 run "direct-only filter disabled" \
   custom_components/njtransit/coordinator.py \
   "if not trip.has_transfer" "if True"
+
+# The RailData account entry. A commute no longer carries its own
+# credentials -- it references an account entry that owns the shared client,
+# and reauth, migration and setup-ordering all depend on getting that
+# reference right.
+# The migration's own pre-check (`_async_ensure_account_entry` in
+# `__init__.py`) is no longer the only thing standing between two commutes
+# on one username and two account entries: `async_create_account_entry`
+# creates the account through the config flow's own `async_step_import`,
+# which sets the unique ID and aborts on a collision before creating
+# anything, so a second caller gets the existing account back even with the
+# pre-check disabled. Breaking the pre-check alone no longer produces two
+# accounts -- mutating the fallback that reads an aborted flow's result is
+# what actually exercises the collapse-to-one-account guarantee now.
+run "a raced account creation raises instead of returning the existing one" \
+  custom_components/njtransit/account.py \
+  "    existing = find_account_entry(hass, username)
+    if existing is not None:
+        return existing" \
+  "    existing = find_account_entry(hass, username)
+    if False:
+        return existing"
+
+run "a commute sets up before its RailData account is loaded" \
+  custom_components/njtransit/__init__.py \
+  "    if account_entry is None or account_entry.state is not ConfigEntryState.LOADED:" \
+  "    if account_entry is None:"
+
+run "a rejected credential asks every commute instead of the account" \
+  custom_components/njtransit/coordinator.py \
+  "        @callback
+        def start_reauth() -> None:
+            entry_id = self.account_entry_id
+            if entry_id is None:
+                return
+            entry = hass.config_entries.async_get_entry(entry_id)
+            if entry is not None:
+                entry.async_start_reauth(hass)" \
+  "        @callback
+        def start_reauth() -> None:
+            for entry_id in self._users:
+                entry = hass.config_entries.async_get_entry(entry_id)
+                if entry is not None:
+                    entry.async_start_reauth(hass)"
+
+run "an account unload schedules reloads even while Home Assistant is stopping" \
+  custom_components/njtransit/__init__.py \
+  "    if hass.is_stopping:" \
+  "    if False:"
+
+# The RailData source. Each of these is a behaviour the daily limits or the
+# signal's honesty depend on, and each was fully covered before it was
+# asserted.
+run "a stored RailData token is never reused" \
+  custom_components/njtransit/api/raildata.py \
+  "if isinstance(value, str) and value and self._token_usable(issued):" \
+  "if False:"
+
+run "a stale RailData token is presented anyway" \
+  custom_components/njtransit/api/raildata.py \
+  "return issued is not None and now_local() - issued < TOKEN_LIFETIME" \
+  "return issued is not None"
+
+run "an invalid RailData token is not replaced" \
+  custom_components/njtransit/api/raildata.py \
+  'if _error_message(payload) and "invalid token" in _error_message(payload):' \
+  "if False:"
+
+run "a fetched station-day is fetched again" \
+  custom_components/njtransit/api/raildata.py \
+  "            if key not in schedules:" "            if True:"
+
+run "the signal is matched on train number alone" \
+  custom_components/njtransit/api/raildata_parsing.py \
+  "        return self.train_id == train_id and (
+            self.scheduled is None or self.scheduled == scheduled
+        )" \
+  "        return self.train_id == train_id"
+
+run "the signaling feed is read at every station" \
+  custom_components/njtransit/api/raildata.py \
+  "if not has_decoder(code) or not board.departures:" \
+  "if not board.departures:"
+
+run "a sighting is forgotten the moment the train stops moving" \
+  custom_components/njtransit/api/raildata.py \
+  "        return self._platforms.get(key)" \
+  "        return self._platforms.pop(key, None)"
+
+run "a train seen off its platform keeps the platform" \
+  custom_components/njtransit/api/raildata.py \
+  "                if sighting.platform is None:
+                    self._platforms.pop(key, None)" \
+  "                if sighting.platform is None:
+                    pass"
+
+run "remembered platforms outlive the board" \
+  custom_components/njtransit/api/raildata.py \
+  "            if key[0] == code and key not in current:" \
+  "            if False:"
+
+run "the signal overrides the board" \
+  custom_components/njtransit/api/models.py \
+  '        if self.track:
+            return "board"' \
+  '        if False:
+            return "board"'
+
+run "a circuit outside the platform range decodes to a platform" \
+  custom_components/njtransit/api/circuits.py \
+  "return str(platform) if platform in _PENN_PLATFORMS else None" \
+  "return str(platform)"
+
+run "the schedule join pairs a train with tomorrow's run" \
+  custom_components/njtransit/api/raildata_parsing.py \
+  "and call.departs < arrival.arrives <= call.departs + _LONGEST_JOURNEY" \
+  "and call.departs < arrival.arrives"
+
+run "a blank RailData status reads as on time" \
+  custom_components/njtransit/api/raildata_parsing.py \
+  "    if not status_raw:
+        return None
+    seconds = _seconds(sec_late)" \
+  "    seconds = _seconds(sec_late)"
+
+run "a new password is vouched for by the old token" \
+  custom_components/njtransit/api/raildata.py \
+  "        if not fresh:" "        if True:"
+
+run "the route refreshes a day after setup rather than in the morning" \
+  custom_components/njtransit/coordinator.py \
+  "        self.update_interval = until_next(ROUTE_REFRESH_AT, now)" \
+  "        pass"
+
+run "the Live Activity ignores the signaled track" \
+  blueprints/automation/njtransit/favorite_live_activity.yaml \
+  "       (signaled_track ~ ' (likely)' if signaled_track else none) }}" \
+  "       none }}"
+
+run "the Live Activity shows the signaled track as posted" \
+  blueprints/automation/njtransit/favorite_live_activity.yaml \
+  "       (signaled_track ~ ' (likely)' if signaled_track else none) }}" \
+  "       (signaled_track if signaled_track else none) }}"
+
+run "a signaled track appearing is not news to the Live Activity" \
+  blueprints/automation/njtransit/favorite_live_activity.yaml \
+  "           trigger.from_state.attributes.get('signaled_track')," \
+  "           state_attr(source, 'signaled_track'),"
+
+run "a rejected credential retries instead of asking for reauth" \
+  custom_components/njtransit/coordinator.py \
+  "            return await self.client.departures(self.station)
+        except NJTransitAuthError as err:
+            raise self._reject_credentials(err) from err" \
+  "            return await self.client.departures(self.station)"
 
 run "assigned_at measured backwards" \
   custom_components/njtransit/track_history.py \
@@ -372,6 +559,26 @@ run_card "card: overdue claimed where no track is posted" \
   frontend/src/commute.ts \
   'return board.some((departure) => departure.track !== null);' \
   'return true;'
+
+run_card "card: the signaled platform is never shown" \
+  frontend/src/pills.ts \
+  '  if (departure.signaledTrack) {
+    return { text: `Track ${departure.signaledTrack} (likely)`, tone: "accent" };
+  }' \
+  ''
+
+run_card "card: the signal is shown as if the board had posted it" \
+  frontend/src/pills.ts \
+  '    return { text: `Track ${departure.signaledTrack} (likely)`, tone: "accent" };' \
+  '    return { text: `Track ${departure.signaledTrack}`, tone: "accent" };'
+
+run_card "card: the signal outranks the board" \
+  frontend/src/pills.ts \
+  '  if (departure.track) {
+    return { text: `Track ${departure.track}`, tone: "accent" };
+  }
+  // The signaling system' \
+  '  // The signaling system'
 
 run_card "card: the crowding hint fires when nothing differs" \
   frontend/src/pills.ts \

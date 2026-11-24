@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any
 
 import pytest
-from homeassistant.config_entries import SOURCE_USER
+from homeassistant.config_entries import SOURCE_USER, ConfigEntryState
+from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from pytest_homeassistant_custom_component.test_util.aiohttp import (
     AiohttpClientMocker,
 )
 
+from custom_components.njtransit.account import account_unique_id
 from custom_components.njtransit.api.models import Station
 from custom_components.njtransit.config_flow import canonical_stations
 from custom_components.njtransit.const import (
@@ -20,31 +24,58 @@ from custom_components.njtransit.const import (
     CONF_DESTINATION,
     CONF_DESTINATION_ID,
     CONF_FAVORITE_TRAINS,
+    CONF_LOOKAHEAD,
     CONF_ORIGIN,
     CONF_ORIGIN_ID,
+    CONF_SOURCE,
     DOMAIN,
+    SOURCE_WEBSITE,
 )
 
-from .conftest import install_api_mock, load_fixture, load_payload
+from .conftest import (
+    install_api_mock,
+    install_raildata_mock,
+    load_fixture,
+    load_payload,
+)
+from .test_account import make_account_entry
 from .test_init import HOBOKEN, NY_PENN, SHORT_HILLS, make_entry, setup_entry
 
 
-def suggested_origin(result: Any) -> str | None:
-    """Return the origin field's pre-filled value, if the form offers one.
+def suggested_value(result: Any, field: str) -> str | None:
+    """Return a form field's pre-filled value, if the form offers one.
 
     Voluptuous carries a suggestion in the marker's `description`, not in the
     schema's values, so it takes a walk over the keys to read back.
     """
     for key in result["data_schema"].schema:
-        if key == CONF_ORIGIN:
+        if key == field:
             return (key.description or {}).get("suggested_value")
     return None
 
 
-async def start_flow(hass: HomeAssistant) -> Any:
-    """Begin the user flow."""
+def suggested_origin(result: Any) -> str | None:
+    """Return the origin field's pre-filled value, if the form offers one."""
+    return suggested_value(result, CONF_ORIGIN)
+
+
+async def start_menu(hass: HomeAssistant) -> Any:
+    """Begin the user flow, stopping at the source menu."""
     return await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": SOURCE_USER}
+    )
+
+
+async def start_flow(hass: HomeAssistant, source: str = SOURCE_WEBSITE) -> Any:
+    """Begin the user flow and choose a source, landing on its next step.
+
+    For the website that is the commute form; for RailData it is the
+    credentials form.
+    """
+    result = await start_menu(hass)
+    assert result["type"] is FlowResultType.MENU
+    return await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": source}
     )
 
 
@@ -127,6 +158,7 @@ class TestUserFlow:
             CONF_ORIGIN_ID: "RT",
             CONF_DESTINATION: NY_PENN,
             CONF_DESTINATION_ID: "NY",
+            CONF_SOURCE: SOURCE_WEBSITE,
         }
 
     async def test_suggests_the_station_nearest_home(
@@ -278,6 +310,8 @@ class TestUserFlow:
 
         assert result["type"] is FlowResultType.FORM
         assert result["errors"] == {"base": "same_station"}
+        assert suggested_value(result, CONF_ORIGIN) == SHORT_HILLS
+        assert suggested_value(result, CONF_DESTINATION) == SHORT_HILLS
 
     async def test_unrecognized_origin_is_reported(
         self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
@@ -289,11 +323,34 @@ class TestUserFlow:
         )
         result = await start_flow(hass)
         result = await hass.config_entries.flow.async_configure(
-            result["flow_id"], {CONF_ORIGIN: SHORT_HILLS}
+            result["flow_id"],
+            {CONF_ORIGIN: SHORT_HILLS, CONF_DESTINATION: NY_PENN},
         )
 
         assert result["type"] is FlowResultType.FORM
         assert result["errors"] == {"base": "invalid_station"}
+        assert suggested_value(result, CONF_ORIGIN) == SHORT_HILLS
+        assert suggested_value(result, CONF_DESTINATION) == NY_PENN
+
+    async def test_rounds_home_coordinates_before_nearest_station_lookup(
+        self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+    ) -> None:
+        """Home coordinates are rounded to ~1.1 km before calling njtransit.com."""
+        hass.config.latitude = 40.7252987
+        hass.config.longitude = -74.3238123
+        install_api_mock(aioclient_mock)
+
+        result = await start_flow(hass)
+
+        assert result["type"] is FlowResultType.FORM
+        close_calls = [
+            call[2]
+            for call in aioclient_mock.mock_calls
+            if isinstance(call[2], dict)
+            and call[2].get("operationName") == "DVCloseStation"
+        ]
+        assert len(close_calls) == 1
+        assert close_calls[0]["variables"]["_latLong"] == "40.73,-74.32"
 
     async def test_unreachable_endpoint_aborts_before_the_form(
         self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
@@ -347,6 +404,37 @@ class TestOptionsFlow:
         interval = entry.runtime_data.board.update_interval
         assert interval is not None
         assert interval.total_seconds() == 300
+
+    async def test_minute_options_carry_minute_units(
+        self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+    ) -> None:
+        """Delay threshold and lookahead show 'min' units alongside the 's' intervals."""
+        install_api_mock(aioclient_mock)
+        entry = make_entry()
+        await setup_entry(hass, entry)
+
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        data_schema = result["data_schema"]
+        assert data_schema is not None
+        selectors = {str(key): value for key, value in data_schema.schema.items()}
+        assert selectors[CONF_DELAY_THRESHOLD].config["unit_of_measurement"] == "min"
+        assert selectors[CONF_LOOKAHEAD].config["unit_of_measurement"] == "min"
+
+    async def test_account_entry_options_aborts_cleanly(
+        self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+    ) -> None:
+        """A RailData account entry has no options of its own and must not crash."""
+        install_api_mock(aioclient_mock)
+        install_raildata_mock(aioclient_mock)
+        account = make_account_entry()
+        account.add_to_hass(hass)
+        await hass.config_entries.async_setup(account.entry_id)
+        await hass.async_block_till_done()
+        assert account.state is ConfigEntryState.LOADED
+
+        result = await hass.config_entries.options.async_init(account.entry_id)
+        assert result["type"] is FlowResultType.ABORT
+        assert result["reason"] == "account_no_options"
 
 
 class TestFavoritesSelector:
@@ -415,3 +503,143 @@ class TestFavoritesSelector:
         )
         assert selector.config["multiple"] is True
         assert "options" not in selector.config
+
+
+class TestAccountReconfigureAndReauth:
+    """Account credential rotation via reconfigure and username-locked reauth."""
+
+    async def test_account_reconfigure_updates_password(
+        self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+    ) -> None:
+        install_api_mock(aioclient_mock)
+        install_raildata_mock(aioclient_mock)
+        account = make_account_entry("someone")
+        account.add_to_hass(hass)
+        await hass.config_entries.async_setup(account.entry_id)
+        await hass.async_block_till_done()
+
+        result = await account.start_reconfigure_flow(hass)
+        assert result["type"] is FlowResultType.FORM
+        assert result["step_id"] == "reconfigure_account"
+        assert result["description_placeholders"] == {"username": "someone"}
+
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {CONF_USERNAME: "someone", CONF_PASSWORD: "rotated"},
+        )
+        await hass.async_block_till_done()
+
+        assert result["type"] is FlowResultType.ABORT
+        assert result["reason"] == "reconfigure_successful"
+        assert account.data[CONF_USERNAME] == "someone"
+        assert account.data[CONF_PASSWORD] == "rotated"
+        assert account.state is ConfigEntryState.LOADED
+
+    async def test_account_reconfigure_rejects_bad_password(
+        self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+    ) -> None:
+        install_api_mock(aioclient_mock)
+        install_raildata_mock(aioclient_mock)
+        account = make_account_entry("someone")
+        account.add_to_hass(hass)
+        await hass.config_entries.async_setup(account.entry_id)
+        await hass.async_block_till_done()
+
+        aioclient_mock.clear_requests()
+        install_raildata_mock(aioclient_mock, authenticated=False)
+        result = await account.start_reconfigure_flow(hass)
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {CONF_USERNAME: "someone", CONF_PASSWORD: "wrong"},
+        )
+
+        assert result["type"] is FlowResultType.FORM
+        assert result["step_id"] == "reconfigure_account"
+        assert result["errors"] == {"base": "invalid_auth"}
+        assert account.data[CONF_PASSWORD] == "secret"
+
+    async def test_account_reconfigure_aborts_on_different_username(
+        self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+    ) -> None:
+        """Changing the username during reconfigure must abort without spending quota."""
+        install_api_mock(aioclient_mock)
+        install_raildata_mock(aioclient_mock)
+        account = make_account_entry("someone")
+        account.add_to_hass(hass)
+        await hass.config_entries.async_setup(account.entry_id)
+        await hass.async_block_till_done()
+
+        aioclient_mock.clear_requests()
+        called = install_raildata_mock(aioclient_mock)
+        result = await account.start_reconfigure_flow(hass)
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {CONF_USERNAME: "someone-else", CONF_PASSWORD: "rotated"},
+        )
+
+        assert result["type"] is FlowResultType.ABORT
+        assert result["reason"] == "wrong_account"
+        assert sum(1 for c in called if c["method"] == "getToken") == 0
+        assert account.unique_id == account_unique_id("someone")
+        assert account.data[CONF_USERNAME] == "someone"
+        assert account.data[CONF_PASSWORD] == "secret"
+
+    async def test_reauth_aborts_on_different_username(
+        self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+    ) -> None:
+        """Reauth must not let a different username diverge from entry.unique_id."""
+        install_api_mock(aioclient_mock)
+        install_raildata_mock(aioclient_mock)
+        account = make_account_entry("someone")
+        account.add_to_hass(hass)
+        await hass.config_entries.async_setup(account.entry_id)
+        await hass.async_block_till_done()
+
+        aioclient_mock.clear_requests()
+        called = install_raildata_mock(aioclient_mock)
+        result = await account.start_reauth_flow(hass)
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {CONF_USERNAME: "someone-else", CONF_PASSWORD: "better"},
+        )
+
+        assert result["type"] is FlowResultType.ABORT
+        assert result["reason"] == "wrong_account"
+        assert sum(1 for c in called if c["method"] == "getToken") == 0
+        assert account.unique_id == account_unique_id("someone")
+        assert account.data[CONF_USERNAME] == "someone"
+        assert account.data[CONF_PASSWORD] == "secret"
+
+    async def test_reauth_accepts_case_folded_username_without_mutating_it(
+        self, hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+    ) -> None:
+        """Case-only differences match the same account and preserve stored username."""
+        install_api_mock(aioclient_mock)
+        install_raildata_mock(aioclient_mock)
+        account = make_account_entry("someone")
+        account.add_to_hass(hass)
+        await hass.config_entries.async_setup(account.entry_id)
+        await hass.async_block_till_done()
+
+        result = await account.start_reauth_flow(hass)
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {CONF_USERNAME: "Someone", CONF_PASSWORD: "better"},
+        )
+        await hass.async_block_till_done()
+
+        assert result["type"] is FlowResultType.ABORT
+        assert result["reason"] == "reauth_successful"
+        assert account.data[CONF_USERNAME] == "someone"
+        assert account.data[CONF_PASSWORD] == "better"
+
+
+def test_strings_and_en_translation_stay_in_sync() -> None:
+    """strings.json and translations/en.json must never drift."""
+    root = Path(__file__).resolve().parents[1] / "custom_components" / "njtransit"
+    strings = json.loads((root / "strings.json").read_text())
+    en = json.loads((root / "translations" / "en.json").read_text())
+    assert strings == en
+    assert "account_no_options" in strings["options"]["abort"]
+    assert "wrong_account" in strings["config"]["abort"]
+    assert "reconfigure_account" in strings["config"]["step"]

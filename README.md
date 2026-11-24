@@ -7,15 +7,18 @@ A Home Assistant integration for NJ Transit rail departures and service alerts,
 scoped to a commute you actually take.
 
 > [!WARNING]
-> This uses the private GraphQL endpoint behind njtransit.com. There is no
-> official API, no documentation, and no compatibility promise. It can break
-> without notice. See [Reliability](#reliability).
+> By default this uses the private GraphQL endpoint behind njtransit.com.
+> There is no official API there, no documentation, and no compatibility
+> promise. It can break without notice. See [Reliability](#reliability).
+> NJ Transit's documented [RailData API](#choosing-a-data-source) is
+> available as an alternative for anyone with a developer account.
 
 ## Contents
 
 - [Why a commute, not a station](#why-a-commute-not-a-station)
 - [Installation](#installation)
 - [Configuration](#configuration)
+- [Choosing a data source](#choosing-a-data-source)
 - [Options](#options)
 - [Entities](#entities)
 - [Automation examples](#automation-examples)
@@ -85,14 +88,26 @@ should end up at `config/custom_components/njtransit/manifest.json`.
 
 Settings → Devices & Services → **Add Integration** → **NJ Transit**.
 
-Pick an **origin** and, optionally, a **destination**. Add the integration
-again for each additional commute, including the reverse direction for the trip
-home.
+Choose a [data source](#choosing-a-data-source), then pick an **origin** and,
+optionally, a **destination**. Add the integration again for each additional
+commute, including the reverse direction for the trip home.
 
 Station names come from NJ Transit's own list and must be used verbatim — most
 end in `Station` or `Terminal`, but `MetLife Stadium` and
 `Penn Station New York` do not. The config flow presents them as a dropdown, so
 there is nothing to type.
+
+**Setup suggests your station.** The origin dropdown comes pre-filled with the
+rail station nearest your Home Assistant home location. It is only a
+suggestion — the field stays required and the full list of 167 is still there —
+and it disappears silently if home is unset or the lookup fails, because a
+convenience must never be able to block setup.
+
+The station list itself carries no coordinates and cannot be made to: SPEC 3.1
+records that asking for `latitude` there nulls the entire response. The
+proximity search is a separate operation that takes a point and answers in
+feet, and it does **not** sort — a reply recorded standing on the Short Hills
+platform lists Millburn first. See SPEC 3.9.
 
 ### Omitting the destination
 
@@ -100,6 +115,61 @@ An entry with no destination reports the **whole board** for that station,
 unfiltered, and no calendar is created. Useful for a station you pass through
 rather than commute along. The destination is part of an entry's identity and
 cannot be changed later — add another commute instead.
+
+## Choosing a data source
+
+The first step of setup asks which API to read from. Both give the same
+departures, alerts, stop lists and calendar; every entity is identical either
+way.
+
+| | njtransit.com | RailData API |
+|---|---|---|
+| Account | none | free developer account from [developer.njtransit.com](https://developer.njtransit.com/registration) |
+| Status | private, undocumented, can change without notice | documented, versioned |
+| Track at New York Penn | when the board posts it, about 10 min before departure | **also from the signaling system, about 20 min before departure** |
+| Planned advisories sensor | populated | always 0 — the feed carries live messages only |
+| Service alert poll interval | per-commute option (default 120 s) | fixed at 120 s per account, shared by every commute on it |
+| Transfer itineraries | shown where nothing runs direct | not available; such a commute falls back to label matching |
+
+**The signaling track is the reason to bother.** At New York Penn, RailData's
+vehicle feed reports which track circuit each train is standing on, and Penn's
+platform circuits decode to platform numbers. For roughly two thirds of
+departures the set is on its platform well before the board says so — a median
+of about 20 minutes before departure, against the board's 10 — and across
+several days of comparison the signal matched the board 229 times out of 231.
+It appears on the departure sensors as `signaled_track`, with `track_source`
+saying which answer is current. Only New York Penn is decoded so far; other
+stations report `null`.
+
+RailData rations its calls: ten sign-ins a day, five schedule downloads a day,
+40,000 realtime calls a day. The integration keeps the sign-in token and each
+station's daily schedule in Home Assistant's storage so restarts do not spend
+them again. Two commutes on the same account share everything. A board poll a
+minute plus the signaling feed beside it is under 3,000 calls a day.
+
+**A RailData account is its own entry.** Choosing RailData for a commute asks
+for a username and password only the first time; after that, adding another
+commute on the same NJ Transit account offers it in a list instead of asking
+again. Settings → Devices & Services → NJ Transit shows the account entry
+alongside your commutes -- it holds the credentials and the shared client,
+and creates no entities of its own. Removing it removes every commute's
+access to that account; a commute left pointing at a removed or not-yet-loaded
+account shows a retrying "not ready" error rather than crashing, and picks
+itself back up once the account is available again.
+
+To switch an existing commute between sources, open the entry and choose
+**Reconfigure**. Stations and options are kept; only the client underneath
+changes, and switching to RailData goes through the same account picker as
+adding a commute. If NJ Transit rejects an account's stored password later,
+Home Assistant asks for a new one on the **account** entry -- fixing it there
+fixes every commute on that account at once, rather than asking once per
+commute.
+
+Station proximity — the nearest-station suggestion at setup and the
+`origin_latitude`/`origin_longitude` attributes — always comes from
+njtransit.com, whichever source the commute reads from. RailData publishes no
+coordinates, and this is a one-off anonymous lookup of a public fact rather
+than a feed.
 
 ## Options
 
@@ -109,7 +179,7 @@ commute, so directions can differ.
 | Option | Default | Range | Notes |
 |---|---|---|---|
 | Departure board poll interval | 60 s | 30–3600 | NJ Transit caches for 30 s; polling faster gains nothing |
-| Service alert poll interval | 120 s | 30–3600 | |
+| Service alert poll interval | 120 s | 30–3600 | `njtransit.com` only; RailData polls alerts per account at a fixed 120 s interval |
 | Upcoming departures to show | 3 | 1–10 | Number of `departure_*` sensors created |
 | Delay before disrupted | 10 min | 1–60 | How late counts as disrupted |
 | Lookahead | 90 min | 15–240 | Departures beyond this are ignored by the disruption sensor |
@@ -169,7 +239,9 @@ integration is working, there is simply no train.
 | `train_id` | A **string**, not a number — Trenton's board carries Amtrak IDs like `A79` |
 | `destination` | Headsign text, e.g. `New York -SEC` |
 | `line` | e.g. `Morristown Line` |
-| `track` | Platform, or `null` until assigned |
+| `track` | Platform as the board posts it, or `null` until assigned |
+| `signaled_track` | Platform the signaling system last showed the train standing on, or `null`. Held while the train sits still, cleared if it moves off. RailData source, New York Penn only — see [Choosing a data source](#choosing-a-data-source) |
+| `track_source` | `board` once the board has posted, `signaled` when only the signaling system has, `null` when neither |
 | `status` | Normalized: `on_time`, `delayed`, `cancelled`, `boarding`, `all_aboard`, `departed`, `unknown` |
 | `status_raw` | The board's own text, e.g. `in 21 Min`. Empty until realtime data exists |
 | `status_text` | One phrase combining status and delay — see below |
@@ -208,7 +280,7 @@ Discrete things that happen to a train, as opposed to the binary sensor's
 | `track_changed` | A train is moved **after** a track was published |
 | `alerted` | A train is newly named in a live alert |
 | `line_cancellation` | A train on your line that you **cannot** use, running shortly ahead of one you can, is cancelled |
-| `track_overdue` | Eight minutes to departure and still no track |
+| `track_overdue` | Six minutes to departure and still no track |
 
 Only transitions fire. An ongoing problem does not re-fire every poll, and
 nothing fires for the state that existed at startup — otherwise every restart
@@ -219,11 +291,11 @@ simply had no track yet. Being *moved* is the actionable case, and the event
 carries `previous_track` alongside the new one.
 
 `track_overdue` comes from something regular riders already do. At New York
-Penn, NJ Transit publishes a track a median of **9.0 minutes** before
-departure, and the middle half of departures fall between 8.9 and 9.1 — a
-scheduled process rather than a tendency, which is exactly why a deviation from
-it is felt. A train still without a track inside six minutes is in the
-slowest tenth, and nothing else on the board says so yet.
+Penn, NJ Transit publishes a track a median of **8.8 minutes** before
+departure, with an interquartile range of **1.9 minutes** — a scheduled process
+rather than a tendency, which is exactly why a deviation from it is felt. A
+train still without a track inside six minutes is in the slowest tenth, and
+nothing else on the board says so yet.
 
 Two things it will not do. It stays quiet for cancelled trains, which were
 never getting a track. And it stays quiet unless the station is publishing
@@ -274,6 +346,8 @@ automation need not care which entity it read a train from, plus:
 | Attribute | Description |
 |---|---|
 | `favorites` | The configured train numbers, normalized |
+| `origin_latitude` | Latitude of the origin station (absent if unknown) |
+| `origin_longitude` | Longitude of the origin station (absent if unknown) |
 
 Every departure sensor also gains a `favorite` boolean, so a dashboard can
 highlight your train in a list without a second lookup.
@@ -296,6 +370,10 @@ passed, is not running today, or no favourite is close enough to follow.
 | `next_stop` | Where it is heading |
 | `due_at_origin` | Scheduled time at your station |
 | `due_at_destination` | Scheduled time at the other end |
+| `eta_at_destination` | Estimated arrival at the other end (`due_at_destination` shifted by `minutes_late`) |
+| `minutes_late` | Peak observed lateness on this run, in minutes, or `null` when unknown |
+| `stops_to_destination` | Stops remaining until your destination |
+| `on_board` | `true` once the train has passed your origin with your destination still ahead |
 | `stops_total` | Stops on the whole run |
 | `stops_remaining` | Names of the stops still ahead |
 
@@ -411,6 +489,12 @@ It shows the train, its track, its status and how full it is:
 Train 6643 · Track 4 · 12 min late · Filling up
 ```
 
+On the [RailData source](#choosing-a-data-source) at New York Penn the track
+can be known before the board posts it. Until it does, the activity shows the
+signaling system's platform as a likelihood — `Track 4 (likely)` — and drops
+the hedge the moment the board confirms. The board always wins if the two ever
+disagree.
+
 Busyness comes from the per-car crowding the board already carries, so it costs
 nothing extra — but the board only publishes consist data for imminent
 departures, so expect it part way through the countdown rather than at the
@@ -458,10 +542,11 @@ The window's end also resets the dismissed flag, which is what it did before
 it gated anything. If you set a schedule expecting notifications outside it,
 that behaviour changed.
 
-Deliberately **not** applied once you are aboard. A window ending at 10:00
-while you are on a train arriving at 10:30 must not take the arrival countdown
-with it — the window is about whether to board, not about a journey already
-under way.
+It gates the arrival countdown too, so set it wide enough to cover the
+journey — a window closing at 10:00 ends the countdown of a train arriving at
+10:15. Letting the arrival half ignore the window put a countdown on the Lock
+Screen on a day off, because the integration can see that a train left your
+station (`on_board`) but not whether you were actually on it.
 
 **Using where you are.** Two optional inputs, **Where you are** (a person or
 device tracker) and **Only when you are in one of these** (zones), stop the
@@ -578,18 +663,6 @@ just opens Home Assistant wherever it was and everything else works unchanged.
 [`dashboards/trains.yaml`](dashboards/trains.yaml) is a ready-made one to copy
 if you want the tap to land somewhere useful — see below.
 
-**Setup suggests your station.** The origin dropdown comes pre-filled with the
-rail station nearest your Home Assistant home location. It is only a
-suggestion — the field stays required and the full list of 167 is still there —
-and it disappears silently if home is unset or the lookup fails, because a
-convenience must never be able to block setup.
-
-The station list itself carries no coordinates and cannot be made to: SPEC 3.1
-records that asking for `latitude` there nulls the entire response. The
-proximity search is a separate operation that takes a point and answers in
-feet, and it does **not** sort — a reply recorded standing on the Short Hills
-platform lists Millburn first. See SPEC 3.9.
-
 ### The departures card
 
 The integration ships a Lovelace card. There is nothing to install for it —
@@ -616,6 +689,11 @@ Two differences worth knowing about:
   recomputes every ten seconds.
 - **Rows open.** Tapping the hero or any row on the board opens that
   departure's more-info dialog.
+- **The signaled track shows early.** On the [RailData
+  source](#choosing-a-data-source) at New York Penn, the hero says
+  `Track 7 (likely)` and the board row `7?` while the signaling system has
+  the train on a platform the board has not announced. The moment the board
+  posts, the hedge drops and the board's number wins, even if it differs.
 
 **The card is tinted by the worst thing on it** — a wash across the top-left
 corner, green normally, amber for a delay, red for a cancellation or an
@@ -765,7 +843,7 @@ Display `status_text` rather than deriving your own from `status` and
 
 ## Reliability
 
-The endpoint is private and undocumented, so this integration is built
+The default endpoint is private and undocumented, so this integration is built
 defensively:
 
 - GraphQL field selections are **pinned**, not broad. Requesting a field the
@@ -779,7 +857,9 @@ defensively:
   broken install.
 
 That reduces the blast radius. It does not eliminate it. If NJ Transit changes
-the endpoint, this will need updating.
+the endpoint, this will need updating — or switch the commute to the
+[RailData source](#choosing-a-data-source), which NJ Transit documents and
+supports.
 
 ## Troubleshooting
 
@@ -798,9 +878,13 @@ out.
 **The calendar shows a train that was cancelled.** The calendar is the
 timetable. Cancellations are folded in only for departures on the live board.
 
+**RailData says the sign-in limit is used up.** Ten token requests a day, and
+the integration normally spends one. Repeated reconfiguring or restarting with
+a broken token store can use them; wait until midnight Eastern.
+
 **Something else.** Download diagnostics from the integration's device page —
 Settings → Devices & Services → NJ Transit → the device → ⋮ → **Download
-diagnostics**. It contains no credentials, because the endpoint takes none.
+diagnostics**. It names the data source and never includes credentials.
 
 ## Contributing
 

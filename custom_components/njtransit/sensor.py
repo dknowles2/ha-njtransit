@@ -113,6 +113,8 @@ def _details(
         "destination": departure.destination,
         "line": departure.line,
         "track": departure.track,
+        "signaled_track": departure.signaled_track,
+        "track_source": departure.track_source,
         "status": departure.status.value,
         "status_raw": departure.status_raw,
         "status_text": departure.status_text,

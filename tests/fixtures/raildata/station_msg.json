@@ -1,0 +1,59 @@
+[
+  {
+    "MSG_TYPE": "banner",
+    "MSG_TEXT": "ATTENTION PASSENGERS NEW JERSEY TRANSIT WILL CROSS HONOR PATH TICKETS INTO NEW YORK",
+    "MSG_PUBDATE": "12/21/2023 11:13:00 AM",
+    "MSG_ID": "",
+    "MSG_AGENCY": "",
+    "MSG_SOURCE": "",
+    "MSG_STATION_SCOPE": "*Newark Penn Station,*Newark Airport",
+    "MSG_LINE_SCOPE": " ",
+    "MSG_PUBDATE_UTC": "12/21/2023 4:13:00 PM"
+  },
+  {
+    "MSG_TYPE": "banner",
+    "MSG_TEXT": "NJCL train #3240, the 12:34 PM arrival into PSNY, is up to 15 min. late due to track maintenance.",
+    "MSG_PUBDATE": "5/30/2024 11:52:40 AM",
+    "MSG_ID": "1756463",
+    "MSG_AGENCY": "NJT",
+    "MSG_SOURCE": "RSS_NJTRailAlerts",
+    "MSG_STATION_SCOPE": " ",
+    "MSG_LINE_SCOPE": "*North Jersey Coast Line",
+    "MSG_PUBDATE_UTC": "5/30/2024 3:52:40 PM"
+  },
+  {
+    "MSG_TYPE": "banner",
+    "MSG_TEXT": "Northeast Corridor and North Jersey Coast Line trains are subject to 15 min. delays due to Amtrak overhead wire repairs. Please take train #3846 for Long Branch.",
+    "MSG_PUBDATE": "5/30/2024 12:02:00 PM",
+    "MSG_ID": "1756470",
+    "MSG_AGENCY": "NJT",
+    "MSG_SOURCE": "RSS_NJTRailAlerts",
+    "MSG_STATION_SCOPE": " ",
+    "MSG_LINE_SCOPE": "*Northeast Corridor Line,*North Jersey Coast Line",
+    "MSG_PUBDATE_UTC": "5/30/2024 4:02:00 PM"
+  },
+  {
+    "MSG_TYPE": "fullscreen",
+    "MSG_TEXT": "Full Screen Test MSG for Jersey Ave.",
+    "MSG_PUBDATE": "5/30/2024 11:44:00 AM",
+    "MSG_ID": "",
+    "MSG_AGENCY": "NJT",
+    "MSG_SOURCE": "",
+    "MSG_STATION_SCOPE": "*Jersey Avenue",
+    "MSG_LINE_SCOPE": " ",
+    "MSG_PUBDATE_UTC": "5/30/2024 3:44:00 PM"
+  },
+  {
+    "MSG_TYPE": "banner",
+    "MSG_TEXT": "M and E train #6676, the scheduled 11:00 PM arrival to PSNY is up to 15 minutes late due to operational issues.",
+    "MSG_RICHTEXT": "",
+    "MSG_PUBDATE": "9/14/2026 9:55:19 PM",
+    "MSG_ID": "2169694",
+    "MSG_AGENCY": "NJT",
+    "MSG_SOURCE": "RSS_NJTRailAlerts",
+    "MSG_STATION_SCOPE": " ",
+    "MSG_LINE_SCOPE": "*ME Line",
+    "MSG_PUBDATE_UTC": "9/15/2026 1:55:19 AM",
+    "MSG_URL": "https://www.njtransit.com/node/2169694"
+  }
+]

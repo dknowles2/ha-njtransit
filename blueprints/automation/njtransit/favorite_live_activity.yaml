@@ -14,6 +14,13 @@ blueprint:
     its status or track changes, and — if you are still following it when it
     leaves — switches to counting down to your arrival instead, showing how
     many stops are left and the next station. It clears when you get there.
+
+
+    On the RailData source at New York Penn, the track can be known before the
+    board posts it: the signaling system shows which platform the train is
+    standing on, typically ten minutes earlier, and has matched the board 229
+    times out of 231. That shows as **Track 3 (likely)** until the board
+    confirms it, at which point the "(likely)" drops.
     Updates are sent `passive` and reuse the same `tag`, so they replace what
     is on screen without a banner or a sound — and one is only sent when
     something you can read on the activity has actually changed.
@@ -424,12 +431,17 @@ variables:
     {%- set away = distance(presence, origin_lat | float(0), origin_lon | float(0)) -%}
     {{ away is none or away <= effective_radius | float(0) }}
     {%- else -%}
+    {#- `distance()` returns kilometres on metric installs and miles on US
+        installs, while a zone's `radius` is always in metres. One degree along
+        the equator is ~111 km or ~69 mi, so `> 90` tells the two apart without
+        assuming a unit system. -#}
+    {%- set m_per_unit = 1000 if distance(0, 0, 0, 1) > 90 else 1609.344 -%}
     {%- set ns = namespace(near=false, measured=false) -%}
     {%- for z in zones -%}
     {%- set away = distance(presence, z) -%}
     {%- if away is not none -%}
     {%- set ns.measured = true -%}
-    {%- if (away * 1000) <= (state_attr(z, 'radius') | float(100)) -%}
+    {%- if (away * m_per_unit) <= (state_attr(z, 'radius') | float(100)) -%}
     {%- set ns.near = true -%}
     {%- endif -%}
     {%- endif -%}
@@ -475,8 +487,19 @@ variables:
   source: "{{ fallback_entity if use_fallback else sensor }}"
   scheduled: "{{ states(source) }}"
   known: "{{ scheduled not in nothing }}"
+  source_status: "{{ state_attr(source, 'status') or '' }}"
+  delay_minutes: "{{ state_attr(source, 'delay_minutes') | int(0) }}"
+  # Effective departure time: scheduled plus known delay, unless the train has
+  # already departed. Driving `minutes_out` and the chronometer from this keeps
+  # a delayed train on the Lock Screen instead of clearing it two minutes after
+  # the timetable time while the rider is still waiting on the platform.
+  effective_departure: >-
+    {%- set base = as_timestamp(scheduled, 0) -%}
+    {{ (base + (delay_minutes * 60
+                if delay_minutes > 0 and source_status != 'departed'
+                else 0)) | int }}
   minutes_out: >-
-    {{ ((as_timestamp(scheduled) - as_timestamp(now())) / 60) | round(0) | int
+    {{ ((effective_departure - as_timestamp(now())) / 60) | round(0) | int
        if known else 9999 }}
   # Kept briefly past departure so the activity does not vanish the instant a
   # train you are running for slips off the board. An unset helper is "", and
@@ -557,8 +580,9 @@ variables:
   #     on its own schedule while the favourite sits still.
   shown_fields: >-
     {{ [states(source), state_attr(source, 'train_id'),
-        state_attr(source, 'track'), state_attr(source, 'status_text'),
-        state_attr(source, 'crowding')] }}
+        state_attr(source, 'track'), state_attr(source, 'signaled_track'),
+        state_attr(source, 'status'), state_attr(source, 'status_text'),
+        state_attr(source, 'delay_minutes'), state_attr(source, 'crowding')] }}
   changed: >-
     {{ riding
        or trigger.from_state is not defined or trigger.from_state is none
@@ -566,14 +590,30 @@ variables:
        or [trigger.from_state.state,
            trigger.from_state.attributes.get('train_id'),
            trigger.from_state.attributes.get('track'),
+           trigger.from_state.attributes.get('signaled_track'),
+           trigger.from_state.attributes.get('status'),
            trigger.from_state.attributes.get('status_text'),
+           trigger.from_state.attributes.get('delay_minutes'),
            trigger.from_state.attributes.get('crowding')] != shown_fields }}
   ride_train: "{{ state_attr(progress_entity, 'train_id') or '' }}"
   ride_stops: "{{ state_attr(progress_entity, 'stops_to_destination') }}"
   ride_next: "{{ state_attr(progress_entity, 'next_stop') or '' }}"
   ride_late: "{{ state_attr(progress_entity, 'minutes_late') | int(0) }}"
   train: "{{ state_attr(source, 'train_id') or '' }}"
-  track: "{{ state_attr(source, 'track') }}"
+  # The board's track once it has posted one; before that, the platform the
+  # signaling system shows the train standing on, if the source carries it.
+  # The board always wins -- it is the official answer and the one the
+  # platform signs match -- and the signaled one is marked as a likelihood,
+  # however good its record, because a "3" that turns into a "4" with no
+  # warning is worse than a "3 (likely)" that does.
+  cancelled: "{{ not riding and source_status == 'cancelled' }}"
+  use_chronometer: "{{ riding or not cancelled }}"
+  posted_track: "{{ state_attr(source, 'track') }}"
+  signaled_track: "{{ state_attr(source, 'signaled_track') }}"
+  track: >-
+    {{ none if cancelled else
+       (posted_track if posted_track else
+        (signaled_track ~ ' (likely)' if signaled_track else none)) }}
   status: "{{ state_attr(source, 'status_text') or 'Scheduled' }}"
   destination: "{{ state_attr(source, 'destination') or '' }}"
   # How full the train is, when the board says. It only carries consist data
@@ -632,7 +672,7 @@ variables:
   # would use it cannot run, because `showing` is false whenever `scheduled` is
   # unknown.
   activity_when: >-
-    {{ (as_timestamp(eta, 0) if riding else as_timestamp(scheduled, 0)) | int }}
+    {{ (as_timestamp(eta, 0) if riding else effective_departure) | int }}
   activity_message: >-
     {%- if riding -%}
     {{ ('next ' ~ ride_next) if ride_next else 'Arriving' }}
@@ -716,41 +756,29 @@ actions:
               # shows it -- so it is worth carrying the busyness here too
               # rather than leaving the watch with only a truncated title.
               message: "{{ activity_message }}"
-              data:
-                tag: "{{ tag }}"
-                live_update: true
-                chronometer: true
-                # An absolute Unix timestamp. `when_relative: true` would mean
-                # "seconds from now" -- passing an epoch with it set makes the
-                # phone count down from about 1.75 billion. Absolute is also
-                # steadier: it cannot drift between this firing and the push
-                # landing.
-                when: "{{ activity_when }}"
-                notification_icon: !input icon
-                group: njtransit
-                # The same tag replaces the notification rather than stacking
-                # it, and that was mistaken here for the update being silent.
-                # It is not: iOS still alerts on every push at the default
-                # interruption level, so a refreshing activity buzzed the
-                # wrist each time. `passive` is what actually means "update
-                # what is on screen, do not interrupt" -- the companion
-                # notification below has always set it, which is why that one
-                # never made a sound and this one did.
-                #
-                # A `url` key alongside these broke the activity outright (see
-                # below), so this was added on its own and its effect on the
-                # activity checked before anything else changed.
-                push:
-                  interruption-level: passive
-                # Deliberately no `url` here. Adding one stopped the activity
-                # rendering at all -- the payload was verified to reach the
-                # notify service as a correct dict with `live_update` and
-                # `chronometer` intact, so the extra key is the only thing that
-                # changed. Live Activities are a narrow, undocumented surface
-                # and are not the place to find out what else they tolerate.
-                #
-                # The tap-through lives on the companion notification below,
-                # where `url` is ordinary and well understood.
+              # `chronometer` and `when` are omitted when the favourite train is
+              # cancelled so the Lock Screen never counts down to a service
+              # that is not running.
+              #
+              # When present, `when` is an absolute Unix timestamp:
+              # `when_relative: true` would mean "seconds from now", and
+              # absolute cannot drift between this firing and the push landing.
+              #
+              # `interruption-level: passive` updates what is on screen without
+              # alerting; reusing `tag` alone stops stacking but still buzzes.
+              #
+              # Deliberately no `url` here -- adding one stopped the Live
+              # Activity rendering at all. The tap-through lives on the
+              # companion notification below.
+              data: >-
+                {{ {
+                     'tag': tag,
+                     'live_update': true,
+                     'notification_icon': icon,
+                     'group': 'njtransit',
+                     'push': {'interruption-level': 'passive'},
+                   } | combine({'chronometer': true, 'when': activity_when}
+                               if use_chronometer else {}) }}
           # The button has to ride on a separate, ordinary notification:
           # Live Activities cannot carry actions.
           #

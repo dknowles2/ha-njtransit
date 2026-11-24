@@ -15,6 +15,8 @@ export type Tone = "accent" | "bad" | "warn" | "muted";
 export interface Pill {
   text: string;
   tone: Tone;
+  /** Accessible name and hover tooltip when `text` is abbreviated or symbolic. */
+  label?: string;
 }
 
 /**
@@ -47,11 +49,20 @@ export function trackPill(
   if (departure.track) {
     return { text: `Track ${departure.track}`, tone: "accent" };
   }
-  // A cancelled train is never getting a platform, so "Track not posted yet"
-  // is not a fact about it -- and next to a red `Cancelled` it reads as a
-  // second, contradictory piece of news. The YAML card said exactly this.
+  // A cancelled train is never getting a platform, so neither a stale
+  // signaling sighting nor "Track not posted yet" is a fact about it -- next
+  // to a red `Cancelled` either reads as a second, contradictory piece of news.
   if (departure.status === "cancelled") {
     return null;
+  }
+  // The signaling system has the set standing on a platform the board has
+  // not announced. Right 229 times of 231, so it earns the accent tone --
+  // but it is marked, because a "7" that turns into an "8" without warning
+  // is worse than a "7 (likely)" that does. It also outranks the overdue
+  // warning below: the board being late is not news to someone who can
+  // already see where the train is.
+  if (departure.signaledTrack) {
+    return { text: `Track ${departure.signaledTrack} (likely)`, tone: "accent" };
   }
   if (!posting) {
     return { text: "Track not posted", tone: "muted" };
@@ -76,16 +87,26 @@ export function trackCell(
   posting: boolean,
 ): Pill {
   if (departure.track) {
-    return { text: departure.track, tone: "accent" };
+    return {
+      text: departure.track,
+      tone: "accent",
+      label: `Track ${departure.track}`,
+    };
   }
-  if (
-    posting &&
-    minutes <= TRACK_OVERDUE_MINUTES &&
-    departure.status !== "cancelled"
-  ) {
-    return { text: "⚠️", tone: "bad" };
+  if (departure.status === "cancelled") {
+    return { text: "—", tone: "muted", label: "Track not posted" };
   }
-  return { text: "—", tone: "muted" };
+  if (departure.signaledTrack) {
+    return {
+      text: `${departure.signaledTrack}?`,
+      tone: "accent",
+      label: `Track ${departure.signaledTrack} (likely)`,
+    };
+  }
+  if (posting && minutes <= TRACK_OVERDUE_MINUTES) {
+    return { text: "⚠️", tone: "bad", label: "Track overdue" };
+  }
+  return { text: "—", tone: "muted", label: "Track not posted" };
 }
 
 /** The operator's own words, coloured by how bad they are. */

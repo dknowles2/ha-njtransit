@@ -2,6 +2,29 @@
   "config": {
     "step": {
       "user": {
+        "title": "Choose a data source",
+        "description": "Both give the same departures and alerts. RailData is NJ Transit's documented API: it needs a free developer account from developer.njtransit.com, and at New York Penn it reports the platform from the signaling system about ten minutes before the board posts it.",
+        "menu_options": {
+          "website": "njtransit.com (no account needed)",
+          "raildata": "RailData API (developer account; shows tracks earlier)"
+        }
+      },
+      "raildata": {
+        "title": "Choose a RailData account",
+        "description": "Commutes on the RailData source share an account's sign-in and daily limits. Pick one already set up, or add a new one.",
+        "data": {
+          "account": "Account"
+        }
+      },
+      "raildata_account": {
+        "title": "New RailData account",
+        "description": "The production credentials NJ Transit emailed when you registered. They are checked now and stored in a separate account entry that every commute on this account shares.",
+        "data": {
+          "username": "Username",
+          "password": "Password"
+        }
+      },
+      "commute": {
         "title": "Add a commute",
         "description": "Each commute is a separate entry. Add the integration again for a different destination, or for the trip home.",
         "data": {
@@ -9,7 +32,31 @@
           "destination": "Destination station"
         },
         "data_description": {
-          "destination": "Optional. Narrows departures to trains that actually reach this station, including ones requiring a transfer."
+          "destination": "Optional. Narrows departures to direct trains serving this station, falling back to transfers only when no direct service runs."
+        }
+      },
+      "reconfigure": {
+        "title": "Change data source",
+        "description": "Switch this commute to the other API. Stations and options are kept.",
+        "menu_options": {
+          "website": "njtransit.com (no account needed)",
+          "raildata": "RailData API (developer account; shows tracks earlier)"
+        }
+      },
+      "reconfigure_account": {
+        "title": "Update RailData credentials",
+        "description": "Enter the current password for {username}. Every commute on this account picks it up once updated.",
+        "data": {
+          "username": "Username",
+          "password": "Password"
+        }
+      },
+      "reauth_confirm": {
+        "title": "RailData credentials rejected",
+        "description": "NJ Transit no longer accepts this account's stored credentials. Enter the current password for {username} -- every commute on this account picks it up once fixed.",
+        "data": {
+          "username": "Username",
+          "password": "Password"
         }
       }
     },
@@ -17,12 +64,17 @@
       "cannot_connect": "Could not reach NJ Transit.",
       "invalid_station": "NJ Transit does not recognize that station.",
       "same_station": "Origin and destination must differ.",
-      "unknown": "Unexpected error."
+      "unknown": "Unexpected error.",
+      "invalid_auth": "NJ Transit rejected that username and password.",
+      "quota": "Today's RailData sign-in limit has been used up. Try again after midnight Eastern."
     },
     "abort": {
       "already_configured": "This commute is already set up.",
       "cannot_connect": "Could not reach NJ Transit.",
-      "unknown": "Unexpected error."
+      "unknown": "Unexpected error.",
+      "reauth_successful": "Credentials updated.",
+      "reconfigure_successful": "Configuration updated.",
+      "wrong_account": "The username must match the existing RailData account."
     }
   },
   "options": {
@@ -41,9 +93,13 @@
         "data_description": {
           "departure_interval": "NJ Transit caches responses for 30 seconds, so polling faster gains nothing.",
           "lookahead": "Departures beyond this window are ignored by the disruption sensor.",
-          "favorite_trains": "Train numbers you usually catch, e.g. 6662. Leave empty to skip the favorite sensor entirely."
+          "favorite_trains": "Train numbers you usually catch, e.g. 6662. Leave empty if you do not track specific trains.",
+          "status_interval": "On the RailData source, the alert feed is polled per account at a fixed interval rather than this one -- see Choosing a data source in the README."
         }
       }
+    },
+    "abort": {
+      "account_no_options": "Options are configured per commute, not on the RailData account."
     }
   },
   "entity": {

@@ -7,10 +7,39 @@ from typing import Final
 
 DOMAIN: Final = "njtransit"
 
+# Config entry schema version. Bumped for the RailData-account split: a
+# commute entry that used to carry its own username/password now references
+# an account entry instead. See `async_migrate_entry` in `__init__.py`.
+CONFIG_ENTRY_VERSION: Final = 2
+
 CONF_ORIGIN: Final = "origin"
 CONF_ORIGIN_ID: Final = "origin_id"
 CONF_DESTINATION: Final = "destination"
 CONF_DESTINATION_ID: Final = "destination_id"
+
+# Which kind of config entry this is. Every entry from before this field
+# existed is a commute, which is why commute entries do not bother setting
+# it -- only the account kind needs to be told apart.
+CONF_ENTRY_TYPE: Final = "entry_type"
+ENTRY_TYPE_ACCOUNT: Final = "account"
+"""A RailData account: username, password, and the shared client/token/
+schedule store every commute referencing it polls through. No entities of
+its own."""
+
+# A commute entry on the RailData source stores the account entry's ID here
+# instead of its own credentials.
+CONF_ACCOUNT: Final = "account"
+
+# Which API answers. Stored in the entry's data rather than its options
+# because changing it changes the client every coordinator is built on,
+# which is a reload, not a live tweak.
+CONF_SOURCE: Final = "source"
+SOURCE_WEBSITE: Final = "website"
+"""The private GraphQL endpoint behind njtransit.com. No account needed."""
+SOURCE_RAILDATA: Final = "raildata"
+"""NJ Transit's documented RailData API. Needs a developer account, and in
+return gives the signaling system's track before the board posts it."""
+DEFAULT_SOURCE: Final = SOURCE_WEBSITE
 
 CONF_DEPARTURE_INTERVAL: Final = "departure_interval"
 CONF_STATUS_INTERVAL: Final = "status_interval"
@@ -45,3 +74,8 @@ TRACK_HISTORY_DAYS: Final = 30
 # largest thing the integration owns, and Home Assistant flushes a pending
 # delayed save on shutdown, so a long delay costs nothing but a crash.
 TRACK_HISTORY_SAVE_DELAY: Final = 600
+
+# Storage key for what the RailData client must not fetch twice: its token
+# (ten a day) and each station's schedule (five a day). One file per account.
+RAILDATA_STORAGE_KEY: Final = f"{DOMAIN}.raildata"
+RAILDATA_STORAGE_VERSION: Final = 1

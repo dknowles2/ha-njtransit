@@ -12,15 +12,16 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .api.client import NJTransitClient
 from .api.exceptions import (
+    NJTransitAuthError,
     NJTransitConnectionError,
     NJTransitError,
     NJTransitNotFoundError,
@@ -33,8 +34,9 @@ from .api.models import (
     SystemAlert,
     TrainRun,
 )
-from .api.parsing import now_local
-from .const import DOMAIN, ROUTE_INTERVAL, STATIC_INTERVAL
+from .api.parsing import TZ, now_local
+from .api.source import RailSource
+from .const import DOMAIN, ROUTE_INTERVAL, SOURCE_WEBSITE, STATIC_INTERVAL
 from .track_history import TrackHistory
 
 _LOGGER = logging.getLogger(__name__)
@@ -65,23 +67,87 @@ class RouteData:
 
 
 class NJTransitCoordinator[T](DataUpdateCoordinator[T]):
-    """Shared error translation for this integration's coordinators."""
+    """Shared error translation for this integration's coordinators.
+
+    Coordinators come in two kinds, and the difference is who owns them.
+
+    A *per-entry* coordinator (route, progress) belongs to one commute and
+    is built the way Home Assistant expects: bound to the entry being set
+    up, so the entry's unload shuts it down and its auth failures start that
+    entry's reauth.
+
+    A *shared* coordinator (reference data, alerts, a station's board) is
+    used by every commute in a :class:`CoordinatorStore`, and must **not**
+    be bound to whichever entry happened to build it. Home Assistant
+    registers a bound coordinator's shutdown on that entry's unload, so a
+    shared board created during entry A's setup died the moment A was
+    reloaded -- an options change, a reconfigure -- and entry B's sensors
+    went unavailable for good while B's entry read as loaded. Shared
+    coordinators are therefore built with no config entry, and the two
+    things that binding would have provided are supplied by hand: the
+    store shuts them down when the last commute leaves, and an auth failure
+    is reported to every entry in the store through ``auth_failed``.
+    """
 
     def __init__(
         self,
         hass: HomeAssistant,
-        client: NJTransitClient,
+        client: RailSource,
         name: str,
         interval: timedelta,
+        *,
+        shared: bool = False,
     ) -> None:
-        """Initialize the coordinator."""
-        super().__init__(
-            hass,
-            _LOGGER,
-            name=f"{DOMAIN} {name}",
-            update_interval=interval,
-        )
+        """Initialize the coordinator.
+
+        :param shared: Whether this coordinator outlives any one config
+            entry. Shared coordinators are not bound to the entry being set
+            up -- see the class docstring for why that matters.
+        """
+        if shared:
+            super().__init__(
+                hass,
+                _LOGGER,
+                config_entry=None,
+                name=f"{DOMAIN} {name}",
+                update_interval=interval,
+            )
+        else:
+            super().__init__(
+                hass,
+                _LOGGER,
+                name=f"{DOMAIN} {name}",
+                update_interval=interval,
+            )
         self.client = client
+        self.auth_failed: Callable[[], None] | None = None
+        """Called when the source rejects the credentials. Set by the store
+        on shared coordinators, which have no entry of their own to reauth."""
+
+    async def async_first_refresh(self) -> None:
+        """Refresh once during setup, failing setup if it fails.
+
+        The unbound equivalent of ``async_config_entry_first_refresh``,
+        which insists on a bound entry. Logging is the ordinary refresh
+        path's: the first failure is an error, repeats are debug.
+        """
+        await self.async_refresh()
+        if not self.last_update_success:
+            raise ConfigEntryNotReady(str(self.last_exception))
+
+    def _reject_credentials(self, err: NJTransitAuthError) -> UpdateFailed:
+        """Return the exception to raise for a rejected credential.
+
+        A bound coordinator raises ``ConfigEntryAuthFailed`` and Home
+        Assistant starts its entry's reauth. A shared one has no entry, so
+        it tells the store, which starts reauth on every entry using it,
+        and then fails the refresh like any other error.
+        """
+        if self.config_entry is not None:
+            raise ConfigEntryAuthFailed(str(err)) from err
+        if self.auth_failed is not None:
+            self.auth_failed()
+        return UpdateFailed(f"Credentials rejected: {err}")
 
 
 class SystemStatusCoordinator(NJTransitCoordinator[tuple[SystemAlert, ...]]):
@@ -90,9 +156,21 @@ class SystemStatusCoordinator(NJTransitCoordinator[tuple[SystemAlert, ...]]):
     Shared by every config entry -- the feed is not per-station.
     """
 
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        client: RailSource,
+        name: str,
+        interval: timedelta,
+    ) -> None:
+        """Initialize the coordinator."""
+        super().__init__(hass, client, name, interval, shared=True)
+
     async def _async_update_data(self) -> tuple[SystemAlert, ...]:
         try:
             return await self.client.system_status()
+        except NJTransitAuthError as err:
+            raise self._reject_credentials(err) from err
         except NJTransitConnectionError as err:
             raise UpdateFailed(f"Could not reach NJ Transit: {err}") from err
         except NJTransitError as err:
@@ -110,17 +188,19 @@ class DepartureCoordinator(NJTransitCoordinator[DepartureBoard]):
     def __init__(
         self,
         hass: HomeAssistant,
-        client: NJTransitClient,
+        client: RailSource,
         station: str,
         interval: timedelta,
     ) -> None:
         """Initialize the coordinator."""
-        super().__init__(hass, client, f"departures {station}", interval)
+        super().__init__(hass, client, f"departures {station}", interval, shared=True)
         self.station = station
 
     async def _async_update_data(self) -> DepartureBoard:
         try:
             return await self.client.departures(self.station)
+        except NJTransitAuthError as err:
+            raise self._reject_credentials(err) from err
         except NJTransitConnectionError as err:
             raise UpdateFailed(f"Could not reach NJ Transit: {err}") from err
         except NJTransitError as err:
@@ -131,9 +211,9 @@ class DepartureCoordinator(NJTransitCoordinator[DepartureBoard]):
 class StaticCoordinator(NJTransitCoordinator[StaticData]):
     """Fetches the station and line reference data."""
 
-    def __init__(self, hass: HomeAssistant, client: NJTransitClient) -> None:
+    def __init__(self, hass: HomeAssistant, client: RailSource) -> None:
         """Initialize the coordinator."""
-        super().__init__(hass, client, "reference data", STATIC_INTERVAL)
+        super().__init__(hass, client, "reference data", STATIC_INTERVAL, shared=True)
 
     async def _async_update_data(self) -> StaticData:
         try:
@@ -141,11 +221,29 @@ class StaticCoordinator(NJTransitCoordinator[StaticData]):
                 stations=await self.client.stations(),
                 lines=await self.client.train_lines(),
             )
+        except NJTransitAuthError as err:
+            raise self._reject_credentials(err) from err
         except NJTransitConnectionError as err:
             raise UpdateFailed(f"Could not reach NJ Transit: {err}") from err
         except NJTransitError as err:
             _LOGGER.warning("Reference data request failed: %s", err)
             raise UpdateFailed(str(err)) from err
+
+
+# When the route coordinator re-resolves the day's trains. After the RailData
+# schedule's own "after 1:30 AM would be better" guidance, with a margin.
+ROUTE_REFRESH_AT = time(1, 45)
+
+
+def until_next(at: time, now: datetime) -> timedelta:
+    """Return how long until the next local occurrence of ``at``."""
+    local = now.astimezone(TZ)
+    target = local.replace(
+        hour=at.hour, minute=at.minute, second=at.second, microsecond=0
+    )
+    if target <= local:
+        target += timedelta(days=1)
+    return target - local
 
 
 class RouteCoordinator(NJTransitCoordinator[RouteData]):
@@ -164,7 +262,7 @@ class RouteCoordinator(NJTransitCoordinator[RouteData]):
     def __init__(
         self,
         hass: HomeAssistant,
-        client: NJTransitClient,
+        client: RailSource,
         origin: str,
         destination: str,
     ) -> None:
@@ -176,7 +274,16 @@ class RouteCoordinator(NJTransitCoordinator[RouteData]):
         self.destination = destination
 
     async def _async_update_data(self) -> RouteData:
-        today = now_local().date()
+        # Each refresh lands the next one at the same early-morning moment
+        # rather than a day after whenever setup happened. The RailData
+        # source publishes a day's schedule from that day's midnight and
+        # nothing about tomorrow before it, so a refresh at 15:00 would
+        # leave a commute with yesterday's trains until 15:00 the next day.
+        # The website is indifferent -- it is asked for today and tomorrow
+        # either way -- so the cadence is shared rather than per source.
+        now = now_local()
+        self.update_interval = until_next(ROUTE_REFRESH_AT, now)
+        today = now.date()
         tomorrow = today + timedelta(days=1)
 
         trips: list[ScheduledTrip] = []
@@ -261,9 +368,22 @@ class CoordinatorStore:
     tests; getting one wrong leaks and the other breaks the surviving entry.
     """
 
+    client: RailSource
+    """The one client every coordinator in this store polls through.
+
+    Shared so that entries on the same RailData account share a token and
+    the schedules it has fetched, both of which are rationed per day."""
+
     static: StaticCoordinator
     status: SystemStatusCoordinator
     history: TrackHistory
+    account_entry_id: str | None = None
+    """The RailData account entry that owns this store, if any.
+
+    ``None`` for the website store, which has no credentials to reauth.
+    A RailData store's coordinators report a rejected credential to this
+    entry alone (SPEC 8.1) -- not to every commute claiming the store, which
+    would open a reauth flow per commute for what is one broken password."""
     boards: dict[str, DepartureCoordinator] = field(default_factory=dict)
     _board_users: dict[str, set[str]] = field(default_factory=dict)
     _users: set[str] = field(default_factory=set)
@@ -278,6 +398,34 @@ class CoordinatorStore:
         """Record that an entry is using the shared coordinators."""
         self._users.add(entry_id)
 
+    @property
+    def users(self) -> frozenset[str]:
+        """Return the entry IDs currently using this store."""
+        return frozenset(self._users)
+
+    def adopt(
+        self, hass: HomeAssistant, coordinator: NJTransitCoordinator[Any]
+    ) -> None:
+        """Give a shared coordinator the entry-level plumbing it lacks.
+
+        With no entry of its own, a rejected credential would otherwise be
+        a logged failure and nothing more. It is reported to the account
+        entry, which is where reauth lives -- not to every commute claiming
+        the store, which runs on the same credentials but does not hold
+        them.
+        """
+
+        @callback
+        def start_reauth() -> None:
+            entry_id = self.account_entry_id
+            if entry_id is None:
+                return
+            entry = hass.config_entries.async_get_entry(entry_id)
+            if entry is not None:
+                entry.async_start_reauth(hass)
+
+        coordinator.auth_failed = start_reauth
+
     def release(self, entry_id: str) -> bool:
         """Drop an entry's claim.
 
@@ -290,7 +438,7 @@ class CoordinatorStore:
     async def board_for(
         self,
         hass: HomeAssistant,
-        client: NJTransitClient,
+        client: RailSource,
         station: str,
         interval: timedelta,
         entry_id: str,
@@ -299,8 +447,9 @@ class CoordinatorStore:
         coordinator = self.boards.get(station)
         if coordinator is None:
             coordinator = DepartureCoordinator(hass, client, station, interval)
+            self.adopt(hass, coordinator)
             self.boards[station] = coordinator
-            await coordinator.async_config_entry_first_refresh()
+            await coordinator.async_first_refresh()
             self._recorders[station] = self.history.attach(coordinator)
             # The listener fires on subsequent updates only, so the board that
             # setup just fetched would otherwise go unrecorded until the next
@@ -335,11 +484,63 @@ class CoordinatorStore:
         if coordinator is not None:
             await coordinator.async_shutdown()
 
+    async def async_shutdown(self) -> None:
+        """Shut down every coordinator this store owns, boards included.
 
-def store_for(hass: HomeAssistant) -> CoordinatorStore | None:
-    """Return the shared store, if one exists."""
-    store = hass.data.get(DOMAIN)
+        For the website store this runs when the last commute releases it.
+        For a RailData store it runs only from the account entry's own
+        unload (`_async_unload_account_entry` in ``__init__``) -- credentials
+        belong to the account, not to any one commute, so a commute claim
+        must never keep this store, or a client about to be replaced by a
+        reauth, alive on its own."""
+        for detach in list(self._recorders.values()):
+            detach()
+        self._recorders.clear()
+        for coordinator in list(self.boards.values()):
+            await coordinator.async_shutdown()
+        self.boards.clear()
+        self._board_users.clear()
+        await self.static.async_shutdown()
+        await self.status.async_shutdown()
+        await self.history.async_flush()
+
+
+def store_for(
+    hass: HomeAssistant, key: str = SOURCE_WEBSITE
+) -> CoordinatorStore | None:
+    """Return the shared store for one data source, if one exists.
+
+    Stores are per source rather than per domain because the two sources
+    are different feeds: a board polled from the website and one polled from
+    RailData are not the same board, and the RailData client is bound to an
+    account. ``key`` is the source name, suffixed with the account for
+    RailData -- see :func:`~.store_key`.
+    """
+    stores = hass.data.get(DOMAIN)
+    if not isinstance(stores, dict):
+        return None
+    store = stores.get(key)
     return store if isinstance(store, CoordinatorStore) else None
+
+
+def register_store(hass: HomeAssistant, key: str, store: CoordinatorStore) -> None:
+    """Make ``store`` the shared store for a data source."""
+    hass.data.setdefault(DOMAIN, {})[key] = store
+
+
+def store_count(hass: HomeAssistant) -> int:
+    """Return how many data sources currently have a store."""
+    stores = hass.data.get(DOMAIN)
+    return len(stores) if isinstance(stores, dict) else 0
+
+
+def forget_store(hass: HomeAssistant, key: str) -> None:
+    """Drop a data source's store once nothing uses it."""
+    stores = hass.data.get(DOMAIN)
+    if isinstance(stores, dict):
+        stores.pop(key, None)
+        if not stores:
+            hass.data.pop(DOMAIN, None)
 
 
 class ProgressCoordinator(NJTransitCoordinator[TrainRun | None]):
@@ -361,7 +562,7 @@ class ProgressCoordinator(NJTransitCoordinator[TrainRun | None]):
     def __init__(
         self,
         hass: HomeAssistant,
-        client: NJTransitClient,
+        client: RailSource,
         pick: Callable[[TrainRun | None], str | None],
         interval: timedelta,
     ) -> None:
@@ -392,7 +593,7 @@ class ProgressCoordinator(NJTransitCoordinator[TrainRun | None]):
 class EntryRuntime:
     """Everything one config entry needs at runtime."""
 
-    client: NJTransitClient
+    client: RailSource
     static: StaticCoordinator
     status: SystemStatusCoordinator
     board: DepartureCoordinator
@@ -401,6 +602,14 @@ class EntryRuntime:
     history: TrackHistory
     origin: str
     destination: str | None
+    store_key: str
+    """Which shared store this entry was set up against.
+
+    Remembered rather than recomputed at unload, because a reconfigure
+    rewrites the entry's data *before* reloading it: computing the key from
+    the new data would look up the wrong store, release nothing, and leave
+    the old store's coordinators polling with no entry left to stop them."""
+
     origin_coordinates: tuple[float, float] | None = None
     """Where the origin station is, when the endpoint would say.
 
@@ -416,4 +625,23 @@ class EntryRuntime:
     a reload when nothing structural changed."""
 
 
+@dataclass
+class AccountRuntime:
+    """What a RailData account entry needs at runtime.
+
+    Deliberately thin next to :class:`EntryRuntime` -- an account entry has
+    no board, route or destination of its own. It exists to own the client
+    and the store built from it, which every commute entry referencing it
+    then shares."""
+
+    client: RailSource
+    store_key: str
+    """The shared store this account's coordinators are registered under.
+
+    Remembered rather than recomputed at unload for the same reason a
+    commute remembers it: unload must release the store that was actually
+    claimed, not one derived from data that may have already changed."""
+
+
 type NJTransitConfigEntry = ConfigEntry[EntryRuntime]
+type NJTransitAccountConfigEntry = ConfigEntry[AccountRuntime]

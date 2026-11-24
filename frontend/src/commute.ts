@@ -148,6 +148,7 @@ export function readDeparture(
     trainId: text(attributes.train_id),
     favorite: attributes.favorite === true,
     track: text(attributes.track),
+    signaledTrack: text(attributes.signaled_track),
     status: text(attributes.status),
     statusText: text(attributes.status_text),
     delayMinutes: typeof delay === "number" ? delay : null,
@@ -155,6 +156,33 @@ export function readDeparture(
     cars,
     alerts,
   };
+}
+
+export type BoardStatus = "ok" | "missing" | "unavailable";
+
+/**
+ * Distinguish an outage or misconfigured entity from a quiet overnight board.
+ *
+ * `unknown` means the integration is healthy and no trains are scheduled in
+ * the lookahead window. `unavailable` means the feed cannot be reached (or
+ * RailData auth failed), and a missing state means the configured entity was
+ * renamed or removed.
+ */
+export function boardStatus(
+  hass: HomeAssistant,
+  entityId: string,
+  commute: Commute,
+): BoardStatus {
+  if (!hass.states[entityId]) {
+    return "missing";
+  }
+  const states = commute.departures
+    .map((id) => hass.states[id]?.state)
+    .filter((state): state is string => state !== undefined);
+  if (states.length > 0 && states.every((state) => state === "unavailable")) {
+    return "unavailable";
+  }
+  return "ok";
 }
 
 /** Read every departure on the board, dropping the sensors with no train. */

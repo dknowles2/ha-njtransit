@@ -16,6 +16,7 @@ export function departure(
       train_id: "6613",
       favorite: false,
       track: null,
+      signaled_track: null,
       status: "on_time",
       status_text: null,
       delay_minutes: null,
@@ -34,6 +35,17 @@ export function empty(entityId: string): HassEntity {
   return {
     entity_id: entityId,
     state: "unknown",
+    attributes: {},
+    last_changed: "",
+    last_updated: "",
+  };
+}
+
+/** A sensor whose coordinator failed or whose auth was rejected. */
+export function unavailable(entityId: string): HassEntity {
+  return {
+    entity_id: entityId,
+    state: "unavailable",
     attributes: {},
     last_changed: "",
     last_updated: "",

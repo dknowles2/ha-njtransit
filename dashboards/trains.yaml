@@ -10,6 +10,12 @@
 # cut apart, and because the third card -- service notices -- has no card
 # equivalent yet.
 #
+# Note on upstream text: these Markdown cards interpolate external alert prose
+# directly into `ha-markdown`. While Home Assistant sanitizes HTML, upstream
+# feed text can still inject Markdown links or formatting; the bundled
+# `custom:njtransit-departures` Lit card renders text nodes only and is
+# preferred over Markdown cards for untrusted upstream alert text.
+#
 # This is an *example*, not something the integration installs. Tapping a Live
 # Activity can only open a dashboard that already exists, so the blueprint's
 # "Open when tapped" input is empty by default and this file is what fills the
@@ -48,7 +54,8 @@
 # as the Morristown Line's colour. Other lines send their own -- the feed
 # carries it per row -- but it also uses that field to mark cancellations, so
 # it is not a dependable line identity and the integration does not expose it.
-# Change the four occurrences below if your line is a different colour.
+# Solid pill fills use #007a30 (green) and #c53929 (red) so white text clears
+# WCAG AA (4.5:1).
 #
 # The track line is the part worth understanding. New York Penn posts NJ
 # Transit tracks a median of 8.8 minutes before departure with an
@@ -142,6 +149,7 @@ views:
         {%- else -%}
         {%- set mins = ((as_timestamp(t) - as_timestamp(now())) / 60) | round(0) | int -%}
         {%- set track = state_attr(s, 'track') -%}
+        {%- set signaled = state_attr(s, 'signaled_track') -%}
         {#- Other trains having tracks is what makes a missing one mean
             something. Same test the integration uses before it will call a
             track overdue. -#}
@@ -158,14 +166,17 @@ views:
            full. Nesting picks the colour -- see the header. This comment opens
            without a dash on purpose: `{#-` would eat the blank line above it
            and weld the first pill onto the end of the heading. -#}
-        {% if track %}`Track {{ track }}`
+        {% if not cancelled -%}
+        {%- if track %}`Track {{ track }}`
+        {%- elif signaled %}`Track {{ signaled }} (likely)`
         {%- elif not posting %}*`Track not posted`*
         {%- elif mins <= 6 %}**`⚠️ Track overdue`**
         {%- elif mins <= 10 %}*`Track due any minute`*
         {%- elif mins <= 25 %}*`Track due in ~{{ mins - 9 }} min`*
         {%- else %}*`Track not posted yet`*{% endif -%}
-        {%- if status %}
-        {%- if cancelled %} **`{{ status }}`**
+        {%- endif -%}
+        {%- if status -%}
+        {%- if cancelled %}**`{{ status }}`**
         {%- elif delay %} ~~`{{ status }}`~~
         {%- else %} *`{{ status }}`*{% endif -%}
         {%- endif -%}
@@ -195,7 +206,7 @@ views:
 
         ---
 
-        {% if away | int == 0 %}Arriving now{% else %}**{{ away }}** stops away{% endif %}
+        {% if away | int == 0 %}Arriving now{% else %}**{{ away }}** {{ 'stop' if away | int == 1 else 'stops' }} away{% endif %}
         {%- if state_attr(prog, 'next_stop') %} · next {{ state_attr(prog, 'next_stop') }}{% endif %}
         {%- endif -%}
         {%- endif -%}
@@ -277,11 +288,11 @@ views:
               white-space: nowrap;
               padding: 4px 10px;
               border-radius: 999px;
-              background: #00953b;
+              background: #007a30;
               color: #fff;
               border: 1px solid transparent;
             }
-            strong code { background: var(--error-color); color: #fff; }
+            strong code { background: #c53929; color: #fff; }
             del { text-decoration: none; }
             del code { background: var(--warning-color); color: #111; }
             em code {
@@ -318,13 +329,20 @@ views:
         {%- if t not in nothing -%}
         {%- set mins = ((as_timestamp(t) - as_timestamp(now())) / 60) | round(0) | int -%}
         {%- set track = state_attr(row, 'track') -%}
+        {%- set signaled = state_attr(row, 'signaled_track') -%}
+        {%- set cancelled = state_attr(row, 'status') == 'cancelled' -%}
         {%- set status = state_attr(row, 'status_text') -%}
+        {%- set rel = (mins ~ 'm') if mins > 0 else ('now' if mins == 0 else 'departed') -%}
         {%- set when = '**' ~ (as_timestamp(t) | timestamp_custom('%-I:%M')) ~ '**'
-                       ~ ' *' ~ (mins ~ 'm' if mins > 0 else 'now') ~ '*' -%}
+                       ~ ' *' ~ rel ~ '*' -%}
         {%- set train = (state_attr(row, 'train_id') | string)
                         ~ (' ⭐' if state_attr(row, 'favorite') else '') -%}
-        {%- if track -%}
+        {%- if cancelled -%}
+        {%- set cell = '*`—`*' -%}
+        {%- elif track -%}
         {%- set cell = '`' ~ track ~ '`' -%}
+        {%- elif signaled -%}
+        {%- set cell = '`' ~ signaled ~ '?`' -%}
         {%- elif posting and mins <= 6 -%}
         {%- set cell = '**`⚠️`**' -%}
         {%- else -%}
@@ -332,7 +350,7 @@ views:
         {%- endif -%}
         {%- if not status -%}
         {%- set tail = '' -%}
-        {%- elif state_attr(row, 'status') == 'cancelled' -%}
+        {%- elif cancelled -%}
         {%- set tail = '**`' ~ status ~ '`**' -%}
         {%- elif state_attr(row, 'delay_minutes') -%}
         {%- set tail = '~~`' ~ status ~ '`~~' -%}
@@ -390,11 +408,11 @@ views:
               white-space: nowrap;
               padding: 3px 9px;
               border-radius: 999px;
-              background: #00953b;
+              background: #007a30;
               color: #fff;
               border: 1px solid transparent;
             }
-            strong code { background: var(--error-color); color: #fff; }
+            strong code { background: #c53929; color: #fff; }
             del { text-decoration: none; }
             del code { background: var(--warning-color); color: #111; }
             em code {
@@ -458,7 +476,7 @@ views:
               font-weight: 700;
               padding: 3px 9px;
               border-radius: 999px;
-              background: var(--error-color);
+              background: #c53929;
               color: #fff;
             }
 
@@ -545,6 +563,7 @@ views:
         {%- else -%}
         {%- set mins = ((as_timestamp(t) - as_timestamp(now())) / 60) | round(0) | int -%}
         {%- set track = state_attr(s, 'track') -%}
+        {%- set signaled = state_attr(s, 'signaled_track') -%}
         {#- Other trains having tracks is what makes a missing one mean
             something. Same test the integration uses before it will call a
             track overdue. -#}
@@ -561,14 +580,17 @@ views:
            full. Nesting picks the colour -- see the header. This comment opens
            without a dash on purpose: `{#-` would eat the blank line above it
            and weld the first pill onto the end of the heading. -#}
-        {% if track %}`Track {{ track }}`
+        {% if not cancelled -%}
+        {%- if track %}`Track {{ track }}`
+        {%- elif signaled %}`Track {{ signaled }} (likely)`
         {%- elif not posting %}*`Track not posted`*
         {%- elif mins <= 6 %}**`⚠️ Track overdue`**
         {%- elif mins <= 10 %}*`Track due any minute`*
         {%- elif mins <= 25 %}*`Track due in ~{{ mins - 9 }} min`*
         {%- else %}*`Track not posted yet`*{% endif -%}
-        {%- if status %}
-        {%- if cancelled %} **`{{ status }}`**
+        {%- endif -%}
+        {%- if status -%}
+        {%- if cancelled %}**`{{ status }}`**
         {%- elif delay %} ~~`{{ status }}`~~
         {%- else %} *`{{ status }}`*{% endif -%}
         {%- endif -%}
@@ -598,7 +620,7 @@ views:
 
         ---
 
-        {% if away | int == 0 %}Arriving now{% else %}**{{ away }}** stops away{% endif %}
+        {% if away | int == 0 %}Arriving now{% else %}**{{ away }}** {{ 'stop' if away | int == 1 else 'stops' }} away{% endif %}
         {%- if state_attr(prog, 'next_stop') %} · next {{ state_attr(prog, 'next_stop') }}{% endif %}
         {%- endif -%}
         {%- endif -%}
@@ -680,11 +702,11 @@ views:
               white-space: nowrap;
               padding: 4px 10px;
               border-radius: 999px;
-              background: #00953b;
+              background: #007a30;
               color: #fff;
               border: 1px solid transparent;
             }
-            strong code { background: var(--error-color); color: #fff; }
+            strong code { background: #c53929; color: #fff; }
             del { text-decoration: none; }
             del code { background: var(--warning-color); color: #111; }
             em code {
@@ -721,13 +743,20 @@ views:
         {%- if t not in nothing -%}
         {%- set mins = ((as_timestamp(t) - as_timestamp(now())) / 60) | round(0) | int -%}
         {%- set track = state_attr(row, 'track') -%}
+        {%- set signaled = state_attr(row, 'signaled_track') -%}
+        {%- set cancelled = state_attr(row, 'status') == 'cancelled' -%}
         {%- set status = state_attr(row, 'status_text') -%}
+        {%- set rel = (mins ~ 'm') if mins > 0 else ('now' if mins == 0 else 'departed') -%}
         {%- set when = '**' ~ (as_timestamp(t) | timestamp_custom('%-I:%M')) ~ '**'
-                       ~ ' *' ~ (mins ~ 'm' if mins > 0 else 'now') ~ '*' -%}
+                       ~ ' *' ~ rel ~ '*' -%}
         {%- set train = (state_attr(row, 'train_id') | string)
                         ~ (' ⭐' if state_attr(row, 'favorite') else '') -%}
-        {%- if track -%}
+        {%- if cancelled -%}
+        {%- set cell = '*`—`*' -%}
+        {%- elif track -%}
         {%- set cell = '`' ~ track ~ '`' -%}
+        {%- elif signaled -%}
+        {%- set cell = '`' ~ signaled ~ '?`' -%}
         {%- elif posting and mins <= 6 -%}
         {%- set cell = '**`⚠️`**' -%}
         {%- else -%}
@@ -735,7 +764,7 @@ views:
         {%- endif -%}
         {%- if not status -%}
         {%- set tail = '' -%}
-        {%- elif state_attr(row, 'status') == 'cancelled' -%}
+        {%- elif cancelled -%}
         {%- set tail = '**`' ~ status ~ '`**' -%}
         {%- elif state_attr(row, 'delay_minutes') -%}
         {%- set tail = '~~`' ~ status ~ '`~~' -%}
@@ -793,11 +822,11 @@ views:
               white-space: nowrap;
               padding: 3px 9px;
               border-radius: 999px;
-              background: #00953b;
+              background: #007a30;
               color: #fff;
               border: 1px solid transparent;
             }
-            strong code { background: var(--error-color); color: #fff; }
+            strong code { background: #c53929; color: #fff; }
             del { text-decoration: none; }
             del code { background: var(--warning-color); color: #111; }
             em code {
@@ -861,6 +890,6 @@ views:
               font-weight: 700;
               padding: 3px 9px;
               border-radius: 999px;
-              background: var(--error-color);
+              background: #c53929;
               color: #fff;
             }

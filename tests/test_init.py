@@ -19,7 +19,10 @@ from homeassistant.config_entries import ConfigEntryState, current_entry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.setup import async_setup_component
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    async_fire_time_changed,
+)
 from pytest_homeassistant_custom_component.test_util.aiohttp import (
     AiohttpClientMocker,
 )
@@ -182,6 +185,76 @@ class TestCoordinatorSharing:
         store = store_for(hass)
         assert store is not None
         assert list(store.boards) == [SHORT_HILLS]
+
+    async def test_reloading_the_entry_that_built_the_store_leaves_it_running(
+        self,
+        hass: HomeAssistant,
+        aioclient_mock: AiohttpClientMocker,
+        freezer: FrozenDateTimeFactory,
+    ) -> None:
+        """The shared coordinators must outlive whichever entry created them.
+
+        Home Assistant binds a coordinator to the entry being set up and
+        shuts it down on that entry's unload. The first commute through
+        setup builds the alert feed, the reference data and its own board
+        for everyone; reloading it -- an options change, a reconfigure --
+        therefore silently stopped polling for every other commute, whose
+        sensors went unavailable while their entries still read as loaded.
+        Seen live: one commute reconfigured to another source at night, the
+        other commute dead until the next morning's reload.
+        """
+        called = install_api_mock(aioclient_mock)
+        first = make_entry()
+        second = make_entry(destination=HOBOKEN, destination_id="HB")
+        await setup_entry(hass, first)
+        await setup_entry(hass, second)
+        board = second.runtime_data.board
+        status = second.runtime_data.status
+        assert board is first.runtime_data.board
+
+        assert await hass.config_entries.async_reload(first.entry_id)
+        await hass.async_block_till_done()
+
+        # The survivor's coordinators are the same objects, and still poll:
+        # the board and the alert feed specifically, not merely something.
+        # A per-entry coordinator polling on its own would make a bare
+        # request count go up while the shared ones sat dead.
+        assert second.runtime_data.board is board
+        assert second.runtime_data.status is status
+        boards = called.count("TrainDepartureScreens")
+        alerts = called.count("SystemStatus")
+        freezer.tick(130)
+        async_fire_time_changed(hass)
+        await hass.async_block_till_done()
+        assert called.count("TrainDepartureScreens") > boards
+        assert called.count("SystemStatus") > alerts
+        assert board.last_update_success
+        state = hass.states.get(
+            "sensor.short_hills_station_to_hoboken_terminal_next_departure"
+        )
+        assert state is not None
+        assert state.state != "unavailable"
+
+    async def test_unloading_the_last_entry_stops_the_shared_coordinators(
+        self,
+        hass: HomeAssistant,
+        aioclient_mock: AiohttpClientMocker,
+        freezer: FrozenDateTimeFactory,
+    ) -> None:
+        """Unbound from any entry, the store has to stop them itself."""
+        called = install_api_mock(aioclient_mock)
+        entry = make_entry()
+        await setup_entry(hass, entry)
+
+        assert await hass.config_entries.async_unload(entry.entry_id)
+        await hass.async_block_till_done()
+
+        polls = len(called)
+        freezer.tick(130)
+        async_fire_time_changed(hass)
+        await hass.async_block_till_done()
+        assert len(called) == polls
+        assert store_for(hass) is None
 
     async def test_concurrent_setup_still_shares_one_store(
         self,

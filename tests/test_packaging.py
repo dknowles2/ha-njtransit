@@ -9,14 +9,22 @@ in the pull request instead.
 from __future__ import annotations
 
 import json
+import os
+import re
+import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
+import yaml
 
 ROOT = Path(__file__).parent.parent
+WORKFLOWS_DIR = ROOT / ".github" / "workflows"
 INTEGRATION = ROOT / "custom_components" / "njtransit"
 MANIFEST = json.loads((INTEGRATION / "manifest.json").read_text())
 HACS = json.loads((ROOT / "hacs.json").read_text())
+
+SHA_PIN_RE = re.compile(r"@([0-9a-f]{40})$")
 
 # Substituted by the release workflow. Deliberately not a plausible version:
 # a placeholder of "0.0.0" would silently no-op if someone set a real one.
@@ -77,3 +85,145 @@ def test_no_external_requirements() -> None:
     -- and it becomes a reason to extract `api/` to PyPI properly.
     """
     assert MANIFEST["requirements"] == []
+
+
+def _stamp_step() -> dict[str, Any]:
+    workflow = yaml.safe_load((WORKFLOWS_DIR / "release.yml").read_text())
+    steps: list[dict[str, Any]] = workflow["jobs"]["release"]["steps"]
+    for step in steps:
+        if step.get("name") == "Stamp the release version into the manifest":
+            return step
+    raise AssertionError("Stamp step not found in release.yml")
+
+
+def test_release_stamp_step_passes_tag_via_env() -> None:
+    """The stamp step must pass TAG through env rather than interpolating into shell."""
+    step = _stamp_step()
+    assert "TAG" in step.get("env", {})
+    assert "${{" not in step["run"]
+
+
+@pytest.mark.parametrize(
+    ("tag", "expected"),
+    [
+        ("2026.8.0", "2026.8.0"),
+        ("v2026.8.0", "2026.8.0"),
+        ("2026.8.0-rc1", "2026.8.0-rc1"),
+        ("v2026.8.0.dev1", "2026.8.0.dev1"),
+    ],
+)
+def test_release_stamp_step_updates_manifest_for_valid_tags(
+    tmp_path: Path, tag: str, expected: str
+) -> None:
+    """Valid CalVer tags stamp manifest.json cleanly and preserve key order."""
+    manifest_dir = tmp_path / "custom_components" / "njtransit"
+    manifest_dir.mkdir(parents=True)
+    manifest_path = manifest_dir / "manifest.json"
+    manifest_path.write_text((INTEGRATION / "manifest.json").read_text())
+
+    step = _stamp_step()
+    result = subprocess.run(
+        ["bash", "-euo", "pipefail", "-c", step["run"]],
+        cwd=tmp_path,
+        env={**os.environ, "TAG": tag},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    stamped = json.loads(manifest_path.read_text())
+    assert stamped["version"] == expected
+    keys = list(stamped)
+    assert keys[:2] == ["domain", "name"]
+    assert keys[2:] == sorted(keys[2:])
+
+
+@pytest.mark.parametrize(
+    "bad_tag",
+    [
+        "",
+        "$(id)",
+        '2026.8.0"; id #',
+        "2026.8.0' + 'x",
+        "2026.8.0/../../etc/passwd",
+        "2026.8.0&touch pwned",
+        "2026.8.0\n",
+        "not-a-version",
+    ],
+)
+def test_release_stamp_step_rejects_malicious_tags(
+    tmp_path: Path, bad_tag: str
+) -> None:
+    """Crafted tags containing shell metacharacters or invalid syntax fail safely."""
+    manifest_dir = tmp_path / "custom_components" / "njtransit"
+    manifest_dir.mkdir(parents=True)
+    manifest_path = manifest_dir / "manifest.json"
+    original = (INTEGRATION / "manifest.json").read_text()
+    manifest_path.write_text(original)
+
+    step = _stamp_step()
+    result = subprocess.run(
+        ["bash", "-euo", "pipefail", "-c", step["run"]],
+        cwd=tmp_path,
+        env={**os.environ, "TAG": bad_tag},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert manifest_path.read_text() == original
+    assert not (tmp_path / "pwned").exists()
+
+
+def test_release_stamp_step_rejects_missing_placeholder(tmp_path: Path) -> None:
+    """Stamping fails loudly if manifest.json no longer has 0000.0.0."""
+    manifest_dir = tmp_path / "custom_components" / "njtransit"
+    manifest_dir.mkdir(parents=True)
+    manifest_path = manifest_dir / "manifest.json"
+    bad_manifest = {**MANIFEST, "version": "2026.7.0"}
+    manifest_path.write_text(json.dumps(bad_manifest, indent=2) + "\n")
+
+    step = _stamp_step()
+    result = subprocess.run(
+        ["bash", "-euo", "pipefail", "-c", step["run"]],
+        cwd=tmp_path,
+        env={**os.environ, "TAG": "2026.8.0"},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert json.loads(manifest_path.read_text())["version"] == "2026.7.0"
+
+
+def test_workflows_have_permissions_and_sha_pinned_actions() -> None:
+    """Every workflow sets top-level permissions and pins actions to 40-char SHAs."""
+    for workflow_path in sorted(WORKFLOWS_DIR.glob("*.yml")):
+        data = yaml.safe_load(workflow_path.read_text())
+        assert "permissions" in data, (
+            f"{workflow_path.name} missing top-level permissions"
+        )
+        for job_name, job in data.get("jobs", {}).items():
+            for step in job.get("steps", []):
+                uses = step.get("uses")
+                if uses is not None:
+                    assert SHA_PIN_RE.search(uses), (
+                        f"{workflow_path.name}:{job_name} action {uses!r} is not SHA-pinned"
+                    )
+
+
+def test_ci_workflow_invariants() -> None:
+    """release-drafter re-labels edited PRs and CI enforces deprecation errors."""
+    drafter = yaml.safe_load((WORKFLOWS_DIR / "release-drafter.yml").read_text())
+    assert "edited" in drafter["on"]["pull_request"]["types"]
+
+    build_test = yaml.safe_load((WORKFLOWS_DIR / "build-and-test.yml").read_text())
+    pytest_steps = [
+        step["run"]
+        for step in build_test["jobs"]["test"]["steps"]
+        if "pytest" in step.get("run", "")
+    ]
+    assert any("-W error::DeprecationWarning" in run for run in pytest_steps)
