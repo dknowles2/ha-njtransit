@@ -12,6 +12,7 @@ from dataclasses import replace
 from datetime import datetime
 
 import pytest
+from homeassistant.core import HomeAssistant
 
 from custom_components.njtransit.api.models import TrainRun, TrainStatus
 from custom_components.njtransit.api.parsing import TZ, parse_stops
@@ -180,3 +181,64 @@ class TestArrivalEstimate:
         )
         assert train.minutes_late(CAPTURED_AT) is None
         assert train.eta_at("New York Penn Station", CAPTURED_AT) is None
+
+
+class TestProgressCoordinatorErrors:
+    """Error translation in ProgressCoordinator._async_update_data."""
+
+    @pytest.mark.parametrize(
+        "exc",
+        [
+            "connection",
+            "api",
+        ],
+    )
+    async def test_translates_transport_and_api_errors_to_update_failed(
+        self, hass: HomeAssistant, exc: str
+    ) -> None:
+        from datetime import timedelta
+        from unittest.mock import AsyncMock, MagicMock
+
+        from homeassistant.helpers.update_coordinator import UpdateFailed
+
+        from custom_components.njtransit.api.exceptions import (
+            NJTransitAPIError,
+            NJTransitConnectionError,
+        )
+        from custom_components.njtransit.coordinator import ProgressCoordinator
+
+        client = MagicMock()
+        err = (
+            NJTransitConnectionError("offline")
+            if exc == "connection"
+            else NJTransitAPIError("bad payload")
+        )
+        client.train_run = AsyncMock(side_effect=err)
+        coordinator = ProgressCoordinator(
+            hass, client, lambda _run: "6624", timedelta(seconds=60)
+        )
+        with pytest.raises(UpdateFailed):
+            await coordinator._async_update_data()
+
+    async def test_auth_error_invokes_account_callback_and_raises_update_failed(
+        self, hass: HomeAssistant
+    ) -> None:
+        from datetime import timedelta
+        from unittest.mock import AsyncMock, MagicMock
+
+        from homeassistant.helpers.update_coordinator import UpdateFailed
+
+        from custom_components.njtransit.api.exceptions import NJTransitAuthError
+        from custom_components.njtransit.coordinator import ProgressCoordinator
+
+        client = MagicMock()
+        client.train_run = AsyncMock(side_effect=NJTransitAuthError("rejected"))
+        called: list[bool] = []
+        coordinator = ProgressCoordinator(
+            hass, client, lambda _run: "6624", timedelta(seconds=60)
+        )
+        coordinator.auth_failed = lambda: called.append(True)
+
+        with pytest.raises(UpdateFailed, match="Credentials rejected"):
+            await coordinator._async_update_data()
+        assert called == [True]

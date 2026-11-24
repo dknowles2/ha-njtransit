@@ -717,3 +717,96 @@ async def test_a_favourite_matches_whatever_case_the_board_uses(
 
     run = entry.runtime_data.progress.data
     assert run is not None, "an uppercase favourite did not match a lowercase board"
+
+
+async def test_noop_options_update_does_not_reload(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """Submitting options unchanged must not trigger a full reload."""
+    install_api_mock(aioclient_mock)
+    entry = make_entry()
+    await setup_entry(hass, entry)
+
+    before = entry.runtime_data
+    hass.config_entries.async_update_entry(entry, options=dict(entry.options))
+    await hass.async_block_till_done()
+
+    assert entry.runtime_data is before
+
+
+async def test_failed_board_refresh_does_not_poison_cache_and_rolls_back(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """A failed first board refresh must not cache a dead coordinator or leak claims."""
+    from custom_components.njtransit.coordinator import store_for
+
+    install_api_mock(aioclient_mock, {"TrainDepartureScreens": TimeoutError()})
+    entry = make_entry()
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert entry.state is ConfigEntryState.SETUP_RETRY
+    assert store_for(hass) is None
+
+    aioclient_mock.clear_requests()
+    install_api_mock(aioclient_mock)
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+
+    reloaded = hass.config_entries.async_get_entry(entry.entry_id)
+    assert reloaded is not None
+    assert reloaded.state is ConfigEntryState.LOADED
+    store = store_for(hass)
+    assert store is not None
+    assert entry.runtime_data.origin in store.boards
+    assert entry.runtime_data.origin in store._recorders
+
+
+async def test_concurrent_setup_sharing_origin_builds_one_board(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """Two commutes sharing an origin set up concurrently must share one board."""
+    import asyncio
+
+    from custom_components.njtransit.coordinator import store_for
+
+    install_api_mock(aioclient_mock)
+    first = make_entry(destination=NY_PENN)
+    second = make_entry(destination="Hoboken Terminal", destination_id="HB")
+    first.add_to_hass(hass)
+    second.add_to_hass(hass)
+
+    results = await asyncio.gather(
+        hass.config_entries.async_setup(first.entry_id),
+        hass.config_entries.async_setup(second.entry_id),
+    )
+    await hass.async_block_till_done()
+
+    assert all(results)
+    assert first.runtime_data.board is second.runtime_data.board
+    store = store_for(hass)
+    assert store is not None
+    assert len(store.boards) == 1
+
+
+async def test_website_setup_shuts_down_static_if_status_fails(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    """If status first refresh fails, static must be shut down cleanly."""
+    from unittest.mock import AsyncMock, patch
+
+    from custom_components.njtransit.coordinator import StaticCoordinator
+
+    install_api_mock(aioclient_mock, {"SystemStatus": TimeoutError()})
+    entry = make_entry()
+    entry.add_to_hass(hass)
+
+    with patch.object(
+        StaticCoordinator, "async_shutdown", new_callable=AsyncMock
+    ) as shutdown:
+        await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert entry.state is ConfigEntryState.SETUP_RETRY
+    assert shutdown.await_count >= 1

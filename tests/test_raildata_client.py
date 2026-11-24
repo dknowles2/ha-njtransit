@@ -696,6 +696,103 @@ class TestSchedules:
         with pytest.raises(NJTransitQuotaError):
             await client_for(mocker).scheduled_trips("RT", "NY")
 
+    async def test_non_list_schedule_raises_and_is_not_cached(
+        self, client_for: ClientFactory
+    ) -> None:
+        mocker = AiohttpClientMocker()
+        install_raildata_mock(mocker, {"getStationSchedule": {"unexpected": True}})
+        store = MemoryStore()
+        with pytest.raises(NJTransitAPIError, match="expected a list"):
+            await client_for(mocker, store=store).scheduled_trips("RT", "NY")
+        assert not (store.data or {}).get("schedules")
+
+    async def test_empty_schedule_is_not_persisted(
+        self, client_for: ClientFactory
+    ) -> None:
+        mocker = AiohttpClientMocker()
+        install_raildata_mock(mocker, {"getStationSchedule": []})
+        store = MemoryStore()
+        client = client_for(mocker, store=store)
+
+        assert await client.scheduled_trips("RT", "NY") == ()
+        assert not (store.data or {}).get("schedules")
+
+        mocker.clear_requests()
+        install_raildata_mock(mocker)
+        trips = await client.scheduled_trips("RT", "NY")
+        assert len(trips) == 23
+
+    async def test_concurrent_invalid_token_spends_only_one_get_token(
+        self, client_for: ClientFactory
+    ) -> None:
+        """Two concurrent calls hitting Invalid token must not renew twice."""
+        from pytest_homeassistant_custom_component.test_util.aiohttp import (
+            AiohttpClientMockResponse,
+        )
+        from yarl import URL
+
+        store = MemoryStore(
+            {"token": {"value": "stale-token", "issued": RECORDED_AT.isoformat()}}
+        )
+        both_rejected = asyncio.Event()
+        rejected_count = 0
+        token_calls = 0
+
+        async def respond(
+            method: str, url: URL, data: dict[str, Any]
+        ) -> AiohttpClientMockResponse:
+            nonlocal rejected_count, token_calls
+            api_method = url.path.rsplit("/", 1)[-1]
+            if api_method == "getToken":
+                token_calls += 1
+                return AiohttpClientMockResponse(
+                    method="POST",
+                    url=url,
+                    json={"Authenticated": "True", "UserToken": f"fresh-{token_calls}"},
+                )
+            if data.get("token") == "stale-token":
+                rejected_count += 1
+                if rejected_count == 2:
+                    both_rejected.set()
+                await both_rejected.wait()
+                return AiohttpClientMockResponse(
+                    method="POST",
+                    url=url,
+                    json={"errorMessage": "Invalid token."},
+                )
+            if api_method == "getStationMSG":
+                return AiohttpClientMockResponse(method="POST", url=url, json=[])
+            return AiohttpClientMockResponse(
+                method="POST",
+                url=url,
+                json=load_raildata_fixture("train_schedule19_short_hills"),
+            )
+
+        mocker = AiohttpClientMocker()
+        for api_method in ("getToken", "getStationMSG", "getTrainSchedule19Rec"):
+            mocker.post(f"{ENDPOINT}/{api_method}", side_effect=respond)
+
+        client = client_for(mocker, store=store)
+        board, alerts = await asyncio.gather(
+            client.departures("RT"),
+            client.system_status(),
+        )
+        assert board.departures
+        assert alerts == ()
+        assert token_calls == 1
+
+    async def test_oversized_response_raises_connection_error(
+        self, client_for: ClientFactory, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from custom_components.njtransit.api import raildata as raildata_mod
+
+        monkeypatch.setattr(raildata_mod, "MAX_RESPONSE_BYTES", 64)
+        mocker = AiohttpClientMocker()
+        mocker.post(f"{ENDPOINT}/getToken", text="{" + " " * 100 + "}")
+
+        with pytest.raises(NJTransitConnectionError, match="exceeded 64 bytes"):
+            await client_for(mocker).authenticate(fresh=True)
+
 
 def _mocked() -> AiohttpClientMocker:
     """Return a mocker serving every recorded fixture."""

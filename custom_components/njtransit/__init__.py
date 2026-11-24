@@ -16,7 +16,6 @@ from .account import async_create_account_entry, find_account_entry, is_account_
 from .api.client import NJTransitClient
 from .api.exceptions import (
     NJTransitAuthError,
-    NJTransitConnectionError,
     NJTransitError,
 )
 from .api.models import TrainRun
@@ -210,7 +209,7 @@ async def _async_setup_account_entry(
                 await client.authenticate()
             except NJTransitAuthError as err:
                 raise ConfigEntryAuthFailed(str(err)) from err
-            except NJTransitConnectionError as err:
+            except NJTransitError as err:
                 raise ConfigEntryNotReady(str(err)) from err
 
             static = StaticCoordinator(hass, client)
@@ -220,8 +219,13 @@ async def _async_setup_account_entry(
                 "system status",
                 timedelta(seconds=DEFAULT_STATUS_INTERVAL),
             )
-            await static.async_first_refresh()
-            await status.async_first_refresh()
+            try:
+                await static.async_first_refresh()
+                await status.async_first_refresh()
+            except BaseException:
+                await status.async_shutdown()
+                await static.async_shutdown()
+                raise
             history = await _shared_history(hass)
             store = CoordinatorStore(
                 client=client,
@@ -304,116 +308,139 @@ async def _async_setup_commute_entry(
     else:
         client, store = await _client_for_website_commute(hass, entry)
 
-    board = await store.board_for(
-        hass,
-        client,
-        origin,
-        _interval(entry, CONF_DEPARTURE_INTERVAL, DEFAULT_DEPARTURE_INTERVAL),
-        entry.entry_id,
-    )
+    key = store_key(hass, entry)
+    board = None
+    route = None
+    progress = None
+    try:
+        board = await store.board_for(
+            hass,
+            client,
+            origin,
+            _interval(entry, CONF_DEPARTURE_INTERVAL, DEFAULT_DEPARTURE_INTERVAL),
+            entry.entry_id,
+        )
 
-    route = RouteCoordinator(hass, client, origin, destination or origin)
-    if destination:
-        # A failed resolution degrades to label matching rather than failing
-        # setup, so this deliberately does not use
-        # async_config_entry_first_refresh.
-        await route.async_refresh()
+        route = RouteCoordinator(hass, client, origin, destination or origin)
+        store.adopt(hass, route)
+        if destination:
+            # A failed resolution degrades to label matching rather than failing
+            # setup, so this deliberately does not use
+            # async_config_entry_first_refresh.
+            await route.async_refresh()
 
-    # When the current latch began. Held so the backstop below can bound how
-    # long one train is followed without depending on times the feed reports.
-    latched: dict[str, Any] = {"train": None, "since": None}
+        # When the current latch began. Held so the backstop below can bound how
+        # long one train is followed without depending on times the feed reports.
+        latched: dict[str, Any] = {"train": None, "since": None}
 
-    def keep_following(run: TrainRun) -> bool:
-        """Return whether to stay with the train already being followed.
+        def keep_following(run: TrainRun) -> bool:
+            """Return whether to stay with the train already being followed.
 
-        True only once the origin is behind it and the destination is still
-        ahead, which is precisely the window where the board can no longer
-        help: a departed train is dropped from it entirely.
+            True only once the origin is behind it and the destination is still
+            ahead, which is precisely the window where the board can no longer
+            help: a departed train is dropped from it entirely.
 
-        This does latch onto a train you watched leave without boarding, and
-        there is no way to tell the difference from here -- Home Assistant
-        cannot see which platform you are standing on. The Live Activity's
-        Dismiss button is the answer to that, and it already existed.
-        """
-        if destination is None:
-            return False
-        if run.stops_until(origin) is not None:
-            return False
-        if run.stops_until(destination) is None:
-            return False
+            This does latch onto a train you watched leave without boarding, and
+            there is no way to tell the difference from here -- Home Assistant
+            cannot see which platform you are standing on. The Live Activity's
+            Dismiss button is the answer to that, and it already existed.
+            """
+            if destination is None:
+                return False
+            if run.stops_until(origin) is not None:
+                return False
+            if run.stops_until(destination) is None:
+                return False
 
-        now = now_local()
-        if latched["train"] != run.train_id:
-            latched["train"] = run.train_id
-            latched["since"] = now
-        return now - latched["since"] <= FOLLOW_LIMIT
+            now = now_local()
+            if latched["train"] != run.train_id:
+                latched["train"] = run.train_id
+                latched["since"] = now
+            return now - latched["since"] <= FOLLOW_LIMIT
 
-    def pick_favorite(following: TrainRun | None) -> str | None:
-        """Return the favourite worth following right now, if any.
+        def pick_favorite(following: TrainRun | None) -> str | None:
+            """Return the favourite worth following right now, if any.
 
-        Gated on the lookahead window so this is not a request a minute, all
-        day, for a train nobody is waiting for. Defined here rather than in
-        the coordinator because choosing needs the destination filter, which
-        lives in the entity layer.
-        """
-        if following is not None and keep_following(following):
-            return following.train_id
+            Gated on the lookahead window so this is not a request a minute, all
+            day, for a train nobody is waiting for. Defined here rather than in
+            the coordinator because choosing needs the destination filter, which
+            lives in the entity layer.
+            """
+            if following is not None and keep_following(following):
+                return following.train_id
 
-        favorites = normalize_train_ids(entry.options.get(CONF_FAVORITE_TRAINS))
-        if not favorites:
+            favorites = normalize_train_ids(entry.options.get(CONF_FAVORITE_TRAINS))
+            if not favorites:
+                return None
+
+            horizon = now_local() + timedelta(
+                minutes=int(entry.options.get(CONF_LOOKAHEAD, DEFAULT_LOOKAHEAD))
+            )
+            for departure in usable_departures(board.data, route.data, destination):
+                if departure.scheduled > horizon:
+                    break
+                if departure.train_id.upper() in favorites:
+                    return departure.train_id
             return None
 
-        horizon = now_local() + timedelta(
-            minutes=int(entry.options.get(CONF_LOOKAHEAD, DEFAULT_LOOKAHEAD))
+        # Where the origin is, so an automation can ask whether you are near enough
+        # to catch anything leaving it. Once, at setup: stations do not move.
+        # A failure here is not a setup failure -- proximity is a convenience laid
+        # on top of a working commute, and the alternative to a coordinate is an
+        # automation that does not filter by location, which is how this behaved
+        # before the lookup existed.
+        #
+        # Always the website, whichever source the commute reads from. RailData
+        # publishes no coordinates, and this is an anonymous one-shot lookup of
+        # a public fact rather than a second feed to keep in step (SPEC 2.9).
+        try:
+            origin_coordinates = await NJTransitClient(session).station_coordinates(
+                origin
+            )
+        except NJTransitError:
+            origin_coordinates = None
+
+        progress = ProgressCoordinator(
+            hass,
+            client,
+            pick_favorite,
+            _interval(entry, CONF_DEPARTURE_INTERVAL, DEFAULT_DEPARTURE_INTERVAL),
         )
-        for departure in usable_departures(board.data, route.data, destination):
-            if departure.scheduled > horizon:
-                break
-            if departure.train_id.upper() in favorites:
-                return departure.train_id
-        return None
+        store.adopt(hass, progress)
+        # Not a first_refresh: a train not running today is normal, and must not
+        # take setup down with it.
+        await progress.async_refresh()
 
-    # Where the origin is, so an automation can ask whether you are near enough
-    # to catch anything leaving it. Once, at setup: stations do not move.
-    # A failure here is not a setup failure -- proximity is a convenience laid
-    # on top of a working commute, and the alternative to a coordinate is an
-    # automation that does not filter by location, which is how this behaved
-    # before the lookup existed.
-    #
-    # Always the website, whichever source the commute reads from. RailData
-    # publishes no coordinates, and this is an anonymous one-shot lookup of
-    # a public fact rather than a second feed to keep in step (SPEC 2.9).
-    try:
-        origin_coordinates = await NJTransitClient(session).station_coordinates(origin)
-    except NJTransitError:
-        origin_coordinates = None
+        entry.runtime_data = EntryRuntime(
+            client=client,
+            static=store.static,
+            status=store.status,
+            board=board,
+            route=route,
+            progress=progress,
+            history=store.history,
+            origin=origin,
+            destination=destination,
+            store_key=key,
+            origin_coordinates=origin_coordinates,
+            options=dict(entry.options),
+        )
 
-    progress = ProgressCoordinator(
-        hass,
-        client,
-        pick_favorite,
-        _interval(entry, CONF_DEPARTURE_INTERVAL, DEFAULT_DEPARTURE_INTERVAL),
-    )
-    # Not a first_refresh: a train not running today is normal, and must not
-    # take setup down with it.
-    await progress.async_refresh()
+        await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    except BaseException:
+        if progress is not None:
+            await progress.async_shutdown()
+        if route is not None:
+            await route.async_shutdown()
+        if board is not None:
+            await store.release_board(origin, entry.entry_id)
+        if store.release(entry.entry_id) and store.account_entry_id is None:
+            await store.async_shutdown()
+            forget_store(hass, key)
+            if store_count(hass) == 0:
+                hass.data.pop(_HISTORY, None)
+        raise
 
-    entry.runtime_data = EntryRuntime(
-        client=client,
-        static=store.static,
-        status=store.status,
-        board=board,
-        route=route,
-        progress=progress,
-        history=store.history,
-        origin=origin,
-        destination=destination,
-        store_key=store_key(hass, entry),
-        origin_coordinates=origin_coordinates,
-        options=dict(entry.options),
-    )
-
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
     return True
 
@@ -490,8 +517,13 @@ async def _client_for_website_commute(
                 "system status",
                 _interval(entry, CONF_STATUS_INTERVAL, DEFAULT_STATUS_INTERVAL),
             )
-            await static.async_first_refresh()
-            await status.async_first_refresh()
+            try:
+                await static.async_first_refresh()
+                await status.async_first_refresh()
+            except BaseException:
+                await status.async_shutdown()
+                await static.async_shutdown()
+                raise
             history = await _shared_history(hass)
             store = CoordinatorStore(
                 client=client, static=static, status=status, history=history
@@ -553,7 +585,10 @@ async def _async_reload_entry(hass: HomeAssistant, entry: NJTransitConfigEntry) 
     }
     runtime.options = dict(entry.options)
 
-    if changed and changed <= HOT_OPTIONS:
+    if not changed:
+        return
+
+    if changed <= HOT_OPTIONS:
         # Nudge the entities so the new value is reflected at once, and let
         # the progress coordinator re-pick which train it is following.
         runtime.board.async_update_listeners()

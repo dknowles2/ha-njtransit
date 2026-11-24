@@ -35,6 +35,7 @@ every integration's credentials.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import re
 from dataclasses import replace
@@ -81,6 +82,7 @@ _LOGGER = logging.getLogger(__name__)
 ENDPOINT = "https://raildata.njtransit.com/api/TrainData"
 
 DEFAULT_TIMEOUT = 30.0
+MAX_RESPONSE_BYTES = 10 * 1024 * 1024
 
 # A token is good for 24 hours. Renewing an hour early keeps a poll from
 # landing on an expired one and spending a retry.
@@ -181,9 +183,12 @@ class RailDataClient:
 
     async def _persist(self) -> None:
         """Write the persisted state back, if there is somewhere to write."""
-        if self._store is None or self._data is None:
+        if self._store is None:
             return
-        await self._store.save(self._data)
+        async with self._data_lock:
+            if self._data is None:
+                return
+            await self._store.save(self._data)
 
     # -- tokens --------------------------------------------------------------
 
@@ -240,12 +245,15 @@ class RailDataClient:
         _LOGGER.debug("Obtained a new RailData token")
         return token
 
-    async def _discard_token(self) -> None:
-        """Forget a token the API has declared invalid."""
-        self._token, self._token_issued = None, None
-        data = await self._stored()
-        if data.pop(_STORE_TOKEN, None) is not None:
-            await self._persist()
+    async def _discard_token(self, failed_token: str) -> None:
+        """Forget a token the API has declared invalid, if it is still current."""
+        async with self._token_lock:
+            if self._token != failed_token:
+                return
+            self._token, self._token_issued = None, None
+            data = await self._stored()
+            if data.pop(_STORE_TOKEN, None) is not None:
+                await self._persist()
 
     async def authenticate(self, *, fresh: bool = False) -> None:
         """Confirm the credentials work.
@@ -280,7 +288,7 @@ class RailDataClient:
             ) as response:
                 # Errors come back as JSON with a 200, so read the body
                 # before deciding anything.
-                return await response.json(content_type=None)
+                return await _read_json(response, method)
         except aiohttp.ClientError as err:
             raise NJTransitConnectionError(
                 f"{method} could not reach the endpoint: {err}"
@@ -309,7 +317,7 @@ class RailDataClient:
 
         if _error_message(payload) and "invalid token" in _error_message(payload):
             _LOGGER.debug("RailData token rejected; requesting a new one")
-            await self._discard_token()
+            await self._discard_token(token)
             token = await self._token_for_request()
             payload = await self._post(method, {**form, "token": token})
 
@@ -535,13 +543,36 @@ class RailDataClient:
                 payload = await self._call(
                     "getStationSchedule", station=code, NJTOnly="true"
                 )
-                schedules[key] = _compact_schedule(
-                    code, payload if isinstance(payload, list) else None
-                )
-                _prune_schedules(schedules, service_date)
-                await self._persist()
+                if not isinstance(payload, list):
+                    raise NJTransitAPIError(
+                        f"getStationSchedule returned {type(payload).__name__}, "
+                        "expected a list"
+                    )
+                compacted = _compact_schedule(code, payload)
+                if compacted:
+                    schedules[key] = compacted
+                    _prune_schedules(schedules, service_date)
+                    await self._persist()
+                return parse_schedule(code, compacted)
 
             return parse_schedule(code, schedules[key])
+
+
+async def _read_json(response: aiohttp.ClientResponse, method: str) -> Any:
+    """Read a bounded response body and decode it as JSON."""
+    stream = response.content
+    chunks = bytearray()
+    while True:
+        remaining = MAX_RESPONSE_BYTES + 1 - len(chunks)
+        chunk = await stream.read(remaining)
+        if not chunk:
+            break
+        chunks.extend(chunk)
+        if len(chunks) > MAX_RESPONSE_BYTES:
+            raise NJTransitConnectionError(
+                f"{method} response exceeded {MAX_RESPONSE_BYTES} bytes"
+            )
+    return json.loads(chunks)
 
 
 def _error_message(payload: Any) -> str:
@@ -597,16 +628,13 @@ def _compact_schedule(
             continue
         if str(block.get("STATION_2CHAR", "")).strip().upper() != code:
             continue
-        kept.append(
-            {
-                "STATION_2CHAR": code,
-                "ITEMS": [
-                    {field: item.get(field) for field in _SCHEDULE_FIELDS}
-                    for item in block.get("ITEMS") or ()
-                    if isinstance(item, dict)
-                ],
-            }
-        )
+        items = [
+            {field: item.get(field) for field in _SCHEDULE_FIELDS}
+            for item in block.get("ITEMS") or ()
+            if isinstance(item, dict)
+        ]
+        if items:
+            kept.append({"STATION_2CHAR": code, "ITEMS": items})
     return kept
 
 

@@ -498,3 +498,41 @@ class TestPagingLimits:
             await client_for(mocker).scheduled_trips(
                 "Short Hills Station", "New York Penn Station", on=SERVICE_DATE
             )
+
+
+class TestResponseGuards:
+    """Response-size bounds and malformed GraphQL error shapes."""
+
+    async def test_oversized_response_raises_connection_error(
+        self,
+        client_for: Callable[[AiohttpClientMocker], NJTransitClient],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from custom_components.njtransit.api import client as client_mod
+
+        monkeypatch.setattr(client_mod, "MAX_RESPONSE_BYTES", 64)
+        mocker = AiohttpClientMocker()
+        mocker.post(ENDPOINT, text="{" + " " * 100 + "}")
+
+        with pytest.raises(NJTransitConnectionError, match="exceeded 64 bytes"):
+            await client_for(mocker).train_lines()
+
+    @pytest.mark.parametrize(
+        "errors",
+        [
+            ["plain string error"],
+            "raw error string",
+            [None],
+            {"message": "object instead of list"},
+        ],
+    )
+    async def test_malformed_graphql_errors_raise_api_error(
+        self,
+        client_for: Callable[[AiohttpClientMocker], NJTransitClient],
+        errors: Any,
+    ) -> None:
+        mocker = AiohttpClientMocker()
+        mocker.post(ENDPOINT, json={"data": {"errors": errors}})
+
+        with pytest.raises(NJTransitAPIError):
+            await client_for(mocker).train_lines()

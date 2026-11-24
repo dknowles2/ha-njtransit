@@ -9,10 +9,11 @@ commutes out of the same station, so the shared ones are kept in
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -138,15 +139,15 @@ class NJTransitCoordinator[T](DataUpdateCoordinator[T]):
     def _reject_credentials(self, err: NJTransitAuthError) -> UpdateFailed:
         """Return the exception to raise for a rejected credential.
 
-        A bound coordinator raises ``ConfigEntryAuthFailed`` and Home
-        Assistant starts its entry's reauth. A shared one has no entry, so
-        it tells the store, which starts reauth on every entry using it,
-        and then fails the refresh like any other error.
+        When ``auth_failed`` is set (by :meth:`CoordinatorStore.adopt`),
+        reauth is routed to the owning account entry rather than raising
+        ``ConfigEntryAuthFailed`` on a credential-less commute entry.
         """
-        if self.config_entry is not None:
-            raise ConfigEntryAuthFailed(str(err)) from err
         if self.auth_failed is not None:
             self.auth_failed()
+            return UpdateFailed(f"Credentials rejected: {err}")
+        if self.config_entry is not None:
+            raise ConfigEntryAuthFailed(str(err)) from err
         return UpdateFailed(f"Credentials rejected: {err}")
 
 
@@ -239,11 +240,11 @@ def until_next(at: time, now: datetime) -> timedelta:
     """Return how long until the next local occurrence of ``at``."""
     local = now.astimezone(TZ)
     target = local.replace(
-        hour=at.hour, minute=at.minute, second=at.second, microsecond=0
+        hour=at.hour, minute=at.minute, second=at.second, microsecond=0, fold=0
     )
-    if target <= local:
+    if target.astimezone(UTC) <= now.astimezone(UTC):
         target += timedelta(days=1)
-    return target - local
+    return target.astimezone(UTC) - now.astimezone(UTC)
 
 
 class RouteCoordinator(NJTransitCoordinator[RouteData]):
@@ -291,6 +292,10 @@ class RouteCoordinator(NJTransitCoordinator[RouteData]):
         for service_date in (today, tomorrow):
             try:
                 trips.extend(await self._trips_for(service_date))
+            except NJTransitAuthError as err:
+                if self.auth_failed is not None:
+                    self.auth_failed()
+                raise UpdateFailed(f"Credentials rejected: {err}") from err
             except NJTransitError as err:
                 _LOGGER.warning(
                     "Could not resolve %s -> %s for %s: %s",
@@ -393,6 +398,7 @@ class CoordinatorStore:
     Held here rather than on the entry, because the board is shared: the
     recorder must outlive any single commute using that station and stop only
     when the board itself does."""
+    _board_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
     def claim(self, entry_id: str) -> None:
         """Record that an entry is using the shared coordinators."""
@@ -444,22 +450,27 @@ class CoordinatorStore:
         entry_id: str,
     ) -> DepartureCoordinator:
         """Return the board coordinator for a station, creating it if needed."""
-        coordinator = self.boards.get(station)
-        if coordinator is None:
-            coordinator = DepartureCoordinator(hass, client, station, interval)
-            self.adopt(hass, coordinator)
-            self.boards[station] = coordinator
-            await coordinator.async_first_refresh()
-            self._recorders[station] = self.history.attach(coordinator)
-            # The listener fires on subsequent updates only, so the board that
-            # setup just fetched would otherwise go unrecorded until the next
-            # poll -- and on a restart during the ten minutes when a terminal
-            # publishes its tracks, that is the interesting one.
-            if coordinator.data is not None:
-                self.history.record(coordinator.data)
+        async with self._board_lock:
+            coordinator = self.boards.get(station)
+            if coordinator is None:
+                coordinator = DepartureCoordinator(hass, client, station, interval)
+                self.adopt(hass, coordinator)
+                try:
+                    await coordinator.async_first_refresh()
+                except BaseException:
+                    await coordinator.async_shutdown()
+                    raise
+                self.boards[station] = coordinator
+                self._recorders[station] = self.history.attach(coordinator)
+                # The listener fires on subsequent updates only, so the board that
+                # setup just fetched would otherwise go unrecorded until the next
+                # poll -- and on a restart during the ten minutes when a terminal
+                # publishes its tracks, that is the interesting one.
+                if coordinator.data is not None:
+                    self.history.record(coordinator.data)
 
-        self._board_users.setdefault(station, set()).add(entry_id)
-        return coordinator
+            self._board_users.setdefault(station, set()).add(entry_id)
+            return coordinator
 
     async def release_board(self, station: str, entry_id: str) -> None:
         """Drop an entry's claim on a station's board.
@@ -468,21 +479,22 @@ class CoordinatorStore:
         down while another commute still polls that station is the bug this
         exists to prevent.
         """
-        users = self._board_users.get(station)
-        if users is None:
-            return
+        async with self._board_lock:
+            users = self._board_users.get(station)
+            if users is None:
+                return
 
-        users.discard(entry_id)
-        if users:
-            return
+            users.discard(entry_id)
+            if users:
+                return
 
-        self._board_users.pop(station, None)
-        detach = self._recorders.pop(station, None)
-        if detach is not None:
-            detach()
-        coordinator = self.boards.pop(station, None)
-        if coordinator is not None:
-            await coordinator.async_shutdown()
+            self._board_users.pop(station, None)
+            detach = self._recorders.pop(station, None)
+            if detach is not None:
+                detach()
+            coordinator = self.boards.pop(station, None)
+            if coordinator is not None:
+                await coordinator.async_shutdown()
 
     async def async_shutdown(self) -> None:
         """Shut down every coordinator this store owns, boards included.
@@ -587,6 +599,15 @@ class ProgressCoordinator(NJTransitCoordinator[TrainRun | None]):
             # after a timetable change, and not a reason to fail the refresh.
             _LOGGER.debug("Train %s is not in service", train_id)
             return None
+        except NJTransitAuthError as err:
+            if self.auth_failed is not None:
+                self.auth_failed()
+            raise UpdateFailed(f"Credentials rejected: {err}") from err
+        except NJTransitConnectionError as err:
+            raise UpdateFailed(f"Could not reach NJ Transit: {err}") from err
+        except NJTransitError as err:
+            _LOGGER.warning("Train progress for %s failed: %s", train_id, err)
+            raise UpdateFailed(str(err)) from err
 
 
 @dataclass
